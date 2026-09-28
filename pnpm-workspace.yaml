@@ -1,0 +1,45 @@
+# Which dependencies may run install scripts: true compiles a native addon, false skips a script
+# the project does not need. A package left out here stops the install with ERR_PNPM_IGNORED_BUILDS.
+# pnpm 11 reads this from pnpm-workspace.yaml only; see https://pnpm.io/settings/build.
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  oracledb: true
+  tesseract.js: false
+
+# Install dependencies explicitly instead of during dev/build/start.
+# create-app installs them initially; run pnpm install after changing dependencies.
+verifyDepsBeforeRun: false
+
+# Skips re-auditing lockfile entries against the supply-chain policy on every install.
+# The check costs tens of seconds here and re-verifies versions the lockfile already pins;
+# newly resolved packages are still checked. Set to false if outside contributors edit the
+# lockfile. See https://pnpm.io/settings/dependency-resolution#trustlockfile.
+trustLockfile: true
+
+# Reports a dependency whose install script was skipped as a warning instead of failing the
+# install. allowBuilds above decides the packages known today; this keeps a new transitive
+# dependency from stopping the install with a red error before anything is even running.
+# See https://pnpm.io/settings/build#strictdepbuilds.
+strictDepBuilds: false
+
+minimumReleaseAgeExclude:
+  - '@asamuzakjp/css-color@7.1.2'
+  - '@asamuzakjp/dom-selector@9.2.2'
+  - '@nocobase/app-cli@1.0.0-beta.7'
+  - '@nocobase/app-plugin-authorization@0.2.0-beta.21'
+  - '@nocobase/app-plugin-authz-default-access@0.1.0-beta.5'
+  - '@nocobase/app-plugin-authz-restriction-rules@0.1.0-beta.4'
+  - '@nocobase/app-plugin-authz-sharing-rules@0.1.0-beta.5'
+  - '@nocobase/app-server@1.0.0-beta.28'
+  - '@nocobase/app-skills@0.1.0-beta.17'
+  - '@nocobase/authorization@0.1.0-beta.10'
+  - ansi-regex@6.4.0
+  - mammoth@1.13.0
+  - micromark-core-commonmark@2.0.4
+  - micromark-factory-space@2.1.0
+  - micromark-util-edit-map@1.0.0
+  - micromark-util-types@2.0.3
+  - micromark@4.0.3
+  - uint8array-extras@1.6.0
+  - ws@8.22.0

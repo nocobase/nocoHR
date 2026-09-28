@@ -1,0 +1,144 @@
+/*
+ * Modern SaaS look shared by Compact and Spacious: a cool neutral palette with an
+ * indigo brand color, hairline borders, white cards on a slightly grey page, soft
+ * layered shadows and Inter for Latin text with Chinese system fallbacks. Only the
+ * density (spacing, radius, line heights) differs between the two presets, which
+ * tests/logic/theme-tokens.test.ts enforces.
+ */
+:root[data-theme='compact'],
+.theme-preview[data-theme='compact'] {
+  --font-sans:
+    'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-serif:
+    ui-serif, Georgia, Cambria, 'Times New Roman', 'Songti SC', SimSun, serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+  --font-heading: var(--font-sans);
+  --spacing: 0.2rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: calc(1 / 0.75);
+  --text-sm: 0.875rem;
+  --text-sm--line-height: calc(1.2 / 0.875);
+  --text-base: 1rem;
+  --text-base--line-height: calc(1.4 / 1);
+  --text-lg: 1.125rem;
+  --text-lg--line-height: calc(1.6 / 1.125);
+  --text-xl: 1.25rem;
+  --text-xl--line-height: calc(1.6 / 1.25);
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: calc(1.8 / 1.5);
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: calc(2.1 / 1.875);
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: calc(2.3 / 2.25);
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1;
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1;
+  --text-7xl: 4.5rem;
+  --text-7xl--line-height: 1;
+  --text-8xl: 6rem;
+  --text-8xl--line-height: 1;
+  --text-9xl: 8rem;
+  --text-9xl--line-height: 1;
+  /* Soft, layered elevation in the manner of Linear and Vercel: a hairline contact
+     shadow plus a wide, faint ambient one, tinted with the neutral hue. */
+  --shadow-2xs: 0 1px 0 0 oklch(0.2 0.01 272 / 0.03);
+  --shadow-xs: 0 1px 2px 0 oklch(0.2 0.01 272 / 0.05);
+  --shadow-sm:
+    0 1px 2px 0 oklch(0.2 0.01 272 / 0.04),
+    0 1px 3px 0 oklch(0.2 0.01 272 / 0.06);
+  --shadow-md:
+    0 2px 4px -1px oklch(0.2 0.01 272 / 0.05),
+    0 4px 10px -2px oklch(0.2 0.01 272 / 0.07);
+  --shadow-lg:
+    0 4px 6px -2px oklch(0.2 0.01 272 / 0.04),
+    0 12px 24px -4px oklch(0.2 0.01 272 / 0.1);
+  --shadow-xl:
+    0 8px 12px -4px oklch(0.2 0.01 272 / 0.05),
+    0 20px 36px -8px oklch(0.2 0.01 272 / 0.13);
+  --shadow-2xl: 0 28px 56px -12px oklch(0.2 0.01 272 / 0.24);
+  --radius: 0.5rem;
+  --background: oklch(0.985 0.002 272);
+  --foreground: oklch(0.21 0.006 272);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.006 272);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.006 272);
+  --primary: oklch(0.52 0.19 276);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.965 0.004 272);
+  --secondary-foreground: oklch(0.25 0.008 272);
+  --muted: oklch(0.965 0.003 272);
+  --muted-foreground: oklch(0.5 0.012 272);
+  --accent: oklch(0.955 0.005 272);
+  --accent-foreground: oklch(0.23 0.008 272);
+  --destructive: oklch(0.577 0.215 27.3);
+  --border: oklch(0.922 0.004 272);
+  --input: oklch(0.9 0.005 272);
+  --ring: oklch(0.58 0.17 276);
+  --chart-1: oklch(0.55 0.19 276);
+  --chart-2: oklch(0.68 0.13 230);
+  --chart-3: oklch(0.7 0.14 162);
+  --chart-4: oklch(0.78 0.15 75);
+  --chart-5: oklch(0.64 0.2 12);
+  /* The navigation sits one step below the page, and the selected item is a neutral
+     pill, as in Linear and Notion; the brand color stays on actions and focus. */
+  --sidebar: oklch(0.975 0.003 272);
+  --sidebar-foreground: oklch(0.3 0.008 272);
+  --sidebar-primary: color-mix(in oklch, var(--foreground) 7%, var(--sidebar));
+  --sidebar-primary-foreground: var(--foreground);
+  --sidebar-accent: color-mix(in oklch, var(--foreground) 4%, var(--sidebar));
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+:root.dark[data-theme='compact'],
+:root.dark .theme-preview[data-theme='compact'] {
+  /* Dark surfaces step up in lightness: sidebar, page, card, popover. Elevation
+     needs deeper shadows here, since a faint shadow vanishes on a dark page. */
+  --shadow-2xs: 0 1px 0 0 oklch(0 0 0 / 0.2);
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.3), 0 1px 3px 0 oklch(0 0 0 / 0.25);
+  --shadow-md:
+    0 2px 4px -1px oklch(0 0 0 / 0.3), 0 4px 10px -2px oklch(0 0 0 / 0.35);
+  --shadow-lg:
+    0 4px 6px -2px oklch(0 0 0 / 0.3), 0 12px 24px -4px oklch(0 0 0 / 0.45);
+  --shadow-xl:
+    0 8px 12px -4px oklch(0 0 0 / 0.35), 0 20px 36px -8px oklch(0 0 0 / 0.5);
+  --shadow-2xl: 0 28px 56px -12px oklch(0 0 0 / 0.6);
+  --background: oklch(0.155 0.004 272);
+  --foreground: oklch(0.955 0.003 272);
+  --card: oklch(0.19 0.005 272);
+  --card-foreground: oklch(0.955 0.003 272);
+  --popover: oklch(0.205 0.006 272);
+  --popover-foreground: oklch(0.955 0.003 272);
+  --primary: oklch(0.7 0.14 276);
+  --primary-foreground: oklch(0.17 0.02 276);
+  --secondary: oklch(0.24 0.006 272);
+  --secondary-foreground: oklch(0.955 0.003 272);
+  --muted: oklch(0.235 0.005 272);
+  --muted-foreground: oklch(0.71 0.01 272);
+  --accent: oklch(0.26 0.007 272);
+  --accent-foreground: oklch(0.955 0.003 272);
+  --destructive: oklch(0.704 0.191 22.2);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.66 0.15 276);
+  --chart-1: oklch(0.68 0.16 276);
+  --chart-2: oklch(0.74 0.12 230);
+  --chart-3: oklch(0.76 0.14 162);
+  --chart-4: oklch(0.82 0.14 75);
+  --chart-5: oklch(0.7 0.18 12);
+  --sidebar: oklch(0.135 0.004 272);
+  --sidebar-foreground: oklch(0.84 0.006 272);
+  --sidebar-primary: color-mix(in oklch, var(--foreground) 9%, var(--sidebar));
+  --sidebar-primary-foreground: var(--foreground);
+  --sidebar-accent: color-mix(in oklch, var(--foreground) 5%, var(--sidebar));
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
