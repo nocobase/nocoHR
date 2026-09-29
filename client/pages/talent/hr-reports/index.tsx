@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/native-select';
 
 interface HrReport {
+  reminderDays: { probation: number; contract: number };
   headcount: number;
   probation: number;
   joined: number;
@@ -77,8 +78,8 @@ export default function HrReportsPage(): ReactElement {
   const { t } = useTranslation();
   const lookups = useLookups();
   const [departmentId, setDepartmentId] = useState('');
-  const [from, setFrom] = useState(isoDate(-364));
-  const [to, setTo] = useState(isoDate(0));
+  const [from, setFrom] = useState(() => isoDate(-364));
+  const [to, setTo] = useState(() => isoDate(0));
   const report = useRemote<HrReport>('talent/hr-reports', {
     departmentId: departmentId || undefined,
     from,
@@ -342,7 +343,11 @@ export default function HrReportsPage(): ReactElement {
           <div className='grid gap-4 lg:grid-cols-2'>
             <Card>
               <CardHeader>
-                <CardTitle>{t('talent.reports.probationEnding')}</CardTitle>
+                <CardTitle>
+                  {t('talent.reports.probationEnding', {
+                    days: data.reminderDays.probation,
+                  })}
+                </CardTitle>
               </CardHeader>
               <CardContent className='space-y-2 text-sm'>
                 {data.probationEnding.length ? (
@@ -371,7 +376,11 @@ export default function HrReportsPage(): ReactElement {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>{t('talent.reports.contractsEnding')}</CardTitle>
+                <CardTitle>
+                  {t('talent.reports.contractsEnding', {
+                    days: data.reminderDays.contract,
+                  })}
+                </CardTitle>
               </CardHeader>
               <CardContent className='space-y-2 text-sm'>
                 {data.contractsEnding.length ? (

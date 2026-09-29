@@ -10,6 +10,7 @@ import {
   addDays,
   daysBetween,
   HrError,
+  isDateOnly,
   isRecord,
   newId,
   optionalDate,
@@ -156,6 +157,7 @@ export interface EmployeeProfile {
 }
 
 export interface HrReport {
+  reminderDays: { probation: number; contract: number };
   headcount: number;
   probation: number;
   joined: number;
@@ -216,7 +218,11 @@ export interface HrCoreService {
   listContracts(
     ctx: ActorContext,
     filters: { employeeId?: string; quick?: 'expiring' | 'overdue' | '' },
-  ): Promise<{ items: Contract[]; can: { manage: boolean } }>;
+  ): Promise<{
+    items: Contract[];
+    reminderDays: number;
+    can: { manage: boolean };
+  }>;
   saveContract(
     ctx: ActorContext,
     id: string | null,
@@ -335,6 +341,7 @@ const EMPLOYEE_FIELDS = [
   'managerEmployeeId',
   'status',
   'hireDate',
+  'careerStartDate',
   'positionSince',
   'email',
   'gender',
@@ -1493,6 +1500,9 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
 
     async listContracts(ctx, filters) {
       const policies = await authorizeAction(ctx.authz, CONTRACT, 'view');
+      const reminderDays = Math.max(
+        ...(await deps.settings.read('reminders')).value.contractDays,
+      );
       const rows = await database
         .repository('employmentContracts')
         .withPolicy(policyOf(policies, 'employmentContracts'))
@@ -1511,7 +1521,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             c.status === 'active' &&
             c.remainingDays !== null &&
             c.remainingDays >= 0 &&
-            c.remainingDays <= 60,
+            c.remainingDays <= reminderDays,
         );
       if (filters.quick === 'overdue')
         items = items.filter(
@@ -1520,7 +1530,11 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             c.remainingDays !== null &&
             c.remainingDays < 0,
         );
-      return { items, can: { manage: await can(ctx, CONTRACT, 'manage') } };
+      return {
+        items,
+        reminderDays,
+        can: { manage: await can(ctx, CONTRACT, 'manage') },
+      };
     },
 
     async saveContract(ctx, id, input) {
@@ -1936,6 +1950,24 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         'talent.hrReport',
         'view',
       );
+      const reminders = (await deps.settings.read('reminders')).value;
+      const reminderDays = {
+        probation: reminders.probationDays,
+        contract: Math.max(...reminders.contractDays),
+      };
+      const to = filters.to ?? currentDate();
+      const validReportDate = (value: string) => {
+        if (!isDateOnly(value)) return false;
+        const parsed = new Date(`${value}T00:00:00Z`);
+        return (
+          Number.isFinite(parsed.getTime()) &&
+          parsed.toISOString().slice(0, 10) === value
+        );
+      };
+      if (!validReportDate(to)) throw new HrError('INVALID_INPUT');
+      const from = filters.from ?? addDays(to, -364);
+      if (!validReportDate(from) || from > to)
+        throw new HrError('INVALID_INPUT');
       const departmentIds = filters.departmentId
         ? await organization.descendantsOf(filters.departmentId)
         : undefined;
@@ -1960,17 +1992,38 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       const employees = rows.map((r) =>
         toEmployee(r as Record<string, unknown>),
       );
-      const to = filters.to ?? currentDate();
-      const from = filters.from ?? addDays(to, -364);
       const active = employees.filter(
         (e) => e.status !== 'leave' && e.status !== 'pending',
       );
-      const joined = employees.filter(
-        (e) => e.hireDate && e.hireDate >= from && e.hireDate <= to,
-      ).length;
-      const left = employees.filter(
-        (e) => e.leaveDate && e.leaveDate >= from && e.leaveDate <= to,
-      ).length;
+      // Scope events to the already authorized employee set; a historical event
+      // must never widen the caller's current employee visibility.
+      const eventRows = employees.length
+        ? await database
+            .query()
+            .selectFrom('jobEvents')
+            .select(['employeeId', 'eventType', 'effectiveDate'])
+            .where(
+              'employeeId',
+              'in',
+              employees.map((e) => e.id),
+            )
+            .where('eventType', 'in', ['onboard', 'offboard'])
+            .where('effectiveDate', '<=', to)
+            .execute()
+        : [];
+      const events = eventRows.map((event) => ({
+        employeeId: String(event.employeeId),
+        type: String(event.eventType),
+        date: toDateOnly(event.effectiveDate as string)!,
+      }));
+      const peopleInPeriod = (type: string, start: string, end: string) =>
+        new Set(
+          events
+            .filter((e) => e.type === type && e.date >= start && e.date <= end)
+            .map((e) => e.employeeId),
+        ).size;
+      const joined = peopleInPeriod('onboard', from, to);
+      const left = peopleInPeriod('offboard', from, to);
       const atStart = employees.filter(
         (e) =>
           e.hireDate &&
@@ -1990,8 +2043,16 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         const month = d.toISOString().slice(0, 7);
         months.push({
           month,
-          joined: employees.filter((e) => e.hireDate?.startsWith(month)).length,
-          left: employees.filter((e) => e.leaveDate?.startsWith(month)).length,
+          joined: peopleInPeriod(
+            'onboard',
+            `${month}-01`,
+            month === to.slice(0, 7) ? to : `${month}-31`,
+          ),
+          left: peopleInPeriod(
+            'offboard',
+            `${month}-01`,
+            month === to.slice(0, 7) ? to : `${month}-31`,
+          ),
         });
       }
       const departmentTitles = new Map<string, string>();
@@ -2031,7 +2092,9 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           (e) =>
             e.status === 'probation' &&
             e.probationEndDate &&
-            daysBetween(currentDate(), e.probationEndDate) <= 30,
+            daysBetween(currentDate(), e.probationEndDate) >= 0 &&
+            daysBetween(currentDate(), e.probationEndDate) <=
+              reminderDays.probation,
         )
         .map((e) => ({
           employeeId: e.id,
@@ -2063,11 +2126,14 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         }))
         .filter(
           (c): c is typeof c & { endDate: string } =>
-            Boolean(c.endDate) && daysBetween(currentDate(), c.endDate!) <= 60,
+            Boolean(c.endDate) &&
+            daysBetween(currentDate(), c.endDate!) >= 0 &&
+            daysBetween(currentDate(), c.endDate!) <= reminderDays.contract,
         )
         .sort((a, b) => a.endDate.localeCompare(b.endDate));
       return {
         headcount: atEnd,
+        reminderDays,
         probation: active.filter((e) => e.status === 'probation').length,
         joined,
         left,

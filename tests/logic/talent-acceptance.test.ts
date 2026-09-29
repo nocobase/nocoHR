@@ -7,11 +7,22 @@ import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { databaseManagerToken } from '@nocobase/db';
+import { databaseManagerToken, type SeedContext } from '@nocobase/db';
+import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import attendanceSettingsSeed from '../../database/main/seeds/202609290105_attendance_settings_permissions.ts';
+import leaveManagementSeed from '../../database/main/seeds/202609290106_leave_management_permissions.ts';
+import leavePageSeed from '../../database/main/seeds/202609290107_leave_page_permission.ts';
+import attendancePageSeed from '../../database/main/seeds/202609290108_attendance_page_permission.ts';
+import leaveRequestSeed from '../../database/main/seeds/202609290109_leave_request_permissions.ts';
+import approvalPageSeed from '../../database/main/seeds/202609290110_approval_page_permission.ts';
+import scheduleSeed from '../../database/main/seeds/202609290111_schedule_permissions.ts';
 import { notificationServiceToken } from '@nocobase/app-plugin-notification';
 import { hrCoreServiceToken } from '../../server/providers/hr/tokens.ts';
 import { addDays, today } from '../../server/providers/hr/shared.ts';
 import { createWorkItemStore } from '../../server/providers/hr/work-item-store.ts';
+import { registerLeaveRequestAcceptance } from '../helpers/leave-request-acceptance.ts';
+import { registerScheduleAcceptance } from '../helpers/schedule-acceptance.ts';
+import { registerLeaveProofAcceptance } from '../helpers/leave-proof-acceptance.ts';
 
 import {
   createStandaloneServer,
@@ -97,6 +108,806 @@ async function startAcceptanceServer() {
 }
 
 beforeAll(startAcceptanceServer, 180_000);
+
+describe('V2-05 leave management', () => {
+  const annualType = {
+    code: 'acceptance-annual',
+    title: 'Annual leave',
+    payType: 'paid',
+    unit: 'day',
+    balanceRule: 'annualBySeniority',
+    fixedDays: null,
+    requiresAttachment: false,
+    countBy: 'schedule',
+    active: true,
+  };
+  let annual: Json;
+  let balance: Json;
+  const employeeIds = [
+    'leave-test-senior',
+    'leave-test-regular',
+    'leave-test-new',
+    'leave-test-pending',
+    'leave-test-left',
+  ];
+  it('rejects anonymous, manager, employee and page-only access', async () => {
+    const authz = server.application.container.resolve(authorizationToken);
+    const user = await call('emp_njl_2', 'GET', '/api/auth/get-session');
+    await authz.permissionSets.create({
+      key: 'test-leave-page-only',
+      title: 'Test leave page',
+      grants: [
+        {
+          resource: { type: 'page', id: 'talent.leave' },
+          actions: [{ action: 'access' }],
+        },
+      ],
+    });
+    await authz.permissionSets.assign({
+      permissionSet: 'test-leave-page-only',
+      subject: { type: 'user', id: String(user.json.user.id) },
+    });
+    for (const username of [null, 'mgr_njl', 'emp_njl_1', 'emp_njl_2']) {
+      for (const [method, url, body] of [
+        ['GET', '/leave/types', undefined],
+        ['GET', '/leave/types/hidden', undefined],
+        ['POST', '/leave/types', { value: annualType }],
+        ['PATCH', '/leave/types/hidden', {}],
+        ['GET', '/leave/balances?year=2026', undefined],
+        ['GET', '/leave/balances/hidden', undefined],
+        ['POST', '/leave/balances/initialize', {}],
+        ['POST', '/leave/balances/hidden/adjust', {}],
+      ] as const)
+        expect((await call(username, method, url, body)).status).toBe(
+          username ? 403 : 401,
+        );
+    }
+  });
+  it('creates and updates types with strict validation and version checks', async () => {
+    const created = await call('hr01', 'POST', '/leave/types', {
+      value: annualType,
+    });
+    expect(created.status).toBe(201);
+    annual = created.json.data;
+    expect(
+      (await call('hr01', 'GET', `/leave/types/${annual.id}`)).json.data,
+    ).toEqual(annual);
+    expect((await call('hr01', 'GET', '/leave/types/not-found')).status).toBe(
+      404,
+    );
+    expect(
+      (await call('hr01', 'POST', '/leave/types', { value: annualType }))
+        .status,
+    ).toBe(409);
+    expect(
+      (
+        await call('hr01', 'POST', '/leave/types', {
+          value: {
+            ...annualType,
+            code: 'bad-fixed',
+            balanceRule: 'fixedPerEvent',
+          },
+        })
+      ).status,
+    ).toBe(400);
+    const edited = await call('hr01', 'PATCH', `/leave/types/${annual.id}`, {
+      value: { ...annualType, title: 'Annual leave revised' },
+      expectedUpdatedAt: annual.updatedAt,
+    });
+    expect(edited.status).toBe(200);
+    expect(
+      (
+        await call('hr01', 'PATCH', `/leave/types/${annual.id}`, {
+          value: annualType,
+          expectedUpdatedAt: annual.updatedAt,
+        })
+      ).status,
+    ).toBe(409);
+    annual = edited.json.data;
+    for (const [code, balanceRule, fixedDays] of [
+      ['earned', 'earned', null],
+      ['event', 'fixedPerEvent', 3],
+      ['unlimited', 'none', null],
+    ] as const) {
+      expect(
+        (
+          await call('hr01', 'POST', '/leave/types', {
+            value: {
+              ...annualType,
+              code: `acceptance-${code}`,
+              balanceRule,
+              fixedDays,
+            },
+          })
+        ).status,
+      ).toBe(201);
+    }
+  });
+  it('initializes the document examples as 10, 5 and 2 days, skips inactive staff and does not duplicate', async () => {
+    const db = server.application.container.resolve(databaseManagerToken);
+    const stamp = new Date();
+    for (const [index, id] of employeeIds.entries()) {
+      await db.repository('employees').createOne({
+        values: {
+          id,
+          employeeNo: id,
+          name: id,
+          departmentId: 'dept-machining',
+          status: index === 3 ? 'pending' : index === 4 ? 'leave' : 'active',
+          hireDate: index === 2 ? '2026-07-01' : '2022-01-01',
+          careerStartDate: [
+            '2014-01-01',
+            '2021-01-01',
+            '2023-01-01',
+            '2020-01-01',
+            '2020-01-01',
+          ][index],
+          createdAt: stamp,
+          updatedAt: stamp,
+        },
+      });
+    }
+    const initialize = { year: 2026, asOf: '2026-09-28', employeeIds };
+    const first = await call(
+      'hr01',
+      'POST',
+      '/leave/balances/initialize',
+      initialize,
+    );
+    expect(first.status).toBe(200);
+    expect(first.json.data.created).toHaveLength(6);
+    expect(first.json.data.skippedEmployeeIds.sort()).toEqual(
+      employeeIds.slice(3).sort(),
+    );
+    const read = await call('hr01', 'GET', '/leave/balances?year=2026');
+    expect(read.status).toBe(200);
+    const annualRows = read.json.data.filter(
+      (row: Json) => row.leaveTypeId === annual.id,
+    );
+    expect(
+      employeeIds
+        .slice(0, 3)
+        .map(
+          (id) =>
+            annualRows.find((row: Json) => row.employeeId === id)?.entitled,
+        ),
+    ).toEqual([10, 5, 2]);
+    balance = annualRows.find((row: Json) => row.employeeId === employeeIds[0]);
+    expect(
+      (await call('hr01', 'GET', `/leave/balances/${balance.id}`)).json.data,
+    ).toEqual(balance);
+    expect(
+      (await call('hr01', 'POST', '/leave/balances/initialize', initialize))
+        .json.data.created,
+    ).toEqual([]);
+    expect(
+      (
+        await call('hr01', 'PATCH', `/leave/types/${annual.id}`, {
+          value: { ...annualType, countBy: 'calendar' },
+          expectedUpdatedAt: annual.updatedAt,
+        })
+      ).json.code,
+    ).toBe('LEAVE_TYPE_IN_USE');
+    expect(
+      (
+        await call(
+          'hr01',
+          'GET',
+          `/leave/balances?year=2026&employeeId=${employeeIds[0]}`,
+        )
+      ).json.data,
+    ).toHaveLength(2);
+    expect(
+      (
+        await call('hr01', 'POST', '/leave/balances/initialize', {
+          ...initialize,
+          employeeIds: ['not-found'],
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await call('hr01', 'POST', '/leave/balances/initialize', {
+          ...initialize,
+          asOf: '2200-01-01',
+          year: 2200,
+        })
+      ).json.code,
+    ).toBe('FUTURE_INITIALIZATION');
+  });
+  it('requires reasons, rejects stale versions and deduplicates audited adjustments', async () => {
+    const url = `/leave/balances/${balance.id}/adjust`;
+    const input = {
+      idempotencyKey: 'acceptance-adjust-1',
+      expectedUpdatedAt: balance.updatedAt,
+      delta: 0.5,
+      reason: 'Verified opening allowance',
+    };
+    expect(
+      (await call('hr01', 'POST', url, { ...input, reason: ' ' })).status,
+    ).toBe(400);
+    expect(
+      (await call('hr01', 'POST', url, { ...input, used: 0 })).status,
+    ).toBe(400);
+    const result = await call('hr01', 'POST', url, input);
+    expect(result.status).toBe(200);
+    expect(result.json.data.available).toBe(10.5);
+    expect(result.json.data.adjustments).toHaveLength(1);
+    expect(result.json.data.adjustments[0]).toMatchObject({
+      delta: 0.5,
+      reason: input.reason,
+      idempotencyKey: input.idempotencyKey,
+    });
+    expect((await call('hr01', 'POST', url, input)).json.data.replayed).toBe(
+      true,
+    );
+    expect(
+      (await call('hr01', 'POST', url, { ...input, delta: 1 })).json.code,
+    ).toBe('IDEMPOTENCY_CONFLICT');
+    expect(
+      (
+        await call('hr01', 'POST', url, {
+          ...input,
+          idempotencyKey: 'acceptance-adjust-stale',
+        })
+      ).status,
+    ).toBe(409);
+    balance = result.json.data;
+    const before = balance.adjustments;
+    expect(
+      (
+        await call('hr01', 'POST', url, {
+          ...input,
+          idempotencyKey: 'acceptance-adjust-negative',
+          expectedUpdatedAt: balance.updatedAt,
+          delta: -11,
+        })
+      ).json.code,
+    ).toBe('INSUFFICIENT_LEAVE_BALANCE');
+    const rows = await call(
+      'hr01',
+      'GET',
+      `/leave/balances?year=2026&employeeId=${employeeIds[0]}`,
+    );
+    expect(
+      rows.json.data.find((row: Json) => row.id === balance.id).adjustments,
+    ).toEqual(before);
+  });
+  it('serializes competing adjustments and preserves used, pending and carry on repeat initialization', async () => {
+    const results = await Promise.all(
+      [1, 2].map((n) =>
+        call('hr01', 'POST', `/leave/balances/${balance.id}/adjust`, {
+          idempotencyKey: `acceptance-concurrent-${n}`,
+          expectedUpdatedAt: balance.updatedAt,
+          delta: n,
+          reason: 'Concurrency check',
+        }),
+      ),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    const db = server.application.container.resolve(databaseManagerToken);
+    await db.repository('leaveBalances').updateOne({
+      filter: { id: balance.id },
+      values: { used: 2, pending: 1, carriedOver: 1 },
+    });
+    const before = await db
+      .repository('leaveBalances')
+      .findOne({ filter: { id: balance.id } });
+    expect(
+      (
+        await call('hr01', 'POST', '/leave/balances/initialize', {
+          year: 2026,
+          asOf: '2026-09-28',
+          employeeIds,
+        })
+      ).json.data.created,
+    ).toEqual([]);
+    expect(
+      await db
+        .repository('leaveBalances')
+        .findOne({ filter: { id: balance.id } }),
+    ).toEqual(before);
+    await db.repository('employees').updateOne({
+      filter: { id: employeeIds[0] },
+      values: { status: 'leave' },
+    });
+    expect(
+      (
+        await call('hr01', 'POST', `/leave/balances/${balance.id}/adjust`, {
+          idempotencyKey: 'acceptance-frozen',
+          expectedUpdatedAt: before!.updatedAt,
+          delta: 1,
+          reason: 'Not permitted after offboarding',
+        })
+      ).json.code,
+    ).toBe('BALANCE_FROZEN');
+  });
+  it('rolls an invalid initialization back and reports missing career dates', async () => {
+    const db = server.application.container.resolve(databaseManagerToken);
+    // A separate year keeps these fixtures independent of already initialized rows.
+    await db.repository('employees').updateOne({
+      filter: { id: employeeIds[2] },
+      values: { hireDate: '2022-01-01', careerStartDate: '2023-01-01' },
+    });
+    const result = await call('hr01', 'POST', '/leave/balances/initialize', {
+      year: 2025,
+      asOf: '2025-12-31',
+      employeeIds: employeeIds.slice(1, 3),
+    });
+    expect(result.json.code).toBe('INVALID_EMPLOYEE_DATES');
+    expect(
+      await db.repository('leaveBalances').count({ filter: { year: 2025 } }),
+    ).toBe(0);
+    await db.repository('employees').updateOne({
+      filter: { id: employeeIds[2] },
+      values: { careerStartDate: null },
+    });
+    const valid = await call('hr01', 'POST', '/leave/balances/initialize', {
+      year: 2025,
+      asOf: '2025-12-31',
+      employeeIds: [employeeIds[2]],
+    });
+    expect(valid.status).toBe(200);
+    expect(valid.json.data.needsCareerStartDate).toEqual([employeeIds[2]]);
+  });
+  it('allows HR to complete career dates and rejects impossible or unauthorized edits', async () => {
+    const path = `/employees/${employeeIds[2]}`;
+    expect(
+      (await call('mgr_njl', 'PATCH', path, { careerStartDate: '2020-01-01' }))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await call('emp_njl_1', 'PATCH', path, {
+          careerStartDate: '2020-01-01',
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await call('hr01', 'PATCH', path, { careerStartDate: '2023-01-01' }))
+        .json.code,
+    ).toBe('EMPLOYEE_CAREER_DATE_INVALID');
+    const saved = await call('hr01', 'PATCH', path, {
+      careerStartDate: '2020-01-01',
+    });
+    expect(saved.status).toBe(200);
+    const db = server.application.container.resolve(databaseManagerToken);
+    expect(
+      (
+        await db
+          .repository('employees')
+          .findOne({ filter: { id: employeeIds[2] } })
+      )?.careerStartDate,
+    ).toBe('2020-01-01');
+    const balances = await call(
+      'hr01',
+      'GET',
+      `/leave/balances?year=2025&employeeId=${employeeIds[2]}`,
+    );
+    expect(
+      balances.json.data.every(
+        (row: Json) => row.needsCareerStartDate === false,
+      ),
+    ).toBe(true);
+    // Completing the date does not silently overwrite already initialized entitlement.
+    expect(
+      balances.json.data.find((row: Json) => row.leaveTypeId === annual.id)
+        ?.entitled,
+    ).toBe(5);
+  });
+  it('leaves existing permission choices and timestamps unchanged on repeat seed runs', async () => {
+    const db = server.application.container.resolve(databaseManagerToken);
+    const read = () =>
+      db
+        .query()
+        .selectFrom('authorizationPermissionSets')
+        .select(['grants', 'updatedAt'])
+        .where('key', '=', 'hr.admin')
+        .executeTakeFirst();
+    const before = await read();
+    await db.transaction(async (connection) => {
+      await leaveManagementSeed.run({ query: connection.query } as SeedContext);
+      await leaveManagementSeed.run({ query: connection.query } as SeedContext);
+      await leavePageSeed.run({ query: connection.query } as SeedContext);
+      await leavePageSeed.run({ query: connection.query } as SeedContext);
+      for (const seed of [leaveRequestSeed, approvalPageSeed, scheduleSeed]) {
+        await seed.run({ query: connection.query } as SeedContext);
+        await seed.run({ query: connection.query } as SeedContext);
+      }
+    });
+    expect(await read()).toEqual(before);
+  });
+});
+
+describe('V2-05 attendance settings', () => {
+  it('protects per-card and latest-record reads and preserves the new HR page grant on repeated seeds', async () => {
+    for (const path of [
+      '/attendance-settings/config/calendar',
+      '/attendance-settings/shifts/missing',
+      '/attendance-settings/rules/missing',
+    ]) {
+      expect((await call(null, 'GET', path)).status).toBe(401);
+      for (const user of ['mgr_east', 'emp_njl_1'])
+        expect((await call(user, 'GET', path)).status).toBe(403);
+    }
+    expect(
+      (await call('hr01', 'GET', '/attendance-settings/shifts/missing')).status,
+    ).toBe(404);
+    expect(
+      (await call('hr01', 'GET', '/attendance-settings/config/not-supported'))
+        .status,
+    ).toBe(400);
+    const all = await call('hr01', 'GET', '/attendance-settings');
+    expect(
+      (await call('hr01', 'GET', '/attendance-settings/config/calendar')).json
+        .data,
+    ).toEqual(all.json.data.config.calendar);
+    const db = server.application.container.resolve(databaseManagerToken);
+    const read = () =>
+      db
+        .query()
+        .selectFrom('authorizationPermissionSets')
+        .select(['grants', 'updatedAt'])
+        .where('key', '=', 'hr.admin')
+        .executeTakeFirst();
+    const before = await read();
+    expect(JSON.stringify(before?.grants)).toContain(
+      'talent.attendanceSettings',
+    );
+    await db.transaction(async (connection) => {
+      await attendancePageSeed.run({ query: connection.query } as SeedContext);
+      await attendancePageSeed.run({ query: connection.query } as SeedContext);
+    });
+    expect(await read()).toEqual(before);
+  });
+  it('commits only one of two concurrent first saves and keeps the other card unchanged', async () => {
+    const original = await call('hr01', 'GET', '/attendance-settings');
+    const annual = original.json.data.config.annualLeave;
+    const responses = await Promise.all(
+      [10, 12].map((days) =>
+        call('hr01', 'PATCH', '/attendance-settings/config/annualLeave', {
+          revision: annual.revision,
+          value: { bands: [{ minimumYears: 1, days }] },
+        }),
+      ),
+    );
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 409,
+    ]);
+    const readback = await call('hr01', 'GET', '/attendance-settings');
+    expect(readback.json.data.config.annualLeave).toEqual(
+      responses.find((response) => response.status === 200)!.json.data,
+    );
+    expect(readback.json.data.config.calendar).toEqual(
+      original.json.data.config.calendar,
+    );
+  });
+  it('preserves settings and permission grants on repeated initialization', async () => {
+    const db = server.application.container.resolve(databaseManagerToken);
+    const before = await db
+      .query()
+      .selectFrom('authorizationPermissionSets')
+      .select(['grants', 'updatedAt'])
+      .where('key', '=', 'hr.admin')
+      .executeTakeFirst();
+    const lock = await db
+      .repository('personnelSettings')
+      .findOne({ filter: { id: 'attendance.catalog' } });
+    await db.transaction(async (connection) => {
+      // Only the seed's documented data dependencies are supplied; no mock database.
+      await attendanceSettingsSeed.run({
+        query: connection.query,
+        repository: connection.repository.bind(connection),
+      } as SeedContext);
+      await attendanceSettingsSeed.run({
+        query: connection.query,
+        repository: connection.repository.bind(connection),
+      } as SeedContext);
+    });
+    expect(
+      await db
+        .query()
+        .selectFrom('authorizationPermissionSets')
+        .select(['grants', 'updatedAt'])
+        .where('key', '=', 'hr.admin')
+        .executeTakeFirst(),
+    ).toEqual(before);
+    expect(
+      await db
+        .repository('personnelSettings')
+        .findOne({ filter: { id: 'attendance.catalog' } }),
+    ).toEqual(lock);
+  });
+  it('a page-only grant cannot access or mutate the settings API', async () => {
+    const authz = server.application.container.resolve(authorizationToken);
+    const user = await call('emp_njl_2', 'GET', '/api/auth/get-session');
+    await authz.permissionSets.create({
+      key: 'test-attendance-page-only',
+      title: 'Test page only',
+      grants: [
+        {
+          resource: { type: 'page', id: 'talent.attendanceSettings' },
+          actions: [{ action: 'access' }],
+        },
+      ],
+    });
+    await authz.permissionSets.assign({
+      permissionSet: 'test-attendance-page-only',
+      subject: { type: 'user', id: String(user.json.user.id) },
+    });
+    expect(
+      (await call('emp_njl_2', 'GET', '/attendance-settings')).status,
+    ).toBe(403);
+    expect(
+      (await call('emp_njl_2', 'GET', '/attendance-settings/config/limits'))
+        .status,
+    ).toBe(403);
+    expect(
+      (await call('emp_njl_2', 'GET', '/attendance-settings/shifts/hidden'))
+        .status,
+    ).toBe(403);
+    expect(
+      (await call('emp_njl_2', 'POST', '/attendance-settings/rules', {}))
+        .status,
+    ).toBe(403);
+  });
+  it('creates and edits catalog data, protects referenced shifts and rejects overlapping department rules', async () => {
+    const url = '/attendance-settings';
+    const db = server.application.container.resolve(databaseManagerToken);
+    const employee = await db
+      .repository('employees')
+      .findOne({ filter: { id: 'emp-wanglei' } });
+    const departmentId = String(employee!.departmentId);
+    const shift = {
+      code: 'test-night',
+      title: 'Test night',
+      startTime: '22:00',
+      endTime: '06:00',
+      isNight: true,
+      departmentIds: [departmentId],
+    };
+    expect(
+      (await call('mgr_east', 'POST', `${url}/shifts`, { value: shift }))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await call('hr01', 'POST', `${url}/shifts`, {
+          value: { ...shift, breakMinutes: 480 },
+        })
+      ).status,
+    ).toBe(400);
+    const created = await call('hr01', 'POST', `${url}/shifts`, {
+      value: shift,
+    });
+    expect(created.status).toBe(201);
+    expect(
+      (await call('hr01', 'POST', `${url}/shifts`, { value: shift })).status,
+    ).toBe(409);
+    const saved = await call(
+      'hr01',
+      'PATCH',
+      `${url}/shifts/${created.json.data.id}`,
+      {
+        value: { ...shift, title: 'Updated night' },
+        expectedUpdatedAt: created.json.data.updatedAt,
+      },
+    );
+    expect(saved.status).toBe(200);
+    expect(
+      (await call('hr01', 'GET', `${url}/shifts/${created.json.data.id}`)).json
+        .data,
+    ).toEqual(saved.json.data);
+    expect(
+      (
+        await call('hr01', 'PATCH', `${url}/shifts/${created.json.data.id}`, {
+          value: shift,
+          expectedUpdatedAt: created.json.data.updatedAt,
+        })
+      ).status,
+    ).toBe(409);
+    await db.repository('shiftSchedules').createOne({
+      values: {
+        id: 'test-catalog-reference',
+        employeeId: employee!.id,
+        date: '2026-10-01',
+        shiftId: created.json.data.id,
+        status: 'draft',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    expect(
+      (
+        await call('hr01', 'PATCH', `${url}/shifts/${created.json.data.id}`, {
+          value: shift,
+          expectedUpdatedAt: saved.json.data.updatedAt,
+        })
+      ).status,
+    ).toBe(409);
+    const disabled = await call(
+      'hr01',
+      'PATCH',
+      `${url}/shifts/${created.json.data.id}`,
+      {
+        value: { ...shift, title: 'Updated night', active: false },
+        expectedUpdatedAt: saved.json.data.updatedAt,
+      },
+    );
+    expect(disabled.status).toBe(200);
+    const rule = {
+      title: 'Workshop',
+      departmentIds: [departmentId],
+      workHourSystem: 'comprehensive',
+      punchSource: 'device',
+    };
+    const initial = await call('hr01', 'POST', `${url}/rules`, { value: rule });
+    expect(initial.status).toBe(201);
+    expect(
+      (await call('hr01', 'POST', `${url}/rules`, { value: rule })).status,
+    ).toBe(409);
+    const updated = await call(
+      'hr01',
+      'PATCH',
+      `${url}/rules/${initial.json.data.id}`,
+      {
+        value: { ...rule, lateGraceMinutes: 15 },
+        expectedUpdatedAt: initial.json.data.updatedAt,
+      },
+    );
+    expect(updated.status).toBe(200);
+    const readback = await call('hr01', 'GET', url);
+    expect(
+      readback.json.data.rules.data.find(
+        (r: Json) => r.id === initial.json.data.id,
+      ).lateGraceMinutes,
+    ).toBe(15);
+    const department = await db
+      .repository('departments')
+      .findOne({ filter: { id: departmentId } });
+    const retiredIds = [
+      departmentId,
+      ...(department?.parentId ? [String(department.parentId)] : []),
+    ];
+    for (const retiredId of retiredIds) {
+      const previousDepartment = await db
+        .repository('departments')
+        .findOne({ filter: { id: retiredId } });
+      await db
+        .repository('departments')
+        .updateOne({ filter: { id: retiredId }, values: { active: false } });
+      try {
+        const latestShift = await call(
+          'hr01',
+          'GET',
+          `${url}/shifts/${created.json.data.id}`,
+        );
+        const deactivateShift = await call(
+          'hr01',
+          'PATCH',
+          `${url}/shifts/${created.json.data.id}`,
+          {
+            value: { ...shift, title: 'Updated night', active: false },
+            expectedUpdatedAt: latestShift.json.data.updatedAt,
+          },
+        );
+        expect(deactivateShift.status).toBe(200);
+        const latestRule = await call(
+          'hr01',
+          'GET',
+          `${url}/rules/${initial.json.data.id}`,
+        );
+        expect(
+          (
+            await call(
+              'hr01',
+              'PATCH',
+              `${url}/rules/${initial.json.data.id}`,
+              {
+                value: { ...rule, lateGraceMinutes: 15, active: false },
+                expectedUpdatedAt: latestRule.json.data.updatedAt,
+              },
+            )
+          ).status,
+        ).toBe(200);
+        expect(
+          (
+            await call(
+              'hr01',
+              'PATCH',
+              `${url}/shifts/${created.json.data.id}`,
+              {
+                value: { ...shift, title: 'Updated night', active: true },
+                expectedUpdatedAt: deactivateShift.json.data.updatedAt,
+              },
+            )
+          ).status,
+        ).toBe(400);
+      } finally {
+        await db.repository('departments').updateOne({
+          filter: { id: retiredId },
+          values: { active: previousDepartment!.active },
+        });
+      }
+    }
+  });
+  it('enforces HR-only access, validates input, persists changes and rejects stale revisions', async () => {
+    const url = '/attendance-settings';
+    expect((await call(null, 'GET', url)).status).toBe(401);
+    for (const user of ['mgr_east', 'emp_njl_1']) {
+      expect((await call(user, 'GET', url)).status).toBe(403);
+      expect(
+        (await call(user, 'PATCH', `${url}/config/limits`, {})).status,
+      ).toBe(403);
+    }
+    const original = await call('hr01', 'GET', url);
+    expect(original.status).toBe(200);
+    const { limits, annualLeave, calendar } = original.json.data.config;
+    expect(limits).toEqual({
+      revision: 0,
+      value: {
+        monthlyMissingPunchLimit: 3,
+        monthlyConfirmationDays: 3,
+        consecutiveMissingReminderDays: 2,
+        overtimeReminderRatio: 0.8,
+        leaveSecondLevelDays: 3,
+      },
+    });
+    const invalid = await call('hr01', 'PATCH', `${url}/config/limits`, {
+      revision: 0,
+      value: { ...limits.value, overtimeReminderRatio: 80 },
+    });
+    expect(invalid.status).toBe(400);
+    expect(invalid.json.details.fields).toContain(
+      'value.overtimeReminderRatio',
+    );
+    expect(
+      (
+        await call('hr01', 'PATCH', `${url}/config/reminders`, {
+          revision: 0,
+          value: {},
+        })
+      ).status,
+    ).toBe(400);
+    const change = {
+      revision: 0,
+      value: { ...limits.value, monthlyMissingPunchLimit: 4 },
+    };
+    const saved = await call('hr01', 'PATCH', `${url}/config/limits`, change);
+    expect(saved.status).toBe(200);
+    expect(saved.json.data.revision).toBe(1);
+    expect(
+      (await call('hr01', 'PATCH', `${url}/config/limits`, change)).status,
+    ).toBe(409);
+    const reloaded = await call('hr01', 'GET', url);
+    expect(reloaded.json.data.config.limits).toEqual(saved.json.data);
+    expect(reloaded.json.data.config.annualLeave).toEqual(annualLeave);
+    expect(reloaded.json.data.config.calendar).toEqual(calendar);
+    const persisted = await server.application.container
+      .resolve(databaseManagerToken)
+      .repository('personnelSettings')
+      .findOne({ filter: { id: 'attendance.limits' } });
+    expect(persisted?.value).toEqual(change.value);
+    expect(persisted?.updatedBy).toBeTruthy();
+  });
+});
+
+registerLeaveRequestAcceptance(() => server, call);
+registerScheduleAcceptance(() => server, call);
+registerLeaveProofAcceptance(
+  () => server,
+  call,
+  async (username, method, url, body) => {
+    const headers: Record<string, string> = {};
+    if (username) headers.cookie = await signIn(username);
+    if (method !== 'GET') headers.origin = 'http://localhost';
+    const basePath = server.application.publicBasePath;
+    const target = url.startsWith(`${basePath}/`)
+      ? `http://localhost${url}`
+      : `${base}${url}`;
+    return server.fetch(new Request(target, { method, headers, body }));
+  },
+);
 
 describe('work item producer foundation', () => {
   it('enforces recipient scope, rejects manual approval closure, and keeps completion idempotent', async () => {
@@ -306,6 +1117,157 @@ describe('work item producer foundation', () => {
 });
 
 describe('contract reminder windows', () => {
+  it('counts scoped job events rather than profile dates and rejects invalid report ranges', async () => {
+    const db = server.application.container.resolve(databaseManagerToken);
+    const url = '/hr-reports?from=2001-01-01&to=2001-01-20';
+    expect((await call(null, 'GET', url)).status).toBe(401);
+    expect((await call('emp_njl_1', 'GET', url)).status).toBe(403);
+    const before = await call('hr01', 'GET', url);
+    const managerBefore = await call('mgr_east', 'GET', url);
+    const eventIds: string[] = [];
+    try {
+      for (const [index, employeeId, eventType, effectiveDate] of [
+        [0, 'emp-limin', 'onboard', '2001-01-01'],
+        [1, 'emp-limin', 'onboard', '2001-01-02'],
+        [2, 'emp-limin', 'offboard', '2001-01-20'],
+        [3, 'emp-zhaoyang', 'onboard', '2001-01-10'],
+        [4, 'emp-wanglei', 'onboard', '2001-01-21'],
+        [5, 'emp-wanglei', 'transfer', '2001-01-10'],
+      ] as const) {
+        const id = `report-event-test-${index}`;
+        await db.repository('jobEvents').createOne({
+          values: {
+            id,
+            employeeId,
+            eventType,
+            effectiveDate,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+        eventIds.push(id);
+      }
+      const report = await call('hr01', 'GET', url);
+      expect(report.status).toBe(200);
+      expect(report.json.data.joined).toBe(before.json.data.joined + 2);
+      expect(report.json.data.left).toBe(before.json.data.left + 1);
+      expect(report.json.data.monthly.at(-1)).toEqual({
+        month: '2001-01',
+        joined: 2,
+        left: 1,
+      });
+      const manager = await call('mgr_east', 'GET', url);
+      expect(manager.status).toBe(200);
+      expect(manager.json.data.joined).toBe(managerBefore.json.data.joined + 1);
+      const empty = await call(
+        'hr01',
+        'GET',
+        `${url}&departmentId=missing-department`,
+      );
+      expect(empty.json.data.joined).toBe(0);
+      expect(empty.json.data.left).toBe(0);
+      for (const range of [
+        'from=2001-02-30',
+        'to=not-a-date',
+        'from=2001-02-01&to=2001-01-01',
+      ])
+        expect((await call('hr01', 'GET', `/hr-reports?${range}`)).status).toBe(
+          400,
+        );
+    } finally {
+      for (const id of eventIds)
+        await db.repository('jobEvents').deleteOne({ filter: { id } });
+    }
+  });
+  it('uses saved windows for contract filters and report reminders, including boundaries', async () => {
+    const db = server.application.container.resolve(databaseManagerToken);
+    const original = await call('hr01', 'GET', '/personnel-settings');
+    const employee = await db
+      .repository('employees')
+      .findOne({ filter: { id: 'emp-sunli' } });
+    const contract = await db
+      .repository('employmentContracts')
+      .findOne({ filter: { id: 'contract-limin' } });
+    expect(employee).toBeTruthy();
+    expect(contract).toBeTruthy();
+    let revision = original.json.data.reminders.revision;
+    const date = today();
+    try {
+      const saved = await call(
+        'hr01',
+        'PATCH',
+        '/personnel-settings/reminders',
+        {
+          revision,
+          value: { probationDays: 20, contractDays: [30, 90] },
+        },
+      );
+      expect(saved.status).toBe(200);
+      revision = saved.json.data.revision;
+      for (const [probationDays, contractDays, included] of [
+        [20, 90, true],
+        [21, 91, false],
+        [-1, -1, false],
+        [0, 0, true],
+      ] as const) {
+        await db.repository('employees').updateOne({
+          filter: { id: 'emp-sunli' },
+          values: {
+            status: 'probation',
+            probationEndDate: addDays(date, probationDays),
+          },
+        });
+        await db.repository('employmentContracts').updateOne({
+          filter: { id: 'contract-limin' },
+          values: { status: 'active', endDate: addDays(date, contractDays) },
+        });
+        const list = await call('hr01', 'GET', '/contracts?quick=expiring');
+        expect(list.status).toBe(200);
+        expect(list.json.data.reminderDays).toBe(90);
+        expect(
+          list.json.data.items.some(
+            (item: Json) => item.id === 'contract-limin',
+          ),
+        ).toBe(included);
+        const report = await call('hr01', 'GET', '/hr-reports');
+        expect(report.status).toBe(200);
+        expect(report.json.data.reminderDays).toEqual({
+          probation: 20,
+          contract: 90,
+        });
+        expect(
+          report.json.data.probationEnding.some(
+            (item: Json) => item.employeeId === 'emp-sunli',
+          ),
+        ).toBe(included);
+        expect(
+          report.json.data.contractsEnding.some(
+            (item: Json) => item.contractId === 'contract-limin',
+          ),
+        ).toBe(included);
+      }
+    } finally {
+      await db.repository('employees').updateOne({
+        filter: { id: 'emp-sunli' },
+        values: {
+          status: employee!.status,
+          probationEndDate: employee!.probationEndDate,
+        },
+      });
+      await db.repository('employmentContracts').updateOne({
+        filter: { id: 'contract-limin' },
+        values: { status: contract!.status, endDate: contract!.endDate },
+      });
+      expect(
+        (
+          await call('hr01', 'PATCH', '/personnel-settings/reminders', {
+            revision,
+            value: original.json.data.reminders.value,
+          })
+        ).status,
+      ).toBe(200);
+    }
+  });
   it('restricts settings to HR and applies saved reminder windows immediately', async () => {
     expect((await call(null, 'GET', '/personnel-settings')).status).toBe(401);
     expect((await call('mgr_east', 'GET', '/personnel-settings')).status).toBe(

@@ -1,6 +1,447 @@
 import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
+  attendance: {
+    records: 'Attendance records',
+    mine: {
+      title: 'Attendance and leave',
+      description:
+        'View your leave balances and requests, and submit leave for approval.',
+      requestCount: '{{count}} leave requests',
+      balances: 'Leave balances · {{year}} (days)',
+      balanceHelp:
+        'Available = entitled + carried over + adjustments − used − pending. Pending requests reserve your balance until approved or cancelled.',
+      emptyBalancesDescription:
+        'No balance has been initialized for you this year. Contact HR to check; an empty balance is not a zero entitlement.',
+      unknownType: 'Leave type unavailable',
+    },
+    approvals: {
+      title: 'Approvals',
+      description: 'Review leave requests waiting for your decision.',
+      empty: 'No pending approvals',
+      emptyDescription: 'Requests assigned to you will appear here.',
+      detail: 'Leave request details',
+      detailDescription:
+        'Review the request, supporting proof and approval history before deciding.',
+      back: 'Back to approvals',
+      applicant: 'Applicant',
+      duration: 'Calculated duration',
+      durationValue: '{{duration}} {{unit}}',
+      unavailable: 'Unavailable',
+      history: 'Approval history',
+      noHistory: 'This request has not entered approval yet.',
+      comment: 'Approval comment',
+      noComment: 'No comment',
+      step: 'Step {{number}} · {{kind}}',
+      manager: 'Department manager',
+      hr: 'HR',
+      waiting: 'Waiting for previous step',
+      inactive: 'Not processed',
+      cannotDecide:
+        'This request does not currently require your decision. Only the current approver can act.',
+      approveTitle: 'Approve {{name}}’s leave request?',
+      approveDescription:
+        'Your decision will be recorded. Leave takes effect only after the final required approval.',
+      rejectTitle: 'Reject {{name}}’s leave request?',
+      rejectDescription:
+        'This ends approval and releases the reserved leave balance. The applicant must create a new request if leave is still needed.',
+      decided: 'Your decision has been recorded.',
+      reload: 'Reload latest request',
+      reloadRequired:
+        'The result changed or could not be confirmed. Reload and review the latest request before deciding again. Your comment has been kept.',
+    },
+    schedules: {
+      title: 'Schedules',
+      view: 'View schedules',
+      edit: 'Edit schedules',
+      description:
+        'Assign shifts by employee and date, then validate and publish.',
+      department: 'Department',
+      from: 'From',
+      to: 'To',
+      load: 'Load schedule',
+      save: 'Save schedule',
+      publish: 'Publish selected schedules',
+      validate: 'Validate',
+      rest: 'Rest day',
+      saved: 'Schedule saved.',
+      published: 'Schedule published.',
+      warning: 'Warnings need confirmation before saving.',
+      blocked:
+        'This schedule cannot be saved until blocking conflicts are fixed.',
+      noEmployees: 'No employees in this department',
+      noEmployeesDescription:
+        'Choose another department or adjust the date range.',
+      errors: {
+        INVALID_DATE_RANGE: 'Enter a valid date range of at most 31 days.',
+        SCHEDULE_BLOCKED: 'Blocking schedule conflicts must be fixed first.',
+        SCHEDULE_NOT_READY:
+          'Schedule validation and publication are still being implemented. No changes were saved.',
+        SCHEDULE_WARNING_CONFIRMATION: 'Confirm the warnings before saving.',
+        SHIFT_NOT_APPLICABLE:
+          'This shift is not available to the employee department.',
+        LEAVE_CONFLICT:
+          'The employee has pending or approved leave on this date.',
+        EMPLOYEE_NOT_ACTIVE: 'The employee cannot be scheduled on this date.',
+      },
+    },
+    leave: {
+      hrEntry: {
+        title: 'HR leave entry',
+        create: 'Enter leave for an employee',
+        edit: 'Continue HR leave draft',
+        description:
+          'Only employees without a login account can be selected. Saved drafts reserve no balance; submission follows the existing approval chain.',
+        selectEmployee: 'Select an employee without an account',
+        employeeLabel: '{{name}} · {{number}}',
+        noEmployees:
+          'No eligible employees without an account are visible in your authorized scope.',
+        noDrafts:
+          'No HR leave drafts. Use “Enter leave for an employee” to create a request.',
+        unavailable:
+          'This is not an editable HR draft, or the employee now has an account. Return to the leave page to check.',
+        draftSaved:
+          'HR leave draft saved. Continue it from the HR entry section on the leave page.',
+        editFor: 'Continue HR leave draft for {{name}}',
+      },
+      ownDetail: {
+        title: 'My leave request',
+        description:
+          'Review your request and approval history. Pending or approved leave can be cancelled where policy permits.',
+        back: 'Back to my attendance and leave',
+        openFor: 'View leave request starting {{date}}',
+        unavailable:
+          'This page only shows your own leave requests. Return to your profile to choose a request.',
+        cancel: 'Cancel leave request',
+        keep: 'Keep request',
+        cancelTitle: 'Cancel this {{type}} request?',
+        pendingConsequence:
+          'Leave from {{start}} to {{end}} will be cancelled. Approval stops and any reserved balance is released. A locked month prevents cancellation.',
+        approvedConsequence:
+          'Leave from {{start}} to {{end}} will be cancelled. Recorded usage is reversed and attendance saved by this request is restored where it has not changed. Locked months or changed attendance prevent cancellation; contact HR if blocked.',
+        cancelled: 'Your leave request has been cancelled.',
+        cannotCancel:
+          'Only pending or approved requests can be cancelled. Drafts can be edited; rejected and cancelled requests are read-only.',
+        reloadRequired:
+          'The cancellation result could not be confirmed or the request is no longer eligible. Reload the latest request before taking another action; do not submit again blindly.',
+      },
+      title: 'Leave',
+      types: 'Leave types',
+      balances: 'Leave balances',
+      requests: 'Leave requests',
+      manageTypes: 'Manage leave types',
+      adjustBalance: 'Initialize and adjust leave balances',
+      request: 'Request leave',
+      approve: 'Approve leave',
+      requestDescription:
+        'Create and submit a leave request for your own employee record.',
+      selectType: 'Select a leave type',
+      editDraft: 'Continue leave draft',
+      editDraftFor: 'Continue leave draft starting {{date}}',
+      draftDescription:
+        'Resume the saved request. Saving a draft does not submit it for approval or reserve leave.',
+      draftUnavailable:
+        'This request is not an editable draft belonging to you. Return to your profile to check its status.',
+      saveDraft: 'Save draft',
+      draftSaved: 'Draft saved. You can continue it from your profile.',
+      requestSubmitted: 'Leave request submitted for approval.',
+      reloadDraft: 'Reload saved draft',
+      reloadDraftDescription:
+        'Discard unsaved form changes and load the latest saved request? Uploaded files are not deleted.',
+      replaceProof: 'Detach proof and replace',
+      timeZone: 'Dates and times are shown in {{zone}}.',
+      proofRequired: 'proof required',
+      proofLabel: 'Supporting proof',
+      uploadProof: 'Upload proof',
+      viewProof: 'View proof',
+      proofLoading: 'Loading proof…',
+      noProof: 'No proof',
+      noRequests: 'No leave requests yet.',
+      requestStatusLabel: 'Status',
+      requestStatus: {
+        draft: 'Draft',
+        pending: 'Pending approval',
+        approved: 'Approved',
+        rejected: 'Rejected',
+        cancelled: 'Cancelled',
+      },
+      proofHelp:
+        'One PDF, PNG or JPEG, up to 5 MiB. Visible only to you, authorized approvers and HR. Not sent to AI.',
+      proofMissing: 'This leave type requires proof before submission.',
+      proofUploadFailed:
+        'Could not upload the proof. Check the file format and size, then retry.',
+      proofUploadUncertain:
+        'The upload result could not be confirmed. Do not upload again; ask HR to reconcile the file first. Your form has been kept.',
+      proofUnavailable:
+        'This proof is unavailable or you no longer have access.',
+      requestPreview:
+        'The server will calculate the duration by {{unit}} and validate your balance before submission.',
+      submit: 'Save and submit',
+      actions: { approve: 'Approve', reject: 'Reject' },
+      description:
+        'Maintain leave policies and annual balances with an auditable adjustment history.',
+      createType: 'New leave type',
+      editType: 'Edit leave type',
+      typeDescription:
+        'Check local policies before enabling. Accounting rules cannot change once referenced.',
+      initialize: 'Initialize annual balances',
+      initializeDescription:
+        'Initialize eligible employees for the selected date’s year (up to 500 employees). Existing balances are preserved; only annual and earned leave have balances. Seniority is calculated as of this date.',
+      initialized: 'Created {{count}} balance records',
+      initializedDetails:
+        '{{skipped}} employees skipped; {{missing}} need a career start date.',
+      adjust: 'Adjust leave balance',
+      adjustDescription:
+        'Enter a signed number of days and a reason. Used and pending amounts are not overwritten.',
+      saved: 'Saved "{{name}}".',
+      searchTypes: 'Search by leave type or code',
+      searchBalances: 'Search by employee, number or leave type',
+      clear: 'Clear filters',
+      retry: 'Retry',
+      yes: 'Yes',
+      no: 'No',
+      active: 'Active',
+      inactive: 'Inactive',
+      frozen: 'Frozen',
+      emptyTypes: 'No leave types yet',
+      emptyTypesDescription:
+        'Create a leave type and verify its policy before initializing balances.',
+      emptyBalances: 'No balances for this year',
+      emptyBalancesDescription:
+        'Configure active annual or earned leave types, then initialize annual balances.',
+      noResults: 'No matching results',
+      cap: 'Only the first 500 records are loaded. Search applies to these records, not the full directory.',
+      missingCareer: 'Career start date missing',
+      balanceNote:
+        'All balances are in days. Missing career start dates fall back to the hire date; ask HR to complete the employee record.',
+      fields: {
+        title: 'Leave type',
+        code: 'Code',
+        payType: 'Pay policy',
+        unit: 'Request unit',
+        balanceRule: 'Balance rule',
+        fixedDays: 'Days per event (fixed rule only)',
+        countBy: 'Count by',
+        requiresAttachment: 'Proof required',
+        active: 'Enabled',
+        employee: 'Employee',
+        year: 'Year',
+        entitled: 'Entitled',
+        carriedOver: 'Carried over',
+        used: 'Used',
+        pending: 'Pending',
+        adjusted: 'Adjustments',
+        available: 'Available',
+        asOf: 'Calculation date',
+        delta: 'Adjustment (days)',
+        reason: 'Reason',
+        startAt: 'Starts at',
+        endAt: 'Ends at',
+      },
+      enums: {
+        paid: 'Paid',
+        partial: 'Partially paid',
+        unpaid: 'Unpaid',
+        day: 'Day',
+        halfDay: 'Half day',
+        hour: 'Hour',
+        annualBySeniority: 'Annual by seniority',
+        fixedPerEvent: 'Fixed per event',
+        earned: 'Earned',
+        none: 'Unlimited',
+        workdays: 'Workdays',
+        schedule: 'Schedule',
+        calendar: 'Calendar days',
+      },
+      errors: {
+        ATTACHMENT_REQUIRED:
+          'This leave type requires proof before submission.',
+        ATTACHMENT_NOT_FOUND: 'The proof file is unavailable.',
+        LEAVE_TYPE_NOT_FOUND: 'This leave type is unavailable.',
+        INVALID_DATE_RANGE: 'Enter a valid start and end time.',
+        LEAVE_SCHEDULE_INVALID:
+          'The shift times are missing or ambiguous. Ask HR to verify the schedule before requesting leave.',
+        LEAVE_UNIT_POLICY_REQUIRED:
+          'Half-day and hourly leave are not yet available: their calculation policy must be confirmed and implemented first. Contact HR; no balance was deducted.',
+        NO_ELIGIBLE_LEAVE_DAYS:
+          'The selected range has no eligible leave days.',
+        BALANCE_NOT_INITIALIZED:
+          'This employee has no initialized balance for the selected leave type.',
+        LEAVE_OVERLAP:
+          'The selected range overlaps another pending or approved leave request.',
+        MONTH_LOCKED: 'The selected month is locked and cannot be changed.',
+        ATTENDANCE_RECALCULATION_REQUIRED:
+          'Attendance changed after leave approval. Contact HR to recalculate before cancelling; nothing was changed.',
+        ATTENDANCE_LEAVE_CONFLICT:
+          'Another approved leave request already covers this attendance date. Contact HR.',
+        FIXED_LEAVE_LIMIT:
+          'The requested duration exceeds the per-event leave allowance.',
+        REQUEST_STATE_CONFLICT: 'This request has already changed state.',
+        ONLY_EMPLOYEE_MAY_SUBMIT: 'Only the employee may submit this draft.',
+        HR_ENTRY_REQUIRES_NO_ACCOUNT:
+          'HR may only record leave for an employee without an account.',
+        NOT_CURRENT_APPROVER:
+          'You are not the current approver for this request.',
+        SELF_APPROVAL_FORBIDDEN: 'You cannot approve your own leave request.',
+        BALANCE_STATE_INVALID: 'The leave balance is inconsistent. Contact HR.',
+        CROSS_YEAR_REQUEST: 'A leave request cannot cross calendar years.',
+        BALANCE_CONFLICT:
+          'The balance changed while submitting. Reload and try again.',
+        forbidden: 'You do not have permission. Contact an administrator.',
+        notFound:
+          'This record is unavailable. Close this form and return to the list.',
+        conflict:
+          'Data changed. Close and reopen the form to review the latest version.',
+        failed: 'Request failed. Please try again.',
+        LEAVE_TYPE_CODE_CONFLICT:
+          'This code is already used. Enter a different code.',
+        LEAVE_TYPE_IN_USE:
+          'This leave type is already referenced. Only its name and enabled status may change.',
+        INSUFFICIENT_LEAVE_BALANCE:
+          'This adjustment would make the available balance negative. Reduce the deduction.',
+        BALANCE_FROZEN:
+          'This employee has left. Their balance is frozen and cannot be adjusted.',
+        INVALID_EMPLOYEE_DATES:
+          'An employee’s career date is later than their hire date. Ask HR to correct it first.',
+        FUTURE_INITIALIZATION: 'The calculation date cannot be in the future.',
+        SCOPE_TOO_LARGE:
+          'The employee scope exceeds 500. Use an explicitly scoped initialization request.',
+        CARRYOVER_POLICY_REQUIRED:
+          'Expiring carryover is not supported yet. No balance was changed.',
+        ATTENDANCE_NOT_INITIALIZED:
+          'Attendance setup is missing. Ask an administrator to apply the required seed.',
+        INVALID_INPUT: 'Some values are invalid. Check the form and try again.',
+        IDEMPOTENCY_CONFLICT:
+          'This request was already used with different values. Reload and verify the audit history.',
+      },
+      invalid: 'Enter a valid value within the allowed range.',
+      invalidDelta:
+        'Enter a nonzero number from −366 to 366, with at most four decimal places.',
+      reasonRequired: 'Enter the reason for this adjustment.',
+      history: 'Adjustment history',
+      noHistory: 'No manual adjustments yet.',
+      adjustedBy: 'Recorded by {{by}}',
+      balanceIdentity: '{{name}} · {{type}} · {{year}}',
+      availableDays: 'Available: {{value}} days',
+      discardTitle: 'Discard unsaved leave changes?',
+      discardDescription: 'Your changes in this form will not be saved.',
+      keepEditing: 'Keep editing',
+      discard: 'Discard',
+      deactivateTitle: 'Disable "{{name}}"?',
+      deactivateDescription:
+        'This type will no longer be offered for new requests or balance initialization. Existing records are preserved.',
+      deactivate: 'Disable',
+    },
+    settings: {
+      description:
+        'Maintain the rules and calendars used by attendance and leave.',
+      shiftsDescription:
+        'Define shift hours and breaks. An end time before the start time belongs to the next day; referenced shifts retain their historical definition.',
+      rulesDescription:
+        'Assign rules to departments and descendants. The nearest department rule takes precedence.',
+      calendar: 'Holidays and adjusted workdays',
+      calendarDescription:
+        'Enter YYYY-MM-DD dates, one per line or separated by commas. HR must verify the local statutory calendar.',
+      annualLeave: 'Annual leave bands',
+      annualLeaveDescription:
+        'Years and days must increase in order. Changes apply to subsequent initialization, not existing balances.',
+      limits: 'Approval, correction and reminder limits',
+      limitsDescription:
+        'Leave exceeding the threshold requires HR approval; fixed-per-event leave always does. Changes affect new submissions. Attendance automation is not yet connected.',
+      pendingScope:
+        'Rotation templates, approval-chain configuration and attendance automation are still being implemented.',
+      newShift: 'New shift',
+      editShift: 'Edit shift',
+      newRule: 'New attendance rule',
+      editRule: 'Edit attendance rule',
+      empty: 'No configuration records yet',
+      emptyDescription:
+        'Create the shifts and department rules used by your organization.',
+      refresh: 'Refresh',
+      reload: 'Reload',
+      reloadTitle: 'Reload this configuration?',
+      reloadDescription:
+        'Unsaved changes in this card will be discarded. The latest server version will be loaded.',
+      discardTitle: 'Discard unsaved configuration changes?',
+      deactivateDescription:
+        'This configuration will not be available for new use. Historical records are preserved.',
+      invalidNumber: 'Enter a number within the stated range.',
+      invalidBands:
+        'Use ascending, distinct year thresholds (0–100), with non-decreasing days (0–366).',
+      invalidCalendar:
+        'Use valid, unique dates within the selected year. A date cannot be both a holiday and an adjusted workday.',
+      invalidCode: 'Use 1–64 letters, digits, underscores or hyphens.',
+      requiredTitle: 'Enter a title (up to 255 characters).',
+      invalidTime: 'Enter different, valid start and end times.',
+      invalidBreak: 'Break time must be shorter than the shift.',
+      requiredDepartment: 'Select at least one department.',
+      allDepartments:
+        'Leave unchecked for all departments; selections also include descendants.',
+      departmentHelp:
+        'Select applicable departments; descendants inherit unless a closer rule exists.',
+      noCalendar:
+        'No statutory calendar configured. Add a year and verify its dates before using workday calculations.',
+      addYear: 'Add year',
+      addBand: 'Add band',
+      removeRow: 'Remove row {{row}}',
+      fields: {
+        title: 'Title',
+        code: 'Code',
+        startTime: 'Start time',
+        endTime: 'End time',
+        breakMinutes: 'Break (minutes, 0–1439)',
+        isNight: 'Night shift',
+        active: 'Active',
+        departmentIds: 'Departments',
+        workHourSystem: 'Working-hours system',
+        punchSource: 'Punch source',
+        lateGraceMinutes: 'Grace period (minutes, 0–240)',
+        overtimeRequiresApproval: 'Overtime requires approval',
+        monthlyOvertimeAlertHours: 'Monthly overtime alert (hours, 0–744)',
+        minRestHours: 'Minimum rest (hours, 0–72)',
+        maxConsecutiveNights: 'Consecutive nights limit (0–31)',
+        leaveSecondLevelDays:
+          'HR approval threshold (days, greater than 0, up to 366)',
+        monthlyMissingPunchLimit: 'Monthly missing-punch limit (0–31)',
+        monthlyConfirmationDays: 'Confirmation deadline (days, 1–31)',
+        consecutiveMissingReminderDays: 'Missing-punch reminder (days, 1–31)',
+        overtimeReminderRatio:
+          'Overtime reminder ratio (greater than 0, up to 1)',
+        minimumYears: 'Minimum career years',
+        days: 'Annual leave days',
+        holidays: 'Statutory holidays',
+        adjustedWorkdays: 'Adjusted workdays',
+      },
+      enums: {
+        standard: 'Standard',
+        comprehensive: 'Comprehensive',
+        flexible: 'Flexible',
+        feishu: 'Feishu',
+        dingtalk: 'DingTalk',
+        wecom: 'WeCom',
+        device: 'Attendance device import',
+      },
+      errors: {
+        SHIFT_CODE_CONFLICT:
+          'This shift code already exists. Choose a different code.',
+        SHIFT_IN_USE:
+          'This shift has been scheduled. Only availability may change; create a new shift to change its definition.',
+        ATTENDANCE_RULE_CONFLICT:
+          'An active rule already covers this department. Edit or disable that rule first.',
+        INVALID_DEPARTMENT:
+          'A selected department is inactive or unavailable. Reload and review the selection.',
+        INVALID_INPUT: 'Check the entered fields and try again.',
+        SCOPE_TOO_LARGE: 'Too many records. Narrow the configuration scope.',
+        ATTENDANCE_NOT_INITIALIZED:
+          'Attendance configuration has not been initialized. Contact an administrator.',
+      },
+      title: 'Attendance settings',
+      manage: 'Manage attendance settings',
+      shifts: 'Shifts',
+      rules: 'Attendance rules',
+      schedules: 'Schedules',
+    },
+  },
   workbench: {
     title: 'Workbench',
     description:
@@ -1573,6 +2014,7 @@ const enUS = {
       employmentType: 'Employment type',
       gender: 'Gender',
       hireDate: 'Hire date',
+      careerStartDate: 'Career start date',
       idNumber: 'ID number',
       idType: 'ID type',
       leaveDate: 'Leave date',
@@ -1869,6 +2311,8 @@ const enUS = {
       DEPARTMENT_NOT_FOUND: 'The department does not exist.',
       DEPARTMENT_PARENT_NOT_FOUND: 'The parent department does not exist.',
       EMPLOYEE_ALREADY_LEFT: 'This employee has already left.',
+      EMPLOYEE_CAREER_DATE_INVALID:
+        'Career start date cannot be later than hire date.',
       EMPLOYEE_CORE_FIELDS_LOCKED:
         'Department, position and status change through personnel actions.',
       EMPLOYEE_DEPARTMENT_NOT_FOUND: 'The department does not exist.',
@@ -2326,7 +2770,8 @@ const enUS = {
       signedAt: 'Signed on',
       quick: {
         all: 'All',
-        expiring: 'Ending within 60 days',
+        expiring: 'Ending within {{days}} days',
+        expiringLoading: 'Expiring soon',
         overdue: 'Past end, not handled',
       },
       more: 'Actions for {{no}}',
@@ -2366,8 +2811,8 @@ const enUS = {
         y3to5: '3–5 years',
         gt5: '> 5 years',
       },
-      probationEnding: 'Probation ending within 30 days',
-      contractsEnding: 'Contracts ending within 60 days',
+      probationEnding: 'Probation ending within {{days}} days',
+      contractsEnding: 'Contracts ending within {{days}} days',
     },
     orgChart: {
       title: 'Organization chart',

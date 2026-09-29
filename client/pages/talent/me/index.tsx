@@ -1,7 +1,8 @@
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { ClockIcon, PencilIcon } from 'lucide-react';
-import { useState, type ReactElement } from 'react';
+import { useReducer, useState, type ReactElement } from 'react';
+import { Link, Outlet, useLocation } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
@@ -43,12 +44,18 @@ import {
 } from '@/components/ui/card';
 
 import { ProfileChangeDialog } from './profile-change-dialog.js';
+import { MyLeaveRequests, type OwnLeaveRequest } from './leave-requests.js';
+import { MyLeaveBalances } from './leave-balances.js';
 
 /** 我的档案 — the signed-in employee's own record, requirements, gaps and history. */
 export default function MyProfilePage(): ReactElement {
   const { t } = useTranslation();
   const me = useRemote<EmployeeDetail | null>('talent/me');
   const lookups = useLookups();
+  const [leaveRevision, reloadLeaveRequests] = useReducer(
+    (n: number) => n + 1,
+    0,
+  );
 
   let body: ReactElement;
   if (me.error) body = <LoadError error={me.error} onRetry={me.reload} />;
@@ -69,6 +76,7 @@ export default function MyProfilePage(): ReactElement {
           me.data.departmentTitle
         }
         onChanged={me.reload}
+        leaveRevision={leaveRevision}
       />
     );
 
@@ -79,6 +87,7 @@ export default function MyProfilePage(): ReactElement {
         description={t('talent.me.description')}
       />
       {body}
+      <Outlet context={{ reloadLeaveRequests }} />
     </PageContainer>
   );
 }
@@ -87,10 +96,12 @@ function MyProfileBody({
   detail,
   departmentTitle,
   onChanged,
+  leaveRevision,
 }: {
   detail: EmployeeDetail;
   departmentTitle: string;
   onChanged: () => void;
+  leaveRevision: number;
 }): ReactElement {
   const { t } = useTranslation();
   const id = encodeURIComponent(detail.employee.id);
@@ -116,6 +127,22 @@ function MyProfileBody({
     resource: { type: 'composite', id: 'talent.profileChange' },
     action: 'request',
   });
+  const canLeave = useCan({
+    resource: { type: 'composite', id: 'talent.leaveRequest' },
+    action: 'request',
+  });
+  const location = useLocation();
+  // Closing the child request form keeps this parent mounted. Reload the
+  // authorized list on navigation so a successful submission is visible.
+  const leaveAllowed = !canLeave.isPending && !canLeave.error && canLeave.can;
+  const leaveRequests = useRemote<OwnLeaveRequest[]>(
+    leaveAllowed ? 'talent/leave/requests' : null,
+    {
+      employeeId: detail.employee.id,
+      refresh: location.key,
+      revision: leaveRevision,
+    },
+  );
   const [changeOpen, setChangeOpen] = useState(false);
   const pending = change.data?.status === 'pending';
   const recommendations = useGapRecommendations(
@@ -126,6 +153,34 @@ function MyProfileBody({
 
   return (
     <>
+      {leaveAllowed ? (
+        <Card id='attendance'>
+          <CardHeader className='flex flex-row items-center justify-between gap-4'>
+            <div>
+              <CardTitle>{t('attendance.mine.title')}</CardTitle>
+              <CardDescription>
+                {t('attendance.mine.description')}
+              </CardDescription>
+            </div>
+            <Button nativeButton={false} render={<Link to='leave/new' />}>
+              {t('attendance.leave.request')}
+            </Button>
+          </CardHeader>
+          <CardContent className='grid gap-6'>
+            <MyLeaveBalances revision={leaveRevision} />
+            {leaveRequests.error ? (
+              <LoadError
+                error={leaveRequests.error}
+                onRetry={leaveRequests.reload}
+              />
+            ) : leaveRequests.loading || !leaveRequests.data ? (
+              <BlockSkeleton rows={2} />
+            ) : (
+              <MyLeaveRequests rows={leaveRequests.data} />
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
       {pending ? (
         <Alert>
           <ClockIcon />

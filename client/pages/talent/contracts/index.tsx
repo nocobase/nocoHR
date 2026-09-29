@@ -78,20 +78,21 @@ export default function ContractsPage(): ReactElement {
   const quick = (QUICK as readonly string[]).includes(params.get('quick') ?? '')
     ? (params.get('quick') ?? '')
     : '';
-  const list = useRemote<{ items: Contract[]; can: { manage: boolean } }>(
-    'talent/contracts',
-    { quick: quick || undefined },
-  );
+  const list = useRemote<{
+    items: Contract[];
+    reminderDays: number;
+    can: { manage: boolean };
+  }>('talent/contracts', { quick: quick || undefined });
   const [editing, setEditing] = useState<{
     mode: 'create' | 'renew' | 'edit';
     contract: Contract | null;
   } | null>(null);
   const [terminating, setTerminating] = useState<Contract | null>(null);
-  const uploadTarget = useRef<Contract | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const uploadTargetRef = useRef<Contract | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function upload(file: File): Promise<void> {
-    const contract = uploadTarget.current;
+    const contract = uploadTargetRef.current;
     if (!contract) return;
     try {
       const { record } = await files.repository('hrFiles').uploadOne({ file });
@@ -135,7 +136,11 @@ export default function ContractsPage(): ReactElement {
         <TabsList>
           {QUICK.map((q) => (
             <TabsTrigger key={q || 'all'} value={q}>
-              {t(`talent.contracts.quick.${q || 'all'}`)}
+              {q === 'expiring' && !list.data
+                ? t('talent.contracts.quick.expiringLoading')
+                : t(`talent.contracts.quick.${q || 'all'}`, {
+                    days: list.data?.reminderDays,
+                  })}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -203,8 +208,8 @@ export default function ContractsPage(): ReactElement {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => {
-                          uploadTarget.current = row;
-                          fileInput.current?.click();
+                          uploadTargetRef.current = row;
+                          fileInputRef.current?.click();
                         }}
                       >
                         <UploadIcon />
@@ -228,7 +233,7 @@ export default function ContractsPage(): ReactElement {
         />
       )}
       <input
-        ref={fileInput}
+        ref={fileInputRef}
         type='file'
         accept='.pdf,.jpg,.jpeg,.png'
         className='hidden'

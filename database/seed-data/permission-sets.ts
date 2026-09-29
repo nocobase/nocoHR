@@ -55,12 +55,22 @@ import {
   practiceScenarioResource,
   trainingSessionResource,
 } from '../../server/providers/hr/training-resources.js';
+import { leaveResource } from '../../server/providers/hr/leave-resources.js';
 
 const ALL = 'allRecords';
 const MANAGED = MANAGED_DEPARTMENTS_SCOPE;
 const SELF = SELF_SCOPE;
 const VISIBLE = VISIBLE_DOCUMENTS_SCOPE;
 const OWNED = OWNED_BY_ME_SCOPE;
+const leaveRequestParts = (scope: string) => ({
+  requests: scope,
+  employees: scope,
+  types: ALL,
+  balances: scope,
+  schedules: scope,
+  attendance: scope,
+  configuration: ALL,
+});
 
 const page = (id: string): PermissionGrant => ({
   resource: { type: 'page', id },
@@ -158,6 +168,8 @@ export const hrAdmin = definePermissionSet('hr.admin')
   .title({ key: 'permissionSets.hrAdmin', ns: 'hr' })
   .grant(
     page('talent.me'),
+    page('talent.approvals'),
+    page('talent.leave'),
     page('talent.employees'),
     page('talent.positions'),
     page('talent.framework'),
@@ -180,6 +192,10 @@ export const hrAdmin = definePermissionSet('hr.admin')
       linkUser: { employees: ALL },
       markLeave: { employees: ALL },
       delete: { employees: ALL },
+    }),
+    leaveResource.reference().grant({
+      request: leaveRequestParts(ALL),
+      approve: leaveRequestParts(ALL),
     }),
     hrAssistantResource.reference().grant({ configure }),
     assessmentResource.reference().grant({
@@ -358,6 +374,7 @@ export const hrManager = definePermissionSet('hr.manager')
   .title({ key: 'permissionSets.hrManager', ns: 'hr' })
   .grant(
     page('talent.me'),
+    page('talent.approvals'),
     page('talent.employees'),
     page('talent.positions'),
     page('talent.framework'),
@@ -367,6 +384,10 @@ export const hrManager = definePermissionSet('hr.manager')
     employeeResource
       .reference()
       .grant({ view: { employees: MANAGED }, list: { employees: MANAGED } }),
+    leaveResource.reference().grant({
+      request: leaveRequestParts(SELF),
+      approve: leaveRequestParts(MANAGED),
+    }),
     assessmentResource.reference().grant({
       view: { employeeCompetencies: MANAGED },
       create: { employeeCompetencies: MANAGED },
@@ -457,6 +478,7 @@ export const hrEmployee = definePermissionSet('hr.employee')
     employeeResource
       .reference()
       .grant({ view: { employees: SELF }, viewSensitive: { employees: SELF } }),
+    leaveResource.reference().grant({ request: leaveRequestParts(SELF) }),
     assessmentResource
       .reference()
       .grant({ view: { employeeCompetencies: SELF } }),

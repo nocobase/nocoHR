@@ -107,6 +107,7 @@ export interface EmployeeRecord {
   managerEmployeeId: string | null;
   status: string;
   hireDate: string | null;
+  careerStartDate: string | null;
   positionSince: string | null;
   email: string | null;
   gender: string | null;
@@ -348,6 +349,7 @@ const BASE_FIELDS = [
   'managerEmployeeId',
   'status',
   'hireDate',
+  'careerStartDate',
   'positionSince',
   'email',
   'gender',
@@ -379,6 +381,7 @@ export function toEmployee(row: Record<string, unknown>): EmployeeRecord {
     managerEmployeeId: opt('managerEmployeeId'),
     status: str(row.status ?? 'active'),
     hireDate: toDateOnly(row.hireDate as string | null),
+    careerStartDate: toDateOnly(row.careerStartDate as string | null),
     positionSince: toDateOnly(row.positionSince as string | null),
     email: opt('email'),
     gender: opt('gender'),
@@ -724,6 +727,11 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       );
     if (input.hireDate !== undefined)
       set('hireDate', optionalDate(input.hireDate, 'EMPLOYEE_DATE_INVALID'));
+    if (input.careerStartDate !== undefined)
+      set(
+        'careerStartDate',
+        optionalDate(input.careerStartDate, 'EMPLOYEE_DATE_INVALID'),
+      );
     if (input.positionSince !== undefined)
       set(
         'positionSince',
@@ -845,6 +853,18 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
     selfId: string | null,
     current?: EmployeeRecord,
   ): Promise<void> {
+    const careerDate =
+      values.careerStartDate === undefined
+        ? current?.careerStartDate
+        : values.careerStartDate;
+    const hireDate =
+      values.hireDate === undefined ? current?.hireDate : values.hireDate;
+    if (
+      typeof careerDate === 'string' &&
+      typeof hireDate === 'string' &&
+      careerDate > hireDate
+    )
+      throw new HrError('EMPLOYEE_CAREER_DATE_INVALID');
     if (typeof values.departmentId === 'string') {
       const department = await organization.getDepartment(
         values.departmentId,
@@ -2033,7 +2053,8 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         positions: data.positions
           .filter(
             (p) =>
-              data.canManage || (p.active && visibleFamilies.has(p.jobFamilyId)),
+              data.canManage ||
+              (p.active && visibleFamilies.has(p.jobFamilyId)),
           )
           .map((p) => ({ ...p, headcount: counts.get(p.id) ?? 0 })),
         canManage: data.canManage,

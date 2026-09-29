@@ -42,6 +42,10 @@ const SCOPED_COLLECTIONS = [
   ...LEARNING_EMPLOYEE_COLLECTIONS,
   ...EXAM_EMPLOYEE_COLLECTIONS,
   ...TRAINING_EMPLOYEE_COLLECTIONS,
+  'leaveRequests',
+  'leaveBalances',
+  'shiftSchedules',
+  'attendanceRecords',
 ];
 /** Collections with an `ownerUserId` column: content an instructor is responsible for. */
 const OWNED_COLLECTIONS = [
@@ -180,6 +184,51 @@ export function registerRecordAccess(
             ];
             return anyScope(scopes.filter((scope) => scope !== false));
           }
+          if (
+            [
+              'leaveRequests',
+              'leaveBalances',
+              'shiftSchedules',
+              'attendanceRecords',
+            ].includes(collection)
+          ) {
+            const scopes: DatabaseScope[] = [anyOf('employeeId', employees)];
+            if (collection === 'leaveRequests') {
+              const pending = await database
+                .query()
+                .selectFrom('leaveRequests')
+                .select(['id', 'approvals'])
+                .where('status', '=', 'pending')
+                .execute();
+              const ids = pending
+                .filter((row) => {
+                  let value: unknown = row.approvals;
+                  for (let i = 0; i < 2 && typeof value === 'string'; i += 1) {
+                    try {
+                      value = JSON.parse(value);
+                    } catch {
+                      break;
+                    }
+                  }
+                  return (
+                    Array.isArray(value) &&
+                    value.some(
+                      (step) =>
+                        step &&
+                        typeof step === 'object' &&
+                        (step as { status?: string; approverUserId?: string })
+                          .status === 'pending' &&
+                        (step as { approverUserId?: string }).approverUserId ===
+                          userId,
+                    )
+                  );
+                })
+                .map((row) => String(row.id));
+              const pendingScope = anyOf('id', ids);
+              if (pendingScope !== false) scopes.push(pendingScope);
+            }
+            return anyScope(scopes.filter((scope) => scope !== false));
+          }
           return anyOf('employeeId', employees);
         }),
     ),
@@ -205,6 +254,17 @@ export function registerRecordAccess(
               scopes.push(condition('employeeId', '$eq', employeeId));
             return anyScope(scopes);
           }
+          if (
+            [
+              'leaveRequests',
+              'leaveBalances',
+              'shiftSchedules',
+              'attendanceRecords',
+            ].includes(collection)
+          )
+            return employeeId
+              ? condition('employeeId', '$eq', employeeId)
+              : false;
           return employeeId
             ? condition('employeeId', '$eq', employeeId)
             : false;

@@ -69,6 +69,24 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
         authz: page('talent.me'),
         navigation: { title: 'navigation.talentMe', icon: IdCard },
         componentLoader: () => import('./pages/talent/me/index.js'),
+        children: [
+          {
+            name: 'talent-me-leave-new',
+            path: 'leave/new',
+            componentLoader: () => import('./pages/talent/me/leave-new.js'),
+          },
+          {
+            name: 'talent-me-leave-edit',
+            path: 'leave/:requestId/edit',
+            componentLoader: () => import('./pages/talent/me/leave-new.js'),
+          },
+          {
+            name: 'talent-me-leave-detail',
+            path: 'leave/:requestId',
+            breadcrumb: { title: 'attendance.leave.ownDetail.title' },
+            componentLoader: () => import('./pages/talent/me/leave-detail.js'),
+          },
+        ],
       },
       {
         name: 'talent-employees',
@@ -169,6 +187,88 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
           icon: FileSignature,
         },
         componentLoader: () => import('./pages/talent/contracts/index.js'),
+      },
+      {
+        name: 'talent-leave',
+        path: '/talent/leave',
+        auth: 'required',
+        authz: page('talent.leave'),
+        navigation: { title: 'attendance.leave.title', icon: CalendarDays },
+        componentLoader: () => import('./pages/talent/leave/index.js'),
+        children: [
+          {
+            name: 'talent-leave-balances',
+            path: 'balances',
+            componentLoader: () =>
+              import('./pages/talent/leave/balances/index.js'),
+            children: [
+              {
+                name: 'talent-leave-hr-entry',
+                path: 'entry',
+                componentLoader: () =>
+                  import('./pages/talent/leave/balances/hr-entry.js'),
+              },
+              {
+                name: 'talent-leave-hr-edit',
+                path: 'entry/:requestId',
+                componentLoader: () =>
+                  import('./pages/talent/leave/balances/hr-entry.js'),
+              },
+              {
+                name: 'talent-leave-initialize',
+                path: 'initialize',
+                componentLoader: () =>
+                  import('./pages/talent/leave/balances/initialize.js'),
+              },
+              {
+                name: 'talent-leave-adjust',
+                path: ':balanceId',
+                componentLoader: () =>
+                  import('./pages/talent/leave/balances/adjust.js'),
+              },
+            ],
+          },
+          {
+            name: 'talent-leave-types',
+            path: 'types',
+            componentLoader: () =>
+              import('./pages/talent/leave/types/index.js'),
+            children: [
+              {
+                name: 'talent-leave-type-new',
+                path: 'new',
+                componentLoader: () =>
+                  import('./pages/talent/leave/types/edit.js'),
+              },
+              {
+                name: 'talent-leave-type-edit',
+                path: ':typeId/edit',
+                componentLoader: () =>
+                  import('./pages/talent/leave/types/edit.js'),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'talent-approvals',
+        path: '/talent/approvals',
+        auth: 'required',
+        authz: page('talent.approvals'),
+        navigation: {
+          title: 'attendance.approvals.title',
+          icon: ClipboardCheck,
+        },
+        componentLoader: () => import('./pages/talent/approvals/index.js'),
+        breadcrumb: { title: 'attendance.approvals.title' },
+        children: [
+          {
+            name: 'talent-approval-leave-detail',
+            path: 'leave/:requestId',
+            breadcrumb: { title: 'attendance.approvals.detail' },
+            componentLoader: () => import('./pages/talent/approvals/detail.js'),
+          },
+        ],
       },
       {
         name: 'talent-knowledge-qa',
@@ -531,6 +631,27 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
 ]);
 
 const settingsRoutes: AppClientRouteContribution = defineSettingsRoutes([
+  {
+    name: 'talent-attendance-settings',
+    path: '/attendance',
+    navigation: { title: 'attendance.settings.title', icon: SlidersHorizontal },
+    authz: page('talent.attendanceSettings'),
+    componentLoader: () => import('./pages/settings/attendance/index.js'),
+    children: [
+      {
+        name: 'talent-attendance-catalog-new',
+        path: ':kind/new',
+        componentLoader: () =>
+          import('./pages/settings/attendance/catalog/edit.js'),
+      },
+      {
+        name: 'talent-attendance-catalog-edit',
+        path: ':kind/:recordId/edit',
+        componentLoader: () =>
+          import('./pages/settings/attendance/catalog/edit.js'),
+      },
+    ],
+  },
   {
     name: 'talent-personnel-settings',
     path: '/personnel',

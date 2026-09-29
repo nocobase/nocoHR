@@ -62,6 +62,7 @@ export interface Employee {
   readonly managerEmployeeId: string | null;
   readonly status: string;
   readonly hireDate: string | null;
+  readonly careerStartDate: string | null;
   readonly positionSince: string | null;
   readonly email: string | null;
   readonly gender: string | null;

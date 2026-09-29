@@ -16,6 +16,13 @@ import { createAIRunner } from './ai-runner.js';
 import { workbenchResource } from './workbench-resource.js';
 import { createWorkItemStore } from './work-item-store.js';
 import { createPersonnelSettingsService } from './personnel-settings.js';
+import { createAttendanceSettingsService } from './attendance-settings.js';
+import { attendanceSettingsResource } from './attendance-settings-resource.js';
+import { createLeaveService } from './leave-service.js';
+import { createLeaveRequestService } from './leave-request-service.js';
+import { leaveResource } from './leave-resources.js';
+import { scheduleResource } from './schedule-resources.js';
+import { createScheduleService } from './schedule-service.js';
 import { AUTOMATION_COLLECTIONS } from './automation-resources.js';
 import { createAutomationTasks } from './automation-tasks.js';
 import { createAutomationService } from './automation.js';
@@ -60,6 +67,10 @@ import {
   examServiceToken,
   hrCoreServiceToken,
   personnelSettingsToken,
+  attendanceSettingsToken,
+  leaveServiceToken,
+  leaveRequestServiceToken,
+  scheduleServiceToken,
   insightServiceToken,
   knowledgeServiceToken,
   learningServiceToken,
@@ -88,6 +99,31 @@ export default class HrProvider extends ServiceProvider<Application> {
   private releaseSubjects?: () => void;
 
   public override register(): void {
+    this.app.container.singleton(leaveServiceToken, () => {
+      const platform = this.app.container.resolve(platformToken);
+      return createLeaveService(platform.database, platform.currentDate);
+    });
+    this.app.container.singleton(leaveRequestServiceToken, () => {
+      const platform = this.app.container.resolve(platformToken);
+      return createLeaveRequestService({
+        database: platform.database,
+        currentDate: platform.currentDate,
+        organization: platform.organization,
+        timeZone: platform.timeZone,
+      });
+    });
+    this.app.container.singleton(attendanceSettingsToken, () =>
+      createAttendanceSettingsService(
+        this.app.container.resolve(databaseManagerToken),
+      ),
+    );
+    this.app.container.singleton(scheduleServiceToken, () => {
+      const platform = this.app.container.resolve(platformToken);
+      return createScheduleService(platform.database, {
+        organization: platform.organization,
+        timeZone: platform.timeZone,
+      });
+    });
     this.app.container.singleton(personnelSettingsToken, () =>
       createPersonnelSettingsService(
         this.app.container.resolve(databaseManagerToken),
@@ -448,6 +484,14 @@ export default class HrProvider extends ServiceProvider<Application> {
 
     for (const collection of [
       { name: 'workItems', title: 'workbench.title' },
+      { name: 'personnelSettings', title: 'attendance.settings.title' },
+      { name: 'shifts', title: 'attendance.settings.shifts' },
+      { name: 'attendanceRules', title: 'attendance.settings.rules' },
+      { name: 'shiftSchedules', title: 'attendance.settings.schedules' },
+      { name: 'leaveTypes', title: 'attendance.leave.types' },
+      { name: 'leaveBalances', title: 'attendance.leave.balances' },
+      { name: 'leaveRequests', title: 'attendance.leave.requests' },
+      { name: 'attendanceRecords', title: 'attendance.records' },
       ...HR_COLLECTIONS,
       ...LEARNING_COLLECTIONS,
       ...EXAM_COLLECTIONS,
@@ -501,7 +545,13 @@ export default class HrProvider extends ServiceProvider<Application> {
       'talent.frameworkAdvisor': 'talent.framework',
       'talent.hrAssistant': 'talent.people',
     };
-    for (const resource of [...HR_COMPOSITES, workbenchResource]) {
+    for (const resource of [
+      ...HR_COMPOSITES,
+      workbenchResource,
+      attendanceSettingsResource,
+      leaveResource,
+      scheduleResource,
+    ]) {
       // The builders differ in their action maps; register each by its built definition.
       const reference = authz.compositeResources.define(resource.build());
       authz.ui.place(reference, {

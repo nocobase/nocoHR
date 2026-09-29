@@ -7,6 +7,31 @@ import type { OrganizationService } from './organization-service.js';
 import type { TalentService } from './talent-service.js';
 import type { HrCoreService } from './core-service.js';
 
+export const leaveServiceToken: ServiceToken<
+  import('./leave-service.js').LeaveService
+> =
+  createServiceToken<import('./leave-service.js').LeaveService>(
+    'hr/leave-service',
+  );
+
+export const leaveRequestServiceToken: ServiceToken<
+  import('./leave-request-service.js').LeaveRequestService
+> = createServiceToken<import('./leave-request-service.js').LeaveRequestService>(
+  'hr/leave-request-service',
+);
+
+export const attendanceSettingsToken: ServiceToken<
+  import('./attendance-settings.js').AttendanceSettingsService
+> = createServiceToken<
+  import('./attendance-settings.js').AttendanceSettingsService
+>('hr/attendance-settings');
+
+export const scheduleServiceToken: ServiceToken<
+  import('./schedule-service.js').ScheduleService
+> = createServiceToken<import('./schedule-service.js').ScheduleService>(
+  'hr/schedule-service',
+);
+
 export const personnelSettingsToken: ServiceToken<
   import('./personnel-settings.js').PersonnelSettingsService
 > = createServiceToken<

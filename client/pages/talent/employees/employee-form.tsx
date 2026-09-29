@@ -33,6 +33,7 @@ const FIELDS = [
   'positionId',
   'managerEmployeeId',
   'hireDate',
+  'careerStartDate',
   'email',
   'mobile',
   'gender',
@@ -92,6 +93,12 @@ export function EmployeeForm({
     if (!draft.employeeNo.trim()) next.employeeNo = t('talent.form.required');
     if (!draft.name.trim()) next.name = t('talent.form.required');
     if (!draft.departmentId) next.departmentId = t('talent.form.required');
+    if (
+      draft.careerStartDate &&
+      draft.hireDate &&
+      draft.careerStartDate > draft.hireDate
+    )
+      next.careerStartDate = t('talent.errors.EMPLOYEE_CAREER_DATE_INVALID');
     setErrors(next);
     if (Object.keys(next).length) return;
     const values: Record<string, unknown> = {};
@@ -223,6 +230,21 @@ export function EmployeeForm({
                   </NativeSelectOption>
                 ))}
             </NativeSelect>
+          </Field>
+          <Field data-invalid={Boolean(errors.careerStartDate)}>
+            <FieldLabel htmlFor='emp-career-start'>
+              {t('talent.fields.careerStartDate')}
+            </FieldLabel>
+            <Input
+              id='emp-career-start'
+              type='date'
+              value={draft.careerStartDate}
+              aria-invalid={Boolean(errors.careerStartDate)}
+              onChange={(e) => set('careerStartDate', e.target.value)}
+            />
+            {errors.careerStartDate ? (
+              <FieldError>{errors.careerStartDate}</FieldError>
+            ) : null}
           </Field>
           <Field>
             <FieldLabel htmlFor='emp-manager'>

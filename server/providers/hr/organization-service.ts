@@ -28,7 +28,7 @@ export interface DepartmentTitleTranslations {
 }
 
 export interface OrganizationService {
-  listTree(): Promise<readonly Department[]>;
+  listTree(connection?: DatabaseConnection): Promise<readonly Department[]>;
   getDepartment(
     id: string,
     connection?: DatabaseConnection,
@@ -271,8 +271,8 @@ export function createOrganizationService(
   }
 
   const service: OrganizationService = {
-    async listTree() {
-      const tree = await loadTree();
+    async listTree(connection) {
+      const tree = await loadTree(connection);
       return [...tree.values()].sort(
         (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
       );
