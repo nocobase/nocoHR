@@ -50,6 +50,12 @@ async function conduct(results: ReturnType<typeof allPass>) {
 describe('13B 实操考核', () => {
   let recordId = '';
 
+  it('lists the records the caller may see with no filter at all (the 实操考核 page load)', async () => {
+    const listed = await h.call('trainer01', 'GET', '/practicals/records');
+    expect(listed.status).toBe(200);
+    expect(Array.isArray(listed.json.data)).toBe(true);
+  });
+
   it('the examiner maps the notes to the items; an item without a note is 未记录, never pass; unchanged notes are kept', async () => {
     const qa = await h.userId('qa_audit');
     const started = await h.call('trainer01', 'POST', '/practicals/records', {

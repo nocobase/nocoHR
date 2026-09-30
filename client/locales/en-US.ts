@@ -1164,7 +1164,8 @@ const enUS = {
   // V3-09 Learning handled by a job event
   jobEventLearning: {
     title: 'Learning',
-    pending: 'The event is not processed yet; what it changes in learning appears here once it is.',
+    pending:
+      'The event is not processed yet; what it changes in learning appears here once it is.',
     none: 'This change did not affect any learning task.',
     assigned: 'Assigned automatically',
     due: 'Due {{date}}',
@@ -1611,6 +1612,9 @@ const enUS = {
       knowledgeAssistant: 'Knowledge assistant',
       contentWriter: 'Content writer',
       certificationSteward: 'Certification steward',
+      recruitingAssistant: 'Recruiting assistant',
+      vendorReconciler: 'Bill reconciler',
+      examiner: 'Examiner',
     },
     tasks: {
       // V2-05: the HR assistant's attendance work.
@@ -1648,6 +1652,87 @@ const enUS = {
         title: 'Renewal preparation',
         description:
           'When a contract enters the largest reminder window, summarizes its history, tenure and what HR should check, with a link to renew. Never renews.',
+      },
+      // Tasks that had no wording yet (found on the AI 员工任务 page).
+      'hrAssistant.payrollCheck': {
+        title: 'Payroll anomaly check',
+        description:
+          'After every payroll calculation, lists the issues the rules find and writes a note for each, citing the policy where a parameter differs. Never changes an amount or formula.',
+      },
+      'vendorReconciler.billReview': {
+        title: 'Vendor bill review',
+        description:
+          'After a staffing-agency bill is uploaded, the AI employee chosen in payroll settings reconciles it and writes notes on the differences for the payroll owner.',
+      },
+      'hrAssistant.syncExplain': {
+        title: 'Explain sync issues',
+        description:
+          'After an organization sync, explains each item it could not resolve on its own and drafts job-title mappings for HR to confirm. Changes nothing itself.',
+      },
+      'hrAssistant.checklistNotes': {
+        title: 'Change checklist notes',
+        description:
+          'When a change checklist is created or its items change, writes a summary of what is easiest to miss and a short note for each item.',
+      },
+      'hrAssistant.compliance': {
+        title: 'Employment compliance check',
+        description:
+          'After the daily rules find new labour-contract issues, words a notice for each citing the relevant article and sends it to the task owner. A prompt, not legal advice.',
+      },
+      'hrAssistant.workforceExplain': {
+        title: 'Explain staffing needs',
+        description:
+          'When a production plan arrives with a staffing gap, explains the calculated numbers once per calculation and tells the department head.',
+      },
+      'hrAssistant.preboarding': {
+        title: 'Pre-boarding follow-up',
+        description:
+          'Every day at 09:00, sends accepted candidates their start-day reminder on the configured days and tells the recruiter about arrivals still unconfirmed.',
+      },
+      'hrAssistant.preboardingExtract': {
+        title: 'Pre-boarding document reading',
+        description:
+          'When a new hire uploads an ID card, bank card or diploma, reads it into fields waiting for HR to confirm after onboarding takes effect.',
+      },
+      'hrAssistant.newHireCheckIn': {
+        title: 'New hire check-ins',
+        description:
+          'Every day at 09:00, asks new employees on the configured days after joining how things are going and routes each issue raised to its owner as a to-do.',
+      },
+      'knowledgeAssistant.conflictCheck': {
+        title: 'Document conflict check',
+        description:
+          'When a new document or version is ready, checks it against the other documents and records any conflicting sections for the owner to resolve.',
+      },
+      'recruitingAssistant.postingDraft': {
+        title: 'Job posting draft',
+        description:
+          'When a requisition is approved, drafts the job posting from the job description, with knockout questions for a bulk hire. Once per requisition.',
+      },
+      'recruitingAssistant.poolReuse': {
+        title: 'Talent pool reuse',
+        description:
+          'When a requisition is approved, suggests past candidates with valid consent who may fit, and why.',
+      },
+      'recruitingAssistant.screening': {
+        title: 'Resume screening',
+        description:
+          'For each new application, reads the resume and suggests a match level against the posting’s requirements. Never rejects anyone.',
+      },
+      'recruitingAssistant.interviewQuestions': {
+        title: 'Interview questions',
+        description:
+          '24 hours before an interview, prepares one question for each requirement of the position. Once per interview.',
+      },
+      'recruitingAssistant.interviewSummary': {
+        title: 'Interview summary',
+        description:
+          'Once every interviewer has scored, summarizes the distribution, where they differ and what to verify. Never gives a hiring recommendation.',
+      },
+      'recruitingAssistant.dailyDigest': {
+        title: 'Daily recruiting digest',
+        description:
+          'Every day at 18:00, sends each recruiter their new applications and suggested match levels.',
       },
       'learningCoach.gapPlans': {
         title: 'Learning plans for gaps',
@@ -1846,7 +1931,8 @@ const enUS = {
         description: 'Against the confirmed requirements of {{position}}.',
         descriptionReason:
           'Against the confirmed requirements of {{position}} ({{reason}}).',
-        noRequirements: 'The target position has no confirmed requirements yet.',
+        noRequirements:
+          'The target position has no confirmed requirements yet.',
       },
       actionGap: {
         title: 'Mandatory competencies of the new position',
@@ -1894,7 +1980,8 @@ const enUS = {
         reason: 'Reason',
         reasonPlaceholder: 'For example: new position, succession',
         added: 'Candidate added',
-        addedWithTodo: 'Candidate added; an assessment to-do was sent to the department head',
+        addedWithTodo:
+          'Candidate added; an assessment to-do was sent to the department head',
       },
       import: {
         open: 'Import assessments',
@@ -1905,7 +1992,8 @@ const enUS = {
         chooseAgain: 'Choose another file',
         template: 'Download template',
         templateName: 'competency-assessment-template.xlsx',
-        summaryErrors: '{{valid}} rows ready, {{invalid}} rows with problems. Fix them and choose the file again.',
+        summaryErrors:
+          '{{valid}} rows ready, {{invalid}} rows with problems. Fix them and choose the file again.',
         summaryValid: 'All {{valid}} rows are ready to import.',
         row: 'Row',
         employee: 'Employee',
@@ -3133,7 +3221,8 @@ const enUS = {
       // V3-08
       COMPETENCY_IN_USE:
         'A confirmed requirement still references this competency, so the draft cannot be discarded.',
-      TARGET_IS_CURRENT_POSITION: 'The target position is the employee’s current position.',
+      TARGET_IS_CURRENT_POSITION:
+        'The target position is the employee’s current position.',
       TARGET_EXISTS: 'This employee already has this target position.',
       TARGET_NOT_FOUND: 'Development target not found.',
       TARGET_NOT_ACTIVE: 'This development target is no longer active.',
@@ -4590,7 +4679,8 @@ const enUS = {
       down: 'Move “{{name}}” down',
       show: 'Show “{{name}}”',
       save: 'Save',
-      conflict: 'Someone else changed these cards. The latest version is loaded.',
+      conflict:
+        'Someone else changed these cards. The latest version is loaded.',
     },
   },
   notificationSettings: {
@@ -5167,13 +5257,15 @@ const enUS = {
     },
     cycles: {
       title: 'Payroll',
-      description: 'Monthly payroll cycles: prerequisites, imports, calculation, anomaly check, approval and payslips.',
+      description:
+        'Monthly payroll cycles: prerequisites, imports, calculation, anomaly check, approval and payslips.',
       tabs: {
         cycles: 'Cycles',
         vendorBills: 'Vendor bills',
       },
       create: 'New cycle',
-      createDescription: 'One cycle per month; it pays everyone with a salary file.',
+      createDescription:
+        'One cycle per month; it pays everyone with a salary file.',
       month: 'Month',
       status: 'Status',
       payslips: 'Payslips',
@@ -5234,7 +5326,8 @@ const enUS = {
       confirmSkip: 'Import the valid rows',
       done: '{{count}} rows imported; calculate again',
       history: 'Import records',
-      record: '{{at}} · {{items}} · {{rows}} rows, {{errors}} with problems · {{source}}',
+      record:
+        '{{at}} · {{items}} · {{rows}} rows, {{errors}} with problems · {{source}}',
       errors: {
         EMPLOYEE_NO_REQUIRED: 'Employee number missing',
         EMPLOYEE_NOT_FOUND: 'No employee with this number',
@@ -5245,8 +5338,10 @@ const enUS = {
     },
     sheet: {
       addManual: 'Add a manual item',
-      manualDescription: 'A correction for this month; a positive amount is paid, a negative one deducted.',
-      manualInvalid: 'Choose an employee and enter a non-zero amount and a reason.',
+      manualDescription:
+        'A correction for this month; a positive amount is paid, a negative one deducted.',
+      manualInvalid:
+        'Choose an employee and enter a non-zero amount and a reason.',
       manualAdded: 'Manual item added; calculate again',
       manualTitle: 'Manual items',
       amount: 'Amount',
@@ -5261,7 +5356,8 @@ const enUS = {
     anomalies: {
       notCalculated: 'The cycle has not been calculated yet.',
       checking: 'The HR assistant is checking the latest calculation…',
-      checked: 'Checked {{at}}: {{total}} anomalies, {{added}} new, {{removed}} resolved.',
+      checked:
+        'Checked {{at}}: {{total}} anomalies, {{added}} new, {{removed}} resolved.',
       none: 'No anomalies found.',
       source: {
         ai: 'HR assistant',
@@ -5296,7 +5392,8 @@ const enUS = {
     bills: {
       title: 'Vendor bill',
       upload: 'Upload a vendor bill',
-      uploadDescription: 'Columns: 工号, 姓名, 工时, 金额. Lines are matched by employee number and reconciled against locked attendance.',
+      uploadDescription:
+        'Columns: 工号, 姓名, 工时, 金额. Lines are matched by employee number and reconciled against locked attendance.',
       vendor: 'Vendor',
       choose: 'Choose a file',
       metaRequired: 'Enter the vendor and the month first.',
@@ -5310,7 +5407,8 @@ const enUS = {
       uploaded: 'Bill uploaded and reconciled',
       empty: 'No vendor bills yet',
       detailDescription: 'Hours by person against locked attendance.',
-      totals: 'Billed {{billed}} h, attendance {{attendance}} h, difference {{diff}} h in {{people}} people',
+      totals:
+        'Billed {{billed}} h, attendance {{attendance}} h, difference {{diff}} h in {{people}} people',
       noNotes: 'No reconciliation notes yet.',
       result: 'Result',
       amount: 'Billed amount',
@@ -5328,14 +5426,16 @@ const enUS = {
     },
     salaries: {
       title: 'Salary files',
-      description: 'Each employee’s file in force, salary adjustments and their approval, and new hires waiting for a file.',
+      description:
+        'Each employee’s file in force, salary adjustments and their approval, and new hires waiting for a file.',
       tabs: {
         files: 'Files',
         adjustments: 'Adjustments',
         pending: 'Waiting for a file',
       },
       newAdjustment: 'Request an adjustment',
-      newAdjustmentDescription: 'The new salary applies from the effective month once approved.',
+      newAdjustmentDescription:
+        'The new salary applies from the effective month once approved.',
       base: 'Base salary',
       allowances: 'Allowances',
       allowance: {
@@ -5366,7 +5466,8 @@ const enUS = {
       },
       fileInvalid: 'Enter the effective month and a base salary.',
       fileCreated: 'Salary file created',
-      adjustmentInvalid: 'Choose the employee, month and structure, and enter the salary and a reason.',
+      adjustmentInvalid:
+        'Choose the employee, month and structure, and enter the salary and a reason.',
       adjustmentSubmitted: 'Adjustment submitted for approval',
       currentFile: 'Now: base {{base}}, {{structure}}',
       relatedAction: 'Raised from a personnel action; it stays linked to it.',
@@ -5374,7 +5475,8 @@ const enUS = {
     },
     insurance: {
       title: 'Social insurance',
-      description: 'City plans, enrolments, starts and stops to confirm, special deductions and the yearly base adjustment.',
+      description:
+        'City plans, enrolments, starts and stops to confirm, special deductions and the yearly base adjustment.',
       tabs: {
         plans: 'Plans',
         enrolments: 'Enrolments',
@@ -5443,31 +5545,38 @@ const enUS = {
     },
     mine: {
       title: 'My payslips',
-      description: 'Your own published payslips and insurance. Verify your identity to see the amounts.',
+      description:
+        'Your own published payslips and insurance. Verify your identity to see the amounts.',
       ask: 'Ask the HR assistant',
       empty: 'No payslip has been published yet.',
       verifyTitle: 'Verify your identity',
-      verifyDescription: 'Enter your password again. The verification lasts 30 minutes.',
+      verifyDescription:
+        'Enter your password again. The verification lasts 30 minutes.',
       password: 'Password',
       verify: 'Verify',
       payslipOf: 'Payslip {{month}}',
       expandHint: 'Open an item to see how it was calculated.',
       insurance: 'Social insurance',
       noInsurance: 'No active enrolment.',
-      insuredIn: 'Insured in {{city}}; social base {{social}}, housing fund base {{housing}}',
-      feedback: 'Think something is wrong? Tell the payroll specialist through 我的档案.',
+      insuredIn:
+        'Insured in {{city}}; social base {{social}}, housing fund base {{housing}}',
+      feedback:
+        'Think something is wrong? Tell the payroll specialist through 我的档案.',
     },
     settings: {
       title: 'Payroll settings',
-      description: 'Salary structures and the payroll rules; changes reach the cycles not yet submitted.',
+      description:
+        'Salary structures and the payroll rules; changes reach the cycles not yet submitted.',
       structures: 'Salary structures',
-      structuresDescription: 'Items, formulas and parameters; saving checks the formulas and runs a trial.',
+      structuresDescription:
+        'Items, formulas and parameters; saving checks the formulas and runs a trial.',
       itemCount: '{{count}} items',
       active: 'Active',
       inactive: 'Inactive',
       newStructure: 'New structure',
       rules: 'Rules',
-      rulesDescription: 'Thresholds, approval levels and defaults. Check the tax table with finance before going live.',
+      rulesDescription:
+        'Thresholds, approval levels and defaults. Check the tax table with finance before going live.',
       monthlyDeduction: 'Monthly basic deduction',
       netChangePercent: 'Net change threshold (%)',
       manualItemAmount: 'Manual item threshold',
@@ -5479,14 +5588,16 @@ const enUS = {
       approvalLevels: 'Approval levels',
       approvalLevelsHint: 'title:permission set, in order, separated by commas',
       billAiEmployee: 'AI employee after a bill upload',
-      billAiEmployeeHint: 'The username of an AI employee created in AI settings with the two vendor-bill tools; leave empty to notify only.',
+      billAiEmployeeHint:
+        'The username of an AI employee created in AI settings with the two vendor-bill tools; leave empty to notify only.',
       taxTable: 'Withholding table',
       taxTableHint: 'Cumulative taxable income · rate · quick deduction',
       above: 'Above',
     },
     structure: {
       breadcrumb: 'Salary structure',
-      description: 'Items run in this order; a formula may read only whitelisted variables and earlier items.',
+      description:
+        'Items run in this order; a formula may read only whitelisted variables and earlier items.',
       save: 'Save and trial',
       saved: 'Structure saved; the trial is below',
       name: 'Name',
@@ -5515,9 +5626,11 @@ const enUS = {
     errors: {
       PAYROLL_MONTH_INVALID: 'Enter a month such as 2026-10.',
       STRUCTURE_NOT_FOUND: 'The salary structure does not exist.',
-      PAYROLL_ATTENDANCE_NOT_LOCKED: 'Attendance is not locked for: {{departments}}.',
+      PAYROLL_ATTENDANCE_NOT_LOCKED:
+        'Attendance is not locked for: {{departments}}.',
       PAYROLL_CYCLE_EXISTS: 'This month already has a cycle.',
-      PAYROLL_CYCLE_LOCKED: 'The cycle is submitted or approved and can no longer change.',
+      PAYROLL_CYCLE_LOCKED:
+        'The cycle is submitted or approved and can no longer change.',
       PAYROLL_RECALCULATE_REQUIRED: 'Calculate again before submitting.',
       PAYROLL_NEGATIVE_NET: 'Net pay is negative for: {{names}}.',
       PAYROLL_NOT_PENDING: 'Nothing is waiting for approval.',
@@ -5525,25 +5638,32 @@ const enUS = {
       PAYROLL_COMMENT_REQUIRED: 'Enter a comment to reject.',
       PAYROLL_NOT_APPROVED: 'Approve the cycle before publishing.',
       PAYROLL_NOT_PUBLISHED: 'The files are available after publishing.',
-      IMPORT_HAS_ERRORS: 'Some rows have problems; import the valid rows or fix the file.',
+      IMPORT_HAS_ERRORS:
+        'Some rows have problems; import the valid rows or fix the file.',
       IMPORT_ITEMS_UNKNOWN: 'No column matches an imported item of this cycle.',
       IMPORT_FILE_INVALID: 'The file is not a readable workbook.',
       IMPORT_FILE_EMPTY: 'The file has no rows.',
-      FORMULA_UNKNOWN_VARIABLE: 'Item {{item}}: {{detail}} is not an allowed variable.',
-      FORMULA_UNKNOWN_PARAM: 'Item {{item}}: parameter {{detail}} is not defined.',
-      FORMULA_UNKNOWN_IMPORT: 'Item {{item}}: {{detail}} is not an imported item.',
-      FORMULA_ITEM_ORDER: 'Item {{item}}: {{detail}} must come after the item it reads.',
+      FORMULA_UNKNOWN_VARIABLE:
+        'Item {{item}}: {{detail}} is not an allowed variable.',
+      FORMULA_UNKNOWN_PARAM:
+        'Item {{item}}: parameter {{detail}} is not defined.',
+      FORMULA_UNKNOWN_IMPORT:
+        'Item {{item}}: {{detail}} is not an imported item.',
+      FORMULA_ITEM_ORDER:
+        'Item {{item}}: {{detail}} must come after the item it reads.',
       FORMULA_SYNTAX: 'Item {{item}}: the formula cannot be read.',
       FORMULA_EMPTY: 'Item {{item}}: enter a formula.',
       STRUCTURE_ITEM_INVALID: 'Item codes must be unique letters and digits.',
-      STRUCTURE_PARAM_INVALID: 'Parameter codes must be unique letters and digits.',
+      STRUCTURE_PARAM_INVALID:
+        'Parameter codes must be unique letters and digits.',
       SALARY_MONTH_TAKEN: 'A file already starts in this month.',
       SALARY_STRUCTURE_REQUIRED: 'Choose a salary structure.',
       SALARY_FILE_REQUIRED: 'The employee has no salary file yet.',
       PAYSLIP_VERIFY_REQUIRED: 'Verify your identity first.',
       PAYSLIP_VERIFY_FAILED: 'The password is not correct.',
       PAYSLIP_VERIFY_LOCKED: 'Too many attempts; try again in 15 minutes.',
-      BILL_ATTENDANCE_NOT_LOCKED: 'Attendance is not locked yet for: {{names}}.',
+      BILL_ATTENDANCE_NOT_LOCKED:
+        'Attendance is not locked yet for: {{names}}.',
       ENROLMENT_ACTIVE_EXISTS: 'The employee is already insured.',
       PLAN_NOT_FOUND: 'No plan for this city and month.',
     },

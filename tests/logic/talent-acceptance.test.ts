@@ -1085,6 +1085,8 @@ describe('work item producer foundation', () => {
       '/talent/../settings',
       '/talent/%2e%2e/settings',
       '/talent/\\\\example.com',
+      '/settings/../talent/me',
+      '/main/settings/org-sync',
     ]) {
       await expect(
         db.transaction((connection) =>
@@ -1097,6 +1099,19 @@ describe('work item producer foundation', () => {
         createWorkItemStore(connection).put({ ...item, sourceKind: 'ai' }),
       ),
     ).rejects.toThrow('INVALID_WORK_ITEM');
+    // A settings page is an app-internal link too (sync explanations, AI task failures).
+    await db.transaction((connection) =>
+      createWorkItemStore(connection).put({
+        ...item,
+        refId: 'settings-link-item',
+        link: '/settings/org-sync/issues',
+      }),
+    );
+    expect(
+      await db
+        .repository('workItems')
+        .exists({ filter: { refId: 'settings-link-item' } }),
+    ).toBe(true);
     const rule = { ...item, type: 'docReview', sourceKind: 'rule' as const };
     await db.transaction(async (connection) => {
       const store = createWorkItemStore(connection);

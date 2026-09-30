@@ -14,8 +14,10 @@ const identitySchema = z.object({
 function internalLink(value: string): boolean {
   // Producers provide app-internal routes, not deployment bases, absolute URLs,
   // encoded path separators or traversal. The original page still owns access.
+  // Settings pages count too: the HR assistant's sync explanations, sync runs
+  // and AI task failures link to the page where HR acts on them.
   if (
-    !value.startsWith('/talent/') ||
+    !(value.startsWith('/talent/') || value.startsWith('/settings/')) ||
     /[\\\s]/u.test(value) ||
     Array.from(value).some((character) => character.charCodeAt(0) < 32)
   )

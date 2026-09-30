@@ -584,12 +584,17 @@ ${text.slice(0, 12_000)}`,
         for (const row of (await database
           .repository('practicalRecords')
           .withPolicy(policyOf(policies, 'practicalRecords'))
-          .findMany({
-            filter: {
-              ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
-              ...(filters.assessmentId ? { assessmentId: filters.assessmentId } : {}),
-            },
-          })) as Record<string, unknown>[])
+          // An empty filter object is rejected ("Filter shorthand must not be empty").
+          .findMany(
+            filters.employeeId || filters.assessmentId
+              ? {
+                  filter: {
+                    ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
+                    ...(filters.assessmentId ? { assessmentId: filters.assessmentId } : {}),
+                  },
+                }
+              : {},
+          )) as Record<string, unknown>[])
           seen.set(str(row.id), row);
       }
       if (!allowed) throw new HrError('FORBIDDEN', 403);

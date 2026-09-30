@@ -105,14 +105,20 @@ interface Run {
   }[];
 }
 
+/** Display order; an employee the server registers but this list misses is appended, so its tasks still show. */
 const EMPLOYEES = [
   'hrAssistant',
+  'recruitingAssistant',
+  'vendorReconciler',
   'frameworkAdvisor',
   'knowledgeAssistant',
   'contentWriter',
   'certificationSteward',
+  'examiner',
   'learningCoach',
   'practiceCoach',
+  'performanceAssistant',
+  'talentAnalyst',
 ];
 const STATUS_VARIANT: Record<
   string,
@@ -207,7 +213,14 @@ export default function AIAutomationsSettingsPage(): ReactElement {
         <BlockSkeleton rows={6} />
       ) : (
         <div className='space-y-4'>
-          {EMPLOYEES.map((employee) => {
+          {[
+            ...EMPLOYEES,
+            ...new Set(
+              automations.data
+                .map((a) => a.employee)
+                .filter((employee) => !EMPLOYEES.includes(employee)),
+            ),
+          ].map((employee) => {
             const items = automations.data!.filter(
               (a) => a.employee === employee,
             );

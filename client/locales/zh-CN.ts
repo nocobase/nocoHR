@@ -1484,6 +1484,9 @@ const zhCN: AppResource = {
       knowledgeAssistant: '知识助手',
       contentWriter: '内容编写员',
       certificationSteward: '认证管家',
+      recruitingAssistant: '招聘助理',
+      vendorReconciler: '账单核对员',
+      examiner: '考官',
     },
     tasks: {
       // V2-05：人事助理的考勤工作。
@@ -1521,6 +1524,87 @@ const zhCN: AppResource = {
         title: '续签准备',
         description:
           '合同进入最大提醒档位时，汇总合同历史、司龄和需要核对的事项发给负责人，附续签入口；不自动续签。',
+      },
+      // Tasks that had no wording yet (found on the AI 员工任务 page).
+      'hrAssistant.payrollCheck': {
+        title: '算薪异常检查',
+        description:
+          '每次算薪后，列出规则发现的异常并逐条写说明，参数与制度不一致时引用制度原文；不修改任何金额或公式。',
+      },
+      'vendorReconciler.billReview': {
+        title: '账单上传后处理',
+        description:
+          '派遣账单上传后，由薪酬设置中指定的 AI 员工核对，把差异说明写给薪酬负责人。',
+      },
+      'hrAssistant.syncExplain': {
+        title: '组织同步说明',
+        description:
+          '组织同步后，逐项说明同步无法自动处理的问题，并起草职务映射交 HR 确认；自身不改数据。',
+      },
+      'hrAssistant.checklistNotes': {
+        title: '变动清单说明',
+        description:
+          '变动影响清单创建或条目变化时，写一段最容易漏掉的事项摘要，并给每个条目写一句说明。',
+      },
+      'hrAssistant.compliance': {
+        title: '用工合规检查',
+        description:
+          '每日规则发现新的劳动合同问题时，逐条写出提示并引用相关条款，发给任务负责人；仅为提示，不构成法律意见。',
+      },
+      'hrAssistant.workforceExplain': {
+        title: '用工测算说明',
+        description:
+          '排产计划到达且有用工缺口时，对每次测算结果说明一次，并告知部门负责人。',
+      },
+      'hrAssistant.preboarding': {
+        title: '待入职跟进',
+        description:
+          '每天 09:00，在设定的入职前天数给已接受 Offer 的候选人发送报到提醒，仍未确认报到的告知招聘专员。',
+      },
+      'hrAssistant.preboardingExtract': {
+        title: '入职材料识别',
+        description:
+          '待入职人员上传身份证、银行卡或学历证书后，读取为待 HR 确认的字段，入职生效后由 HR 确认写入档案。',
+      },
+      'hrAssistant.newHireCheckIn': {
+        title: '新员工回访',
+        description:
+          '每天 09:00，在入职后设定的天数询问新员工近况，把反馈的问题作为待办分给对应负责人。',
+      },
+      'knowledgeAssistant.conflictCheck': {
+        title: '文档冲突检查',
+        description:
+          '新文档或新版本就绪后，与其他文档比对，把相互矛盾的小节记录下来交负责人处理。',
+      },
+      'recruitingAssistant.postingDraft': {
+        title: '职位起草',
+        description:
+          '招聘需求批准后，按岗位职责起草职位描述，批量招聘时附带筛选问题；每个需求只起草一次。',
+      },
+      'recruitingAssistant.poolReuse': {
+        title: '简历库复用',
+        description:
+          '招聘需求批准后，推荐授权仍有效、可能合适的历史候选人并说明理由。',
+      },
+      'recruitingAssistant.screening': {
+        title: '简历初筛',
+        description:
+          '每份新投递读取简历，对照职位要求给出匹配等级建议；不淘汰任何人。',
+      },
+      'recruitingAssistant.interviewQuestions': {
+        title: '面试题准备',
+        description:
+          '面试前 24 小时，按职位的每项要求准备一道面试题；每场面试只准备一次。',
+      },
+      'recruitingAssistant.interviewSummary': {
+        title: '面试汇总',
+        description:
+          '所有面试官提交评分后，汇总评分分布、分歧点和需要核实的事项；不给录用建议。',
+      },
+      'recruitingAssistant.dailyDigest': {
+        title: '招聘日报',
+        description:
+          '每天 18:00，把每位招聘专员当天的新投递和匹配等级建议发给本人。',
       },
       'learningCoach.gapPlans': {
         title: '差距学习计划',
@@ -1714,12 +1798,14 @@ const zhCN: AppResource = {
       targets: {
         title: '目标岗位对标',
         description: '按「{{position}}」已确认的岗位要求计算。',
-        descriptionReason: '按「{{position}}」已确认的岗位要求计算（{{reason}}）。',
+        descriptionReason:
+          '按「{{position}}」已确认的岗位要求计算（{{reason}}）。',
         noRequirements: '目标岗位还没有已确认的岗位要求。',
       },
       actionGap: {
         title: '新岗位的必备能力与当前差距',
-        description: '仅供审批参考：按新岗位已确认的必备要求计算当前差距，不影响提交与审批。',
+        description:
+          '仅供审批参考：按新岗位已确认的必备要求计算当前差距，不影响提交与审批。',
         levelsHidden: '你无权查看该员工的能力评定，这里只列出岗位要求。',
         none: '新岗位没有已确认的必备要求。',
       },
@@ -1772,7 +1858,8 @@ const zhCN: AppResource = {
         chooseAgain: '重新选择文件',
         template: '下载模板',
         templateName: '能力评定导入模板.xlsx',
-        summaryErrors: '{{valid}} 行可导入，{{invalid}} 行有错误。请修正后重新选择文件。',
+        summaryErrors:
+          '{{valid}} 行可导入，{{invalid}} 行有错误。请修正后重新选择文件。',
         summaryValid: '全部 {{valid}} 行可导入。',
         row: '行',
         employee: '员工',
@@ -2242,8 +2329,7 @@ const zhCN: AppResource = {
       ruleShortage:
         '规则 {{index}} 需要 {{count}} 题，题库中仅有 {{available}} 题可用。',
       previewPaper: '预览试卷',
-      previewDescription:
-        '试抽一次，总分 {{score}}；每位考生的试卷各不相同。',
+      previewDescription: '试抽一次，总分 {{score}}；每位考生的试卷各不相同。',
       tabs: {
         paper: '试卷',
         grading: '阅卷',
@@ -4064,7 +4150,8 @@ const zhCN: AppResource = {
       description:
         '账号开通后立即关联到该员工，通过{{provider}}登录，不显示密码。',
       email: '邮箱',
-      emailHint: '留空则使用{{provider}}中的邮箱；成员在{{provider}}中没有邮箱时再填写。',
+      emailHint:
+        '留空则使用{{provider}}中的邮箱；成员在{{provider}}中没有邮箱时再填写。',
       submit: '开通并关联',
       done: '已为“{{name}}”开通登录账号',
     },
@@ -4867,7 +4954,8 @@ const zhCN: AppResource = {
     },
     cycles: {
       title: '算薪',
-      description: '按月算薪：前提检查、导入、计算、异常检查、审批与工资条发放。',
+      description:
+        '按月算薪：前提检查、导入、计算、异常检查、审批与工资条发放。',
       tabs: {
         cycles: '算薪周期',
         vendorBills: '派遣账单',
@@ -4934,7 +5022,8 @@ const zhCN: AppResource = {
       confirmSkip: '跳过问题行导入',
       done: '已导入 {{count}} 行，请重新计算',
       history: '导入记录',
-      record: '{{at}} · {{items}} · {{rows}} 行，问题 {{errors}} 行 · {{source}}',
+      record:
+        '{{at}} · {{items}} · {{rows}} 行，问题 {{errors}} 行 · {{source}}',
       errors: {
         EMPLOYEE_NO_REQUIRED: '缺少工号',
         EMPLOYEE_NOT_FOUND: '工号不存在',
@@ -4961,7 +5050,8 @@ const zhCN: AppResource = {
     anomalies: {
       notCalculated: '周期尚未计算。',
       checking: '人事助理正在检查最近一次计算…',
-      checked: '{{at}} 检查：{{total}} 条异常，新增 {{added}}，消除 {{removed}}。',
+      checked:
+        '{{at}} 检查：{{total}} 条异常，新增 {{added}}，消除 {{removed}}。',
       none: '未发现异常。',
       source: {
         ai: '人事助理说明',
@@ -4996,7 +5086,8 @@ const zhCN: AppResource = {
     bills: {
       title: '派遣账单',
       upload: '上传派遣账单',
-      uploadDescription: '列：工号、姓名、工时、金额。按工号匹配员工，与已锁定的考勤工时核对。',
+      uploadDescription:
+        '列：工号、姓名、工时、金额。按工号匹配员工，与已锁定的考勤工时核对。',
       vendor: '派遣公司',
       choose: '选择文件',
       metaRequired: '请先填写派遣公司和月份。',
@@ -5010,7 +5101,8 @@ const zhCN: AppResource = {
       uploaded: '账单已上传并核对',
       empty: '还没有派遣账单',
       detailDescription: '逐人对照已锁定的考勤工时。',
-      totals: '账单 {{billed}} 工时，考勤 {{attendance}} 工时，差异 {{diff}} 工时，涉及 {{people}} 人',
+      totals:
+        '账单 {{billed}} 工时，考勤 {{attendance}} 工时，差异 {{diff}} 工时，涉及 {{people}} 人',
       noNotes: '还没有核对说明。',
       result: '核对结果',
       amount: '账单金额',
@@ -5074,7 +5166,8 @@ const zhCN: AppResource = {
     },
     insurance: {
       title: '社保公积金',
-      description: '参保方案、员工参保、增减员确认、专项附加扣除与年度基数调整。',
+      description:
+        '参保方案、员工参保、增减员确认、专项附加扣除与年度基数调整。',
       tabs: {
         plans: '方案',
         enrolments: '员工参保',
@@ -5154,7 +5247,8 @@ const zhCN: AppResource = {
       expandHint: '点开每一项可查看计算方式与来源。',
       insurance: '社保与公积金',
       noInsurance: '没有参保记录。',
-      insuredIn: '参保城市 {{city}}；社保基数 {{social}}，公积金基数 {{housing}}',
+      insuredIn:
+        '参保城市 {{city}}；社保基数 {{social}}，公积金基数 {{housing}}',
       feedback: '认为有误？请通过“我的档案”向薪酬专员反馈。',
     },
     settings: {
@@ -5179,7 +5273,8 @@ const zhCN: AppResource = {
       approvalLevels: '审批链',
       approvalLevelsHint: '格式：级别名称:权限集，按顺序用逗号分隔',
       billAiEmployee: '账单上传后处理的 AI 员工',
-      billAiEmployeeHint: '填写在 AI 员工设置中新建、并绑定两个派遣账单工具的 AI 员工用户名；留空则只通知薪酬专员。',
+      billAiEmployeeHint:
+        '填写在 AI 员工设置中新建、并绑定两个派遣账单工具的 AI 员工用户名；留空则只通知薪酬专员。',
       taxTable: '个税预扣率表',
       taxTableHint: '累计预扣预缴应纳税所得额 · 预扣率 · 速算扣除数',
       above: '以上',
@@ -5215,7 +5310,8 @@ const zhCN: AppResource = {
     errors: {
       PAYROLL_MONTH_INVALID: '请填写月份，如 2026-10。',
       STRUCTURE_NOT_FOUND: '薪资结构不存在。',
-      PAYROLL_ATTENDANCE_NOT_LOCKED: '以下部门的月度考勤尚未锁定：{{departments}}。',
+      PAYROLL_ATTENDANCE_NOT_LOCKED:
+        '以下部门的月度考勤尚未锁定：{{departments}}。',
       PAYROLL_CYCLE_EXISTS: '该月份已有算薪周期。',
       PAYROLL_CYCLE_LOCKED: '周期已提交或已批准，不能再修改。',
       PAYROLL_RECALCULATE_REQUIRED: '请先重新计算再提交。',
