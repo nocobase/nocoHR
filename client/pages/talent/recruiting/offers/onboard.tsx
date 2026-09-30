@@ -35,6 +35,8 @@ export default function OfferOnboardPage(): ReactElement {
   const draft = useRemote<OnboardDraft>(path);
   const { busy, run } = useAction();
   const [employeeNo, setEmployeeNo] = useState('');
+  // 参加工作日期: prefilled from the resume estimate until HR edits it.
+  const [careerStart, setCareerStart] = useState<string>();
   const [result, setResult] = useState<{ actionId: string } | null>(null);
   const data = draft.data;
   return (
@@ -130,7 +132,14 @@ export default function OfferOnboardPage(): ReactElement {
                     event.preventDefault();
                     const done = await run<{ actionId: string }>(
                       'onboard',
-                      { path, json: { employeeNo } },
+                      {
+                        path,
+                        json: {
+                          employeeNo,
+                          careerStartDate:
+                            (careerStart ?? data.draft.careerStartDate) || null,
+                        },
+                      },
                       t('recruiting.offers.onboarded'),
                     );
                     if (done) {
@@ -149,6 +158,18 @@ export default function OfferOnboardPage(): ReactElement {
                     required
                     value={employeeNo}
                     onChange={(e) => setEmployeeNo(e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor='ob-career'>
+                    {t('recruiting.offers.careerStartDate')}
+                  </FieldLabel>
+                  <Input
+                    id='ob-career'
+                    type='date'
+                    max={data.draft.effectiveDate}
+                    value={careerStart ?? data.draft.careerStartDate ?? ''}
+                    onChange={(e) => setCareerStart(e.target.value)}
                   />
                 </Field>
                 <Button type='submit' disabled={busy !== null}>

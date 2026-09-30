@@ -1032,6 +1032,11 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           managerEmployeeId: null,
           status: probationEndDate ? 'probation' : 'active',
           hireDate: effectiveDate,
+          careerStartDate:
+            typeof candidate.careerStartDate === 'string' &&
+            candidate.careerStartDate <= effectiveDate
+              ? candidate.careerStartDate
+              : null,
           positionSince: row.toPositionId ? effectiveDate : null,
           email: typeof candidate.email === 'string' ? candidate.email : null,
           mobile:
@@ -1827,6 +1832,8 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             ) ?? 'fullTime',
           probationMonths,
           createAccount: input.createAccount === true,
+          // 参加工作日期 (年假按累计工作年限): from the onboarding form, or estimated from the resume for an offer.
+          careerStartDate: optionalDate(input.careerStartDate, 'INVALID_INPUT'),
           // 界面追加字段 placed on the onboarding form; written to the employee when the action takes effect.
           customFields: deps.customFields.prepare(
             deps.customFields.visible(

@@ -196,7 +196,10 @@ export default function CandidateDetail(): ReactElement {
                     </p>
                   )}
                   <p className='text-muted-foreground'>
-                    {c.sourceChannel} ·{' '}
+                    {t(`recruiting.labels.source.${c.sourceChannel}`, {
+                      defaultValue: c.sourceChannel,
+                    })}{' '}
+                    ·{' '}
                     {t(`recruiting.labels.parse.${c.parseStatus}`, {
                       defaultValue: c.parseStatus,
                     })}

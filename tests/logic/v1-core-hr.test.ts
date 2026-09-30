@@ -241,10 +241,15 @@ function onboardInput(department: string, position = 'pos-cnc-operator') {
 
 describe('approval chain configured per department', () => {
   it('previews the default two levels, the applicant passing the HR level', async () => {
-    const preview = await call('hr01', 'POST', '/personnel-settings/chain-preview', {
-      departmentId: 'sz-mc',
-      actionType: 'onboard',
-    });
+    const preview = await call(
+      'hr01',
+      'POST',
+      '/personnel-settings/chain-preview',
+      {
+        departmentId: 'sz-mc',
+        actionType: 'onboard',
+      },
+    );
     expect(preview.status).toBe(200);
     const steps = preview.json.data as Json[];
     expect(steps.map((s) => s.kind)).toEqual(['departmentHead', 'hrAdmin']);
@@ -262,19 +267,29 @@ describe('approval chain configured per department', () => {
         })
       ).status,
     ).toBe(200);
-    const chengdu = await call('hr01', 'POST', '/personnel-settings/chain-preview', {
-      departmentId: 'cd-mc',
-      actionType: 'onboard',
-    });
+    const chengdu = await call(
+      'hr01',
+      'POST',
+      '/personnel-settings/chain-preview',
+      {
+        departmentId: 'cd-mc',
+        actionType: 'onboard',
+      },
+    );
     const steps = chengdu.json.data as Json[];
     // 成都机加工车间 has no head: the first level goes up to 何伟, who is also the added level's approver.
     expect(steps).toHaveLength(2);
     expect(steps[0]!.approverNames).toEqual(['何伟']);
     expect(steps[0]!.merged).toEqual([{ kind: 'extra', name: '厂长审批' }]);
-    const suzhou = await call('hr01', 'POST', '/personnel-settings/chain-preview', {
-      departmentId: 'sz-mc',
-      actionType: 'onboard',
-    });
+    const suzhou = await call(
+      'hr01',
+      'POST',
+      '/personnel-settings/chain-preview',
+      {
+        departmentId: 'sz-mc',
+        actionType: 'onboard',
+      },
+    );
     expect((suzhou.json.data as Json[]).map((s) => s.kind)).toEqual([
       'departmentHead',
       'hrAdmin',
@@ -282,13 +297,23 @@ describe('approval chain configured per department', () => {
   });
 
   it('runs the merged level once, then separately when merging is off', async () => {
-    const merged = await call('hr01', 'POST', '/actions', onboardInput('cd-mc'));
+    const merged = await call(
+      'hr01',
+      'POST',
+      '/actions',
+      onboardInput('cd-mc'),
+    );
     expect(merged.status).toBe(201);
     const mergedSteps = merged.json.data.approvals as Json[];
     expect(mergedSteps).toHaveLength(2);
     const mgrCd = await userIdOf('mgr_cd');
     expect(merged.json.data.status).toBe('pending');
-    const approved = await call('mgr_cd', 'POST', `/actions/${merged.json.data.id}/approve`, {});
+    const approved = await call(
+      'mgr_cd',
+      'POST',
+      `/actions/${merged.json.data.id}/approve`,
+      {},
+    );
     expect(approved.status).toBe(200);
     expect(approved.json.data.status).toBe('effective');
     expect(approved.json.data.approvals[0].decidedBy).toBe(mgrCd);
@@ -297,26 +322,57 @@ describe('approval chain configured per department', () => {
       rules: [CHENGDU_DIRECTOR],
       mergeAdjacent: false,
     });
-    const separate = await call('hr01', 'POST', '/actions', onboardInput('cd-mc'));
+    const separate = await call(
+      'hr01',
+      'POST',
+      '/actions',
+      onboardInput('cd-mc'),
+    );
     const steps = separate.json.data.approvals as Json[];
-    expect(steps.map((s) => s.kind)).toEqual(['departmentHead', 'extra', 'hrAdmin']);
+    expect(steps.map((s) => s.kind)).toEqual([
+      'departmentHead',
+      'extra',
+      'hrAdmin',
+    ]);
     expect(steps[1]!.name).toBe('厂长审批');
-    const first = await call('mgr_cd', 'POST', `/actions/${separate.json.data.id}/approve`, {});
+    const first = await call(
+      'mgr_cd',
+      'POST',
+      `/actions/${separate.json.data.id}/approve`,
+      {},
+    );
     expect(first.json.data.status).toBe('pending');
     expect(first.json.data.currentLevel).toBe(2);
-    const second = await call('mgr_cd', 'POST', `/actions/${separate.json.data.id}/approve`, {});
+    const second = await call(
+      'mgr_cd',
+      'POST',
+      `/actions/${separate.json.data.id}/approve`,
+      {},
+    );
     expect(second.json.data.status).toBe('effective');
   });
 
   it('keeps the submitted chain when the configuration changes afterwards', async () => {
     await saveSettings('approvalChain', { rules: [], mergeAdjacent: true });
-    const raised = await call('hr01', 'POST', '/actions', onboardInput('sz-mc'));
+    const raised = await call(
+      'hr01',
+      'POST',
+      '/actions',
+      onboardInput('sz-mc'),
+    );
     expect((raised.json.data.approvals as Json[]).map((s) => s.kind)).toEqual([
       'departmentHead',
       'hrAdmin',
     ]);
     await saveSettings('approvalChain', {
-      rules: [{ ...CHENGDU_DIRECTOR, id: 'rule-sz', departmentId: 'sz', approver: { type: 'departmentHead', departmentId: 'sz' } }],
+      rules: [
+        {
+          ...CHENGDU_DIRECTOR,
+          id: 'rule-sz',
+          departmentId: 'sz',
+          approver: { type: 'departmentHead', departmentId: 'sz' },
+        },
+      ],
       mergeAdjacent: true,
     });
     const later = await call('hr01', 'GET', `/actions/${raised.json.data.id}`);
@@ -334,7 +390,9 @@ describe('approval chain configured per department', () => {
   });
 
   it('refuses the settings to department heads, and unknown references', async () => {
-    expect((await call('mgr_cd', 'GET', '/personnel-settings')).status).toBe(403);
+    expect((await call('mgr_cd', 'GET', '/personnel-settings')).status).toBe(
+      403,
+    );
     expect(
       (
         await call('mgr_east', 'POST', '/personnel-settings/chain-preview', {
@@ -382,7 +440,12 @@ describe('promotion by grade order', () => {
     });
     expect(raised.status).toBe(201);
     expect(raised.json.data.approvals[0].status).toBe('auto');
-    const done = await call('hr01', 'POST', `/actions/${raised.json.data.id}/approve`, {});
+    const done = await call(
+      'hr01',
+      'POST',
+      `/actions/${raised.json.data.id}/approve`,
+      {},
+    );
     expect(done.json.data.status).toBe('effective');
     const events = await call('hr01', 'GET', '/employees/emp-zhaoyang/events');
     const latest = (events.json.data as Json[])[0]!;
@@ -398,14 +461,24 @@ describe('更正任职信息', () => {
       departmentId: 'sz-as',
     });
     expect(edit.json.code).toBe('EMPLOYEE_CORE_FIELDS_LOCKED');
-    const noReason = await call('hr01', 'POST', '/employees/emp-qianjin/correct-job', {
-      departmentId: 'sz-as',
-    });
+    const noReason = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-qianjin/correct-job',
+      {
+        departmentId: 'sz-as',
+      },
+    );
     expect(noReason.json.code).toBe('EMPLOYEE_CORRECTION_NOTE_REQUIRED');
-    const corrected = await call('hr01', 'POST', '/employees/emp-qianjin/correct-job', {
-      departmentId: 'sz-as',
-      note: '入职时部门录错',
-    });
+    const corrected = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-qianjin/correct-job',
+      {
+        departmentId: 'sz-as',
+        note: '入职时部门录错',
+      },
+    );
     expect(corrected.status).toBe(200);
     expect(corrected.json.data.departmentId).toBe('sz-as');
     const events = await call('hr01', 'GET', '/employees/emp-qianjin/events');
@@ -427,18 +500,26 @@ describe('更正任职信息', () => {
         })
       ).status,
     ).toBe(403);
-    await saveSettings('jobInfo', { importMayChangeJob: true, allowCorrection: false });
+    await saveSettings('jobInfo', {
+      importMayChangeJob: true,
+      allowCorrection: false,
+    });
     const off = await call('hr01', 'POST', '/employees/emp-limin/correct-job', {
       departmentId: 'sz-as',
       note: 'x',
     });
     expect(off.json.code).toBe('EMPLOYEE_CORRECTION_DISABLED');
-    await saveSettings('jobInfo', { importMayChangeJob: true, allowCorrection: true });
+    await saveSettings('jobInfo', {
+      importMayChangeJob: true,
+      allowCorrection: true,
+    });
   });
 
   it('marks the handler done: every event gets processedAt', async () => {
     // Seeded events are handed to the handler by the daily run, like any event whose handler failed.
-    expect((await call('hr01', 'POST', '/org/maintenance/run', {})).status).toBe(200);
+    expect(
+      (await call('hr01', 'POST', '/org/maintenance/run', {})).status,
+    ).toBe(200);
     const { databaseManagerToken } = await import('@nocobase/db');
     const database = server.application.container.resolve(databaseManagerToken);
     const pending = await database
@@ -453,7 +534,10 @@ describe('更正任职信息', () => {
 
 describe('import and job information', () => {
   it('rejects moving an employee by import once the switch is off', async () => {
-    await saveSettings('jobInfo', { importMayChangeJob: false, allowCorrection: true });
+    await saveSettings('jobInfo', {
+      importMayChangeJob: false,
+      allowCorrection: true,
+    });
     const preview = await upload(
       'hr01',
       '/employees/import/preview',
@@ -462,13 +546,27 @@ describe('import and job information', () => {
       ]),
     );
     expect(preview.status).toBe(200);
-    expect(preview.json.data.rows[0].errors).toContain('IMPORT_JOB_CHANGE_DISABLED');
-    await saveSettings('jobInfo', { importMayChangeJob: true, allowCorrection: true });
+    expect(preview.json.data.rows[0].errors).toContain(
+      'IMPORT_JOB_CHANGE_DISABLED',
+    );
+    await saveSettings('jobInfo', {
+      importMayChangeJob: true,
+      allowCorrection: true,
+    });
     const allowed = await upload(
       'hr01',
       '/employees/import/preview',
       await workbook([
-        ['QH3002', '吴敏', 'CD-MC', 'prod-cnc-operator', '', '2022-03-01', '', ''],
+        [
+          'QH3002',
+          '吴敏',
+          'CD-MC',
+          'prod-cnc-operator',
+          '',
+          '2022-03-01',
+          '',
+          '',
+        ],
       ]),
     );
     expect(allowed.json.data.rows[0].errors).toEqual([]);
@@ -485,7 +583,14 @@ describe('employee self-service fields', () => {
     });
     expect(address.json.code).toBe('PROFILE_CHANGE_FIELD_NOT_ALLOWED');
     await saveSettings('selfService', {
-      fields: ['mobile', 'email', 'address', 'educations', 'experiences', 'emergencyContacts'],
+      fields: [
+        'mobile',
+        'email',
+        'address',
+        'educations',
+        'experiences',
+        'emergencyContacts',
+      ],
     });
   });
 });
@@ -506,18 +611,14 @@ describe('HR assistant: probation and renewal preparation', () => {
   it('prepares 孙丽 for mgr_east without the contract and for hr01 with it, once', async () => {
     const container = server.application.container;
     const { databaseManagerToken } = await import('@nocobase/db');
-    const { notificationServiceToken } = await import(
-      '@nocobase/app-plugin-notification'
-    );
-    const { hrCoreServiceToken } = await import(
-      '../../server/providers/hr/tokens.ts'
-    );
-    const { scopeForUser } = await import(
-      '../../server/providers/hr/authorize.ts'
-    );
-    const { authorizationToken } = await import(
-      '@nocobase/app-plugin-authorization/server'
-    );
+    const { notificationServiceToken } =
+      await import('@nocobase/app-plugin-notification');
+    const { hrCoreServiceToken } =
+      await import('../../server/providers/hr/tokens.ts');
+    const { scopeForUser } =
+      await import('../../server/providers/hr/authorize.ts');
+    const { authorizationToken } =
+      await import('@nocobase/app-plugin-authorization/server');
     const db = container.resolve(databaseManagerToken);
     const notifications = container.resolve(notificationServiceToken);
     const core = container.resolve(hrCoreServiceToken);
@@ -543,7 +644,9 @@ describe('HR assistant: probation and renewal preparation', () => {
     const regularizeBefore = (before.json.data.items as Json[]).filter(
       (a) => a.actionType === 'regularize',
     ).length;
-    expect((await call('hr01', 'POST', '/org/maintenance/run', {})).status).toBe(200);
+    expect(
+      (await call('hr01', 'POST', '/org/maintenance/run', {})).status,
+    ).toBe(200);
     for (const recipient of [mgrEast, hr01])
       expect(
         await notifications.getByIdempotencyKey(
@@ -559,10 +662,15 @@ describe('HR assistant: probation and renewal preparation', () => {
       ).toBeTruthy();
     const after = await call('hr01', 'GET', '/actions?view=all');
     expect(
-      (after.json.data.items as Json[]).filter((a) => a.actionType === 'regularize')
-        .length,
+      (after.json.data.items as Json[]).filter(
+        (a) => a.actionType === 'regularize',
+      ).length,
     ).toBe(regularizeBefore);
-    const contract = await call('hr01', 'GET', '/contracts?employeeId=emp-limin');
+    const contract = await call(
+      'hr01',
+      'GET',
+      '/contracts?employeeId=emp-limin',
+    );
     expect((contract.json.data.items as Json[])[0]!.status).toBe('active');
 
     // A second run sends nothing new.
@@ -577,11 +685,20 @@ describe('HR assistant: probation and renewal preparation', () => {
   });
 
   it('keeps the probation reminder when the preparation is switched off', async () => {
-    const settings = await call('hr01', 'PATCH', '/automations/hrAssistant.probationPrep', {
-      enabled: false,
-    });
+    const settings = await call(
+      'hr01',
+      'PATCH',
+      '/automations/hrAssistant.probationPrep',
+      {
+        enabled: false,
+      },
+    );
     expect(settings.status).toBe(200);
-    const runs = await call('hr01', 'GET', '/automations/runs?task=hrAssistant.probationPrep');
+    const runs = await call(
+      'hr01',
+      'GET',
+      '/automations/runs?task=hrAssistant.probationPrep',
+    );
     expect(runs.status).toBe(200);
     await call('hr01', 'PATCH', '/automations/hrAssistant.probationPrep', {
       enabled: true,
@@ -592,15 +709,12 @@ describe('HR assistant: probation and renewal preparation', () => {
 describe('HR assistant: attachment suggestions', () => {
   it('turns differing fields into a suggestion HR adopts field by field', async () => {
     const container = server.application.container;
-    const { hrCoreServiceToken } = await import(
-      '../../server/providers/hr/tokens.ts'
-    );
-    const { scopeForUser } = await import(
-      '../../server/providers/hr/authorize.ts'
-    );
-    const { authorizationToken } = await import(
-      '@nocobase/app-plugin-authorization/server'
-    );
+    const { hrCoreServiceToken } =
+      await import('../../server/providers/hr/tokens.ts');
+    const { scopeForUser } =
+      await import('../../server/providers/hr/authorize.ts');
+    const { authorizationToken } =
+      await import('@nocobase/app-plugin-authorization/server');
     const core = container.resolve(hrCoreServiceToken);
     const authz = container.resolve(authorizationToken);
     const hr01 = await userIdOf('hr01');
@@ -617,8 +731,16 @@ describe('HR assistant: attachment suggestions', () => {
         employeeId: 'emp-sunli',
         attachmentFileId: 'file-sample',
         fields: {
-          idNumber: { value: '999999199501010099', confidence: 0.92, snippet: '公民身份号码 9999…' },
-          birthDate: { value: '1995-01-01', confidence: 0.9, snippet: '出生 1995年1月1日' },
+          idNumber: {
+            value: '999999199501010099',
+            confidence: 0.92,
+            snippet: '公民身份号码 9999…',
+          },
+          birthDate: {
+            value: '1995-01-01',
+            confidence: 0.9,
+            snippet: '出生 1995年1月1日',
+          },
           gender: { value: 'nonsense', confidence: 0.3, snippet: '?' },
         },
       },
@@ -626,11 +748,15 @@ describe('HR assistant: attachment suggestions', () => {
     expect(created).toBeTruthy();
     expect(created!.fields).not.toContain('gender');
     const list = await call('hr01', 'GET', '/profile-changes?status=pending');
-    const suggestion = (list.json.data as Json[]).find((c) => c.id === created!.id)!;
+    const suggestion = (list.json.data as Json[]).find(
+      (c) => c.id === created!.id,
+    )!;
     expect(suggestion.source).toBe('ai');
     expect(suggestion.confidence.idNumber.confidence).toBe(0.92);
     const unchanged = await call('hr01', 'GET', '/employees/emp-sunli');
-    expect(unchanged.json.data.employee.idNumber).not.toBe('999999199501010099');
+    expect(unchanged.json.data.employee.idNumber).not.toBe(
+      '999999199501010099',
+    );
     // An employee's own request is not blocked by the assistant's suggestion.
     const approved = await call(
       'hr01',
@@ -647,32 +773,39 @@ describe('HR assistant: attachment suggestions', () => {
 
   it('records an image scan as needing a model that reads images', async () => {
     const container = server.application.container;
-    const { automationTasksToken } = await import(
-      '../../server/providers/hr/tokens.ts'
-    );
+    const { automationTasksToken } =
+      await import('../../server/providers/hr/tokens.ts');
     const { databaseManagerToken } = await import('@nocobase/db');
     const db = container.resolve(databaseManagerToken);
     const now = new Date();
-    await db.query().insertInto('hrFiles').values({
-      id: '00000000-0000-4000-8000-000000000001',
-      disk: 'local',
-      key: 'missing.png',
-      filename: '身份证样例.png',
-      ext: 'png',
-      mimeType: 'image/png',
-      size: 1,
-      createdAt: now,
-      updatedAt: now,
-    }).execute();
-    await db.query().insertInto('employeeAttachments').values({
-      id: 'attachment-sample',
-      employeeId: 'emp-sunli',
-      fileId: '00000000-0000-4000-8000-000000000001',
-      category: 'idCard',
-      title: '身份证样例',
-      createdAt: now,
-      updatedAt: now,
-    }).execute();
+    await db
+      .query()
+      .insertInto('hrFiles')
+      .values({
+        id: '00000000-0000-4000-8000-000000000001',
+        disk: 'local',
+        key: 'missing.png',
+        filename: '身份证样例.png',
+        ext: 'png',
+        mimeType: 'image/png',
+        size: 1,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+    await db
+      .query()
+      .insertInto('employeeAttachments')
+      .values({
+        id: 'attachment-sample',
+        employeeId: 'emp-sunli',
+        fileId: '00000000-0000-4000-8000-000000000001',
+        category: 'idCard',
+        title: '身份证样例',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
     const outcome = await container
       .resolve(automationTasksToken)
       .onAttachmentUploaded({
@@ -680,8 +813,54 @@ describe('HR assistant: attachment suggestions', () => {
         uploaderUserId: await userIdOf('hr01'),
       });
     expect(outcome.status).toBe('failed');
-    const run = await call('hr01', 'GET', `/automations/runs/${(outcome as Json).runId}`);
+    const run = await call(
+      'hr01',
+      'GET',
+      `/automations/runs/${(outcome as Json).runId}`,
+    );
     expect(String(run.json.data.error)).toContain('image');
     expect(JSON.stringify(run.json.data)).not.toContain('999999');
+  });
+});
+
+describe('重置登录密码', () => {
+  it('gives HR a one-time password that signs the employee in, and refuses others', async () => {
+    // 刘洋 (emp_njl_4) is not used elsewhere in this file: revoking his sessions affects nothing else.
+    expect(
+      (await call('emp_njl_1', 'POST', '/employees/emp-liuyang/reset-password'))
+        .status,
+    ).toBe(403);
+    expect(
+      (await call(null, 'POST', '/employees/emp-liuyang/reset-password'))
+        .status,
+    ).toBe(401);
+    // 孙丽 has no NocoHR account.
+    const none = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-sunli/reset-password',
+    );
+    expect(none.status).toBe(409);
+    expect(none.json.code).toBe('EMPLOYEE_NO_ACCOUNT');
+    const reset = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-liuyang/reset-password',
+    );
+    expect(reset.status).toBe(200);
+    const { password, login } = reset.json.data as {
+      password: string;
+      login: string;
+    };
+    expect(login).toBe('emp_njl_4');
+    expect(password).toMatch(/^Qh-[A-Za-z2-9]{12}$/u);
+    const signedIn = await server.fetch(
+      new Request(`${base}/api/auth/sign-in/username`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: login, password }),
+      }),
+    );
+    expect(signedIn.status).toBe(200);
   });
 });

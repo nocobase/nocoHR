@@ -87,8 +87,34 @@ const onboardSchema = z
       .optional(),
     employmentType: z.string().max(16).optional(),
     createAccount: z.boolean().optional(),
+    careerStartDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .nullish(),
   })
   .strict();
+
+/**
+ * 参加工作日期 estimated from the resume: the start date less the years its
+ * experiences add up to (周迪: two years on CNC lathes). HR sees and may
+ * correct it on the onboarding form; null without any years.
+ */
+export function estimateCareerStart(
+  experiences: readonly { years: number | null }[] | undefined,
+  startDate: string | null,
+): string | null {
+  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/u.test(startDate)) return null;
+  const years = (experiences ?? []).reduce(
+    (sum, e) =>
+      sum + (typeof e.years === 'number' && e.years > 0 ? e.years : 0),
+    0,
+  );
+  if (!years) return null;
+  const months = Math.round(years * 12);
+  const date = new Date(`${startDate}T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() - months);
+  return date.toISOString().slice(0, 10);
+}
 
 export interface Preboarding {
   remindersSent: { day: number; sentAt: string; delivery?: string }[];
@@ -930,6 +956,10 @@ export function createOfferService(
             probationMonths: offer.probationMonths,
             employmentType: 'fullTime',
             createAccount: Boolean(c.candidate.email),
+            careerStartDate: estimateCareerStart(
+              c.candidate.parsedProfile?.experiences,
+              offer.startDate,
+            ),
           }
         : null;
       const updated = await database
@@ -1030,6 +1060,10 @@ export function createOfferService(
         probationMonths: draft.probationMonths,
         employmentType:
           parsed.data.employmentType ?? draft.employmentType ?? 'fullTime',
+        careerStartDate:
+          parsed.data.careerStartDate === undefined
+            ? (draft.careerStartDate ?? null)
+            : parsed.data.careerStartDate,
         createAccount:
           parsed.data.createAccount ?? draft.createAccount === true,
         reason: '由 Offer 生成',

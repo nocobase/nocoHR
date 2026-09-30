@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { AppAuthorization } from '@nocobase/app-plugin-authorization/server';
 import type { UserAdministrationService } from '@nocobase/app-plugin-authentication';
 import type { DatabaseConnection, DatabaseManager } from '@nocobase/db';
@@ -301,6 +302,15 @@ export interface TalentService extends FrameworkService {
     id: string,
     userId: string | null,
   ): Promise<EmployeeRecord>;
+  /**
+   * A one-time temporary password for the employee's linked login account,
+   * shown once to the HR administrator who asked (a new hire from an offer
+   * has an account nobody knows the password of). Sessions are revoked.
+   */
+  resetLoginPassword(
+    ctx: ActorContext,
+    id: string,
+  ): Promise<{ password: string; login: string }>;
   markLeave(
     ctx: ActorContext,
     id: string,
@@ -1790,6 +1800,33 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       });
       await notifyUsers(affected);
       return (await readEmployee(ctx, id))!;
+    },
+
+    async resetLoginPassword(ctx, id) {
+      // Same permission as linking the account: HR who manage employee accounts.
+      await authorizeAction(ctx.authz, EMPLOYEE, 'linkUser');
+      const employee = await readEmployee(ctx, id);
+      if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+      if (!employee.userId) throw new HrError('EMPLOYEE_NO_ACCOUNT', 409);
+      if (employee.userId === ctx.userId)
+        throw new HrError('RESET_OWN_PASSWORD', 409);
+      const user = await users.get(employee.userId);
+      if (!user) throw new HrError('EMPLOYEE_NO_ACCOUNT', 409);
+      // Readable and unambiguous: no 0/O or 1/l/I.
+      const alphabet =
+        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+      const bytes = randomBytes(12);
+      const password = `Qh-${Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('')}`;
+      await users.resetPassword(employee.userId, password);
+      await users.revokeSessions(employee.userId);
+      const record = user as {
+        username?: string | null;
+        email?: string | null;
+      };
+      return {
+        password,
+        login: String(record.username || record.email || ''),
+      };
     },
 
     async markLeave(ctx, id, input) {

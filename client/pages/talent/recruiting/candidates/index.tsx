@@ -212,7 +212,11 @@ export default function CandidatesPage(): ReactElement {
                         <TableCell>
                           <MatchBadge level={i.matchLevel} />
                         </TableCell>
-                        <TableCell>{i.sourceChannel}</TableCell>
+                        <TableCell>
+                          {t(`recruiting.labels.source.${i.sourceChannel}`, {
+                            defaultValue: i.sourceChannel,
+                          })}
+                        </TableCell>
                         <TableCell>
                           <StatusBadge kind='stage' value={i.stage} />
                         </TableCell>

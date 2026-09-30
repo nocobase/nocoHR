@@ -1242,6 +1242,10 @@ describe('V2-07 录用与入职', () => {
     expect(draft.suggestions[0].fields.idNumber.value).toBe(
       '999999200102150031',
     );
+    // 参加工作日期 estimated from the resume's two years on CNC lathes, for HR to check.
+    expect(draft.draft.careerStartDate).toBe(
+      `${Number(start.slice(0, 4)) - 2}${start.slice(4)}`,
+    );
     expect(
       (await call('recruit01', 'GET', `/offers/${state.offerId}/onboard`))
         .status,
@@ -1294,12 +1298,19 @@ describe('V2-07 录用与入职', () => {
         database
           .query()
           .selectFrom('employees')
-          .select(['id', 'status', 'userId'])
+          .select(['id', 'status', 'userId', 'careerStartDate'])
           .where('employeeNo', '=', 'QH3301')
           .executeTakeFirst(),
       (e) => Boolean(e),
     );
     expect(employee?.status).toBe('probation');
+    // Annual leave counts from the career start the onboarding carried over, not from today.
+    const career = employee!.careerStartDate as unknown;
+    expect(
+      career instanceof Date
+        ? career.toISOString().slice(0, 10)
+        : String(career).slice(0, 10),
+    ).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
     state.employeeId = String(employee!.id);
     // The ID's values wait for hr01 as an AI change request (信息修改), not in the record.
     const suggestion = await until(

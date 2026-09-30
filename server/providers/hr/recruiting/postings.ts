@@ -12,6 +12,7 @@
  * Who may do what: the requisition's recruiter manages and publishes;
  * hr.admin reads.
  */
+import { yesNoValue } from './common.js';
 import { randomBytes } from 'node:crypto';
 
 import { z } from 'zod';
@@ -55,7 +56,13 @@ export const knockoutSchema = z
     requirementKey: z.string().min(1).max(40),
     expected: z.string().trim().max(60).nullish(),
   })
-  .strict();
+  .strict()
+  // yes/no expectations are stored as 'yes' / 'no' (an editor may type 是 / 能).
+  .transform((q) =>
+    q.answerType === 'yesNo'
+      ? { ...q, expected: yesNoValue(q.expected) ?? q.expected }
+      : q,
+  );
 
 const slotSchema = z
   .object({
@@ -408,8 +415,7 @@ export function createPostingService(
     /** Text, requirements and knockout questions: the posting returns to draft and must be confirmed again. */
     async update(actor: ActorContext, id: string, input: unknown) {
       const { posting, requisition } = await assertManage(actor, id);
-      if (posting.status === 'closed')
-        throw new HrError('POSTING_CLOSED', 409);
+      if (posting.status === 'closed') throw new HrError('POSTING_CLOSED', 409);
       const parsed = draftSchema.safeParse(input);
       if (!parsed.success)
         throw new HrError('INVALID_INPUT', 400, {
@@ -474,7 +480,10 @@ export function createPostingService(
         );
         await checkSlots(fresh);
         for (const old of posting.interviewSlots)
-          if ((counts.get(old.start) ?? 0) > 0 && !slots.some((s) => s.start === old.start))
+          if (
+            (counts.get(old.start) ?? 0) > 0 &&
+            !slots.some((s) => s.start === old.start)
+          )
             throw new HrError('POSTING_SLOT_BOOKED', 409, { start: old.start });
         values.interviewSlots = slots;
       }
@@ -492,7 +501,11 @@ export function createPostingService(
       const { posting } = await assertManage(actor, id);
       const parsed = bookingSchema.safeParse(input);
       if (!parsed.success) throw new HrError('INVALID_INPUT', 400);
-      if (parsed.data.enabled && !parsed.data.template && !posting.bookingTemplate)
+      if (
+        parsed.data.enabled &&
+        !parsed.data.template &&
+        !posting.bookingTemplate
+      )
         throw new HrError('POSTING_BOOKING_TEMPLATE_REQUIRED', 400);
       const template = parsed.data.template
         ? {

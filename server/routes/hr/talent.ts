@@ -204,6 +204,12 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
         data: await talent.linkUser(actor(c), c.req.param('id'), userId),
       });
     });
+    // One-time temporary password for the employee's login (shown once, never stored).
+    routes.post('/employees/:id/reset-password', async (c) =>
+      c.json({
+        data: await talent.resetLoginPassword(actor(c), c.req.param('id')),
+      }),
+    );
     routes.post('/employees/:id/mark-leave', async (c) => {
       const body = await readJson(c);
       return c.json({

@@ -39,6 +39,7 @@ import {
   type KnockoutQuestion,
   type Requirement,
   type ScreeningSuggestion,
+  yesNoValue,
 } from './common.js';
 import type { RecruitingContext } from './context.js';
 import type { InterviewService, Scorecard } from './interviews.js';
@@ -66,7 +67,8 @@ export const TASKS = {
 } as const;
 
 /** 职责说明中入职后才取得的内部上岗资格: not a hiring condition. */
-const INTERNAL_LICENSE = /(须|需|应)?持有?[^，。,；;]{0,20}(上岗证|上岗资格|岗位资格证)[^，。,；;]*/u;
+const INTERNAL_LICENSE =
+  /(须|需|应)?持有?[^，。,；;]{0,20}(上岗证|上岗资格|岗位资格证)[^，。,；;]*/u;
 
 const draftSchema = z.object({
   title: z.string().min(1).max(200),
@@ -155,7 +157,9 @@ const notesSchema = z.object({
 });
 
 const poolSchema = z.object({
-  reasons: z.array(z.object({ id: z.string().max(64), reason: z.string().max(300) })).max(50),
+  reasons: z
+    .array(z.object({ id: z.string().max(64), reason: z.string().max(300) }))
+    .max(50),
 });
 
 /** Advice words a screening or summary may not contain (招聘助理不建议淘汰、不给录用建议). */
@@ -197,7 +201,9 @@ export function createRecruitingAssistant(
   }
 
   /** The requisition's recruiter, with their own authorization; undefined when none is assigned. */
-  async function recruiterOf(requisition: RequisitionView): Promise<ActorContext | undefined> {
+  async function recruiterOf(
+    requisition: RequisitionView,
+  ): Promise<ActorContext | undefined> {
     if (!requisition.recruiterUserId) return undefined;
     return {
       userId: requisition.recruiterUserId,
@@ -220,13 +226,15 @@ export function createRecruitingAssistant(
       .split(/[、，,；;。]|和/u)
       .map((d) => d.replace(/^(负责|和|及|以及)/u, '').trim())
       .filter((d) => d.length >= 2 && d.length <= 20);
-    const checklist: Requirement[] = requisition.requirementsChecklist.map((item, i) => ({
-      key: `c${i + 1}`,
-      type: item.type,
-      text: item.text,
-      mustHave: item.mustHave,
-      origin: 'checklist',
-    }));
+    const checklist: Requirement[] = requisition.requirementsChecklist.map(
+      (item, i) => ({
+        key: `c${i + 1}`,
+        type: item.type,
+        text: item.text,
+        mustHave: item.mustHave,
+        origin: 'checklist',
+      }),
+    );
     const covered = (duty: string) =>
       checklist.some((c) => c.text.includes(duty.slice(0, 2)));
     const derived: Requirement[] = duties
@@ -241,10 +249,17 @@ export function createRecruitingAssistant(
       }));
     const requirements = [...checklist, ...derived];
     const description = [
-      `【岗位职责】${responsibilities.replace(INTERNAL_LICENSE, '').replace(/[，,]\s*$/u, '').trim() || position.title}`,
+      `【岗位职责】${
+        responsibilities
+          .replace(INTERNAL_LICENSE, '')
+          .replace(/[，,]\s*$/u, '')
+          .trim() || position.title
+      }`,
       `【任职要求】${requirements.map((r) => `${r.text}${r.mustHave ? '（必备）' : ''}`).join('；')}`,
       ...(license
-        ? [`【入职培训】入职后参加上岗培训与考核，取得${/[一-龥A-Z]*上岗证/u.exec(license)?.[0] ?? '上岗资格'}后独立上岗（不是招聘条件）。`]
+        ? [
+            `【入职培训】入职后参加上岗培训与考核，取得${/[一-龥A-Z]*上岗证/u.exec(license)?.[0] ?? '上岗资格'}后独立上岗（不是招聘条件）。`,
+          ]
         : []),
     ].join('\n');
     const questions: KnockoutQuestion[] = [];
@@ -272,17 +287,22 @@ export function createRecruitingAssistant(
     };
   }
 
-  async function postingDraft(run: AutomationRunContext, requisitionId: string) {
+  async function postingDraft(
+    run: AutomationRunContext,
+    requisitionId: string,
+  ) {
     const requisition = await deps.requisitions.get(requisitionId);
     const actor = await recruiterOf(requisition);
-    if (!actor) return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
+    if (!actor)
+      return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
     const exists = await database
       .query()
       .selectFrom('jobPostings')
       .select(['id'])
       .where('requisitionId', '=', requisitionId)
       .executeTakeFirst();
-    if (exists) return { status: 'skipped' as const, output: { reason: 'EXISTS' } };
+    if (exists)
+      return { status: 'skipped' as const, output: { reason: 'EXISTS' } };
     const position = (await ctx.position(requisition.positionId)) ?? {
       title: '',
       responsibilities: null,
@@ -291,7 +311,9 @@ export function createRecruitingAssistant(
     };
     const settings = await ctx.settings();
     const bulk = requisition.headcount >= settings.assistant.bulkHeadcount;
-    run.summarize(`requisition ${requisitionId}, headcount ${requisition.headcount}`);
+    run.summarize(
+      `requisition ${requisitionId}, headcount ${requisition.headcount}`,
+    );
     let draft = ruleDraft(requisition, position, bulk);
     try {
       const answer = await structured(
@@ -303,9 +325,11 @@ export function createRecruitingAssistant(
           '为下面的招聘需求起草职位描述与任职要求，按要求的结构化格式输出。',
           `岗位：${position.title}（序列：${position.jobFamily ?? '—'}，职级：${position.grade ?? '—'}）`,
           `职责说明：${position.responsibilities ?? '（空）'}`,
+          'title 只写对外的职位名称（如“CNC 操作工”，可加工作地点），不写序列、职级等内部信息。',
           `用人部门条件清单（原样保留，origin=checklist）：`,
           ...requisition.requirementsChecklist.map(
-            (c, i) => `${i + 1}. [${c.type}] ${c.text}${c.mustHave ? '（必备）' : ''}`,
+            (c, i) =>
+              `${i + 1}. [${c.type}] ${c.text}${c.mustHave ? '（必备）' : ''}`,
           ),
           '从职责说明中只提炼岗位真正需要的学历、经验、证书和技能，origin=responsibilities；入职后才取得的内部上岗资格（如“须持有 CNC 岗位上岗证”）不列为要求，写进职位描述的“入职培训”说明。',
           bulk
@@ -316,16 +340,23 @@ export function createRecruitingAssistant(
       );
       // The checklist is re-inserted exactly as the department wrote it; the model adds only derived items.
       const derived = answer.requirements
-        .filter((r) => r.origin !== 'checklist' && !INTERNAL_LICENSE.test(r.text))
+        .filter(
+          (r) => r.origin !== 'checklist' && !INTERNAL_LICENSE.test(r.text),
+        )
         .slice(0, 10)
         .map((r, i) => ({
           key: `r${i + 1}`,
           type: r.type,
           text: r.text,
           mustHave: r.mustHave,
-          origin: r.origin === 'manual' ? ('manual' as const) : ('responsibilities' as const),
+          origin:
+            r.origin === 'manual'
+              ? ('manual' as const)
+              : ('responsibilities' as const),
         }));
-      const checklist = draft.requirements.filter((r) => r.origin === 'checklist');
+      const checklist = draft.requirements.filter(
+        (r) => r.origin === 'checklist',
+      );
       const requirements = [...checklist, ...derived];
       const questions: KnockoutQuestion[] = [];
       for (const q of answer.knockoutQuestions) {
@@ -341,19 +372,32 @@ export function createRecruitingAssistant(
           answerType: q.answerType,
           options: q.options ?? undefined,
           requirementKey: mapped.key,
-          expected: q.expected ?? (q.answerType === 'yesNo' ? 'yes' : null),
+          // Stored as the contract's 'yes' / 'no', whatever wording the model used (是 / 能).
+          expected:
+            q.answerType === 'yesNo'
+              ? (yesNoValue(q.expected) ?? 'yes')
+              : (q.expected ?? null),
         });
       }
       const candidate = {
-        title: answer.title,
+        // Internal grading (生产序列, S1) never reaches the public title.
+        title: /序列|职级|\bS\d+\b/u.test(answer.title)
+          ? draft.title
+          : answer.title,
         description: answer.description,
         requirements,
-        knockoutQuestions: bulk && questions.length >= 3 ? questions : draft.knockoutQuestions,
+        knockoutQuestions:
+          bulk && questions.length >= 3 ? questions : draft.knockoutQuestions,
       };
-      validateDraft(requisition, candidate.requirements, candidate.knockoutQuestions);
+      validateDraft(
+        requisition,
+        candidate.requirements,
+        candidate.knockoutQuestions,
+      );
       draft = candidate;
     } catch (error) {
-      if (!(error instanceof AIUnavailableError) && !(error instanceof HrError)) throw error;
+      if (!(error instanceof AIUnavailableError) && !(error instanceof HrError))
+        throw error;
       run.markFallback();
     }
     const id = await deps.postings.insertDraft({
@@ -373,7 +417,13 @@ export function createRecruitingAssistant(
       params: { position: position.title },
       path: `/talent/postings/${id}`,
     });
-    return { output: { postingId: id, requirements: draft.requirements.length, questions: draft.knockoutQuestions.length } };
+    return {
+      output: {
+        postingId: id,
+        requirements: draft.requirements.length,
+        questions: draft.knockoutQuestions.length,
+      },
+    };
   }
 
   // ---------- 简历库复用 ----------
@@ -391,7 +441,11 @@ export function createRecruitingAssistant(
       .query()
       .selectFrom('applications')
       .innerJoin('jobPostings', 'jobPostings.id', 'applications.postingId')
-      .innerJoin('jobRequisitions', 'jobRequisitions.id', 'jobPostings.requisitionId')
+      .innerJoin(
+        'jobRequisitions',
+        'jobRequisitions.id',
+        'jobPostings.requisitionId',
+      )
       .select([
         'applications.candidateId as candidateId',
         'jobRequisitions.id as requisitionId',
@@ -408,7 +462,9 @@ export function createRecruitingAssistant(
       const mine = applied.filter((a) => str(a.candidateId) === str(r.id));
       if (mine.some((a) => str(a.requisitionId) === requisition.id)) continue;
       if (mine.some((a) => str(a.stage) === 'hired')) continue;
-      const samePosition = mine.some((a) => str(a.positionId) === requisition.positionId);
+      const samePosition = mine.some(
+        (a) => str(a.positionId) === requisition.positionId,
+      );
       const profile = json<ParsedProfile | null>(r.parsedProfile, null);
       const text = JSON.stringify(profile ?? {});
       const hits = [...new Set(words.filter((w) => text.includes(w)))];
@@ -428,10 +484,13 @@ export function createRecruitingAssistant(
   async function poolReuse(run: AutomationRunContext, requisitionId: string) {
     const requisition = await deps.requisitions.get(requisitionId);
     const actor = await recruiterOf(requisition);
-    if (!actor) return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
+    if (!actor)
+      return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
     const settings = await ctx.settings();
     const found = await findPool(requisition, settings.assistant.poolLimit);
-    run.summarize(`requisition ${requisitionId}: ${found.length} pool candidates`);
+    run.summarize(
+      `requisition ${requisitionId}: ${found.length} pool candidates`,
+    );
     const ruleReason = (f: (typeof found)[number]) =>
       [
         f.samePosition ? '曾应聘同一岗位' : null,
@@ -458,7 +517,8 @@ export function createRecruitingAssistant(
           poolSchema,
         );
         for (const r of answer.reasons)
-          if (reasons.has(r.id) && r.reason && !VERDICT.test(r.reason)) reasons.set(r.id, r.reason);
+          if (reasons.has(r.id) && r.reason && !VERDICT.test(r.reason))
+            reasons.set(r.id, r.reason);
       } catch (error) {
         if (!(error instanceof AIUnavailableError)) throw error;
         run.markFallback();
@@ -466,7 +526,11 @@ export function createRecruitingAssistant(
       }
     const suggestion = {
       at: new Date().toISOString(),
-      candidates: found.map((f) => ({ candidateId: f.id, name: f.name, reason: reasons.get(f.id) ?? '' })),
+      candidates: found.map((f) => ({
+        candidateId: f.id,
+        name: f.name,
+        reason: reasons.get(f.id) ?? '',
+      })),
     };
     await database
       .query()
@@ -500,7 +564,11 @@ export function createRecruitingAssistant(
     if (!candidate.resumeFileId) return { status: 'none', sentText: null };
     const file = await ctx.readFile(candidate.resumeFileId);
     if (!file) return { status: 'none', sentText: null };
-    const text = await extractResumeText(file.bytes, file.filename, file.mimeType);
+    const text = await extractResumeText(
+      file.bytes,
+      file.filename,
+      file.mimeType,
+    );
     if (!text) {
       await database
         .query()
@@ -554,7 +622,9 @@ export function createRecruitingAssistant(
   async function screeningInput(applicationId: string) {
     const application = await deps.candidates.applicationRow(applicationId);
     const posting = await deps.postings.get(application.postingId);
-    const candidate = await deps.candidates.candidateRow(application.candidateId);
+    const candidate = await deps.candidates.candidateRow(
+      application.candidateId,
+    );
     const definitions = await deps.candidates.customFieldDefinitions();
     return {
       applicationId,
@@ -564,18 +634,27 @@ export function createRecruitingAssistant(
         text: r.text,
         mustHave: r.mustHave,
       })),
-      parsedProfile: candidate.parsedProfile ? cleanProfile(candidate.parsedProfile) : null,
+      parsedProfile: candidate.parsedProfile
+        ? cleanProfile(candidate.parsedProfile)
+        : null,
       knockoutAnswers: application.knockoutAnswers.map((k) => ({
         requirementKey:
-          posting.knockoutQuestions.find((q) => q.key === k.key)?.requirementKey ?? null,
-        question: posting.knockoutQuestions.find((q) => q.key === k.key)?.question ?? '',
+          posting.knockoutQuestions.find((q) => q.key === k.key)
+            ?.requirementKey ?? null,
+        question:
+          posting.knockoutQuestions.find((q) => q.key === k.key)?.question ??
+          '',
         answer: k.answer,
         meetsExpected: k.meetsExpected,
       })),
-      screeningFields: deps.candidates.customValues(definitions, candidate.customFields, {
-        sensitive: false,
-        aiOnly: true,
-      }),
+      screeningFields: deps.candidates.customValues(
+        definitions,
+        candidate.customFields,
+        {
+          sensitive: false,
+          aiOnly: true,
+        },
+      ),
     };
   }
 
@@ -585,14 +664,23 @@ export function createRecruitingAssistant(
     requirements: readonly Requirement[],
   ): ScreeningSuggestion {
     const keys = new Set(requirements.map((r) => r.key));
-    const all = [...suggestion.met, ...suggestion.missing, ...suggestion.toVerify, ...suggestion.reasons.map((r) => r.key)];
-    if (all.some((k) => !keys.has(k))) throw new HrError('SCREENING_KEY_UNKNOWN', 400);
+    const all = [
+      ...suggestion.met,
+      ...suggestion.missing,
+      ...suggestion.toVerify,
+      ...suggestion.reasons.map((r) => r.key),
+    ];
+    if (all.some((k) => !keys.has(k)))
+      throw new HrError('SCREENING_KEY_UNKNOWN', 400);
     if (suggestion.reasons.some((r) => VERDICT.test(r.text)))
       throw new HrError('SCREENING_VERDICT_NOT_ALLOWED', 400);
     return { ...suggestion, by: 'ai' };
   }
 
-  async function writeSuggestion(applicationId: string, suggestion: ScreeningSuggestion) {
+  async function writeSuggestion(
+    applicationId: string,
+    suggestion: ScreeningSuggestion,
+  ) {
     const now = new Date();
     await database
       .query()
@@ -607,9 +695,13 @@ export function createRecruitingAssistant(
     const posting = await deps.postings.get(application.postingId);
     const requisition = await deps.requisitions.get(posting.requisitionId);
     const actor = await recruiterOf(requisition);
-    if (!actor) return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
-    if (application.screenedAt) return { status: 'skipped' as const, output: { reason: 'SCREENED' } };
-    const candidate = await deps.candidates.candidateRow(application.candidateId);
+    if (!actor)
+      return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
+    if (application.screenedAt)
+      return { status: 'skipped' as const, output: { reason: 'SCREENED' } };
+    const candidate = await deps.candidates.candidateRow(
+      application.candidateId,
+    );
     if (candidate.parseStatus !== 'parsed' || candidate.resumeFileId)
       await parseResume(run, actor.userId, candidate.id);
     const input = await screeningInput(applicationId);
@@ -617,12 +709,22 @@ export function createRecruitingAssistant(
     const rule = () =>
       ruleScreen(
         posting.requirements,
-        input.parsedProfile ?? { education: [], experiences: [], skills: [], certificates: [] },
+        input.parsedProfile ?? {
+          education: [],
+          experiences: [],
+          skills: [],
+          certificates: [],
+        },
         input.knockoutAnswers
           .filter((k) => k.requirementKey)
-          .map((k) => ({ requirementKey: k.requirementKey!, meetsExpected: k.meetsExpected, answer: k.answer })),
+          .map((k) => ({
+            requirementKey: k.requirementKey!,
+            meetsExpected: k.meetsExpected,
+            answer: k.answer,
+          })),
       );
-    if (!input.parsedProfile && !input.knockoutAnswers.length) suggestion = rule();
+    if (!input.parsedProfile && !input.knockoutAnswers.length)
+      suggestion = rule();
     else
       try {
         const answer = await structured(
@@ -640,12 +742,18 @@ export function createRecruitingAssistant(
         );
         suggestion = validateSuggestion(answer, posting.requirements);
       } catch (error) {
-        if (!(error instanceof AIUnavailableError) && !(error instanceof HrError)) throw error;
+        if (
+          !(error instanceof AIUnavailableError) &&
+          !(error instanceof HrError)
+        )
+          throw error;
         run.markFallback();
         suggestion = rule();
       }
     await writeSuggestion(applicationId, suggestion);
-    await run.recordItems('screeningSuggestion', [{ id: applicationId, hash: suggestion.matchLevel }]);
+    await run.recordItems('screeningSuggestion', [
+      { id: applicationId, hash: suggestion.matchLevel },
+    ]);
     // 运行记录中不保存简历内容和联系方式: the application id and the level only.
     run.summarize(`application ${applicationId}`);
     return { output: { applicationId, matchLevel: suggestion.matchLevel } };
@@ -667,18 +775,27 @@ export function createRecruitingAssistant(
           ? '证书名称、发证机构与有效期，以原件查验为准（问答不替代查验）'
           : `是否有具体、可核实的事例，能说明“${r.text}”`,
       followUps:
-        r.type === 'certificate' ? ['证书现在是否在有效期内？'] : ['遇到的最大困难是什么，怎么解决的？'],
+        r.type === 'certificate'
+          ? ['证书现在是否在有效期内？']
+          : ['遇到的最大困难是什么，怎么解决的？'],
     }));
   }
 
-  async function interviewQuestions(run: AutomationRunContext, interviewId: string) {
+  async function interviewQuestions(
+    run: AutomationRunContext,
+    interviewId: string,
+  ) {
     const interview = await deps.interviews.get(interviewId);
-    if (interview.questionPlan) return { status: 'skipped' as const, output: { reason: 'EXISTS' } };
-    const application = await deps.candidates.applicationRow(interview.applicationId);
+    if (interview.questionPlan)
+      return { status: 'skipped' as const, output: { reason: 'EXISTS' } };
+    const application = await deps.candidates.applicationRow(
+      interview.applicationId,
+    );
     const posting = await deps.postings.get(application.postingId);
     const requisition = await deps.requisitions.get(posting.requisitionId);
     const actor = await recruiterOf(requisition);
-    if (!actor) return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
+    if (!actor)
+      return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
     const input = await screeningInput(application.id);
     let plan = rulePlan(posting.requirements);
     try {
@@ -689,19 +806,28 @@ export function createRecruitingAssistant(
         '面试题',
         [
           '按任职要求和候选人经历设计行为面试题（“请讲一次你……的经历”），每题对应一条任职要求（requirementKey），写明要听什么（lookFor），最多 2–3 个追问；证书类要求设计核实问题，不替代证书查验。',
-          JSON.stringify({ requirements: input.requirements, profile: input.parsedProfile }),
+          JSON.stringify({
+            requirements: input.requirements,
+            profile: input.parsedProfile,
+          }),
         ].join('\n'),
         planSchema,
         { linkConversation: false },
       );
       const keys = new Set(posting.requirements.map((r) => r.key));
-      const questions = answer.questions.filter((q) => keys.has(q.requirementKey));
+      const questions = answer.questions.filter((q) =>
+        keys.has(q.requirementKey),
+      );
       if (questions.length) plan = questions;
     } catch (error) {
       if (!(error instanceof AIUnavailableError)) throw error;
       run.markFallback();
     }
-    await deps.interviews.savePlanTrusted(interviewId, plan, posting.requirements);
+    await deps.interviews.savePlanTrusted(
+      interviewId,
+      plan,
+      posting.requirements,
+    );
     await platform.notify({
       key: `interviewQuestions:${interviewId}`,
       userIds: interview.interviewerUserIds,
@@ -724,48 +850,88 @@ export function createRecruitingAssistant(
       const scores = cards
         .map((c) => ({
           userId: c.userId,
-          score: c.requirementScores.find((s) => s.requirementKey === r.key)?.score ?? null,
-          evidence: c.requirementScores.find((s) => s.requirementKey === r.key)?.evidence ?? null,
+          score:
+            c.requirementScores.find((s) => s.requirementKey === r.key)
+              ?.score ?? null,
+          evidence:
+            c.requirementScores.find((s) => s.requirementKey === r.key)
+              ?.evidence ?? null,
         }))
-        .filter((s) => s.score !== null) as { userId: string; score: number; evidence: string | null }[];
+        .filter((s) => s.score !== null) as {
+        userId: string;
+        score: number;
+        evidence: string | null;
+      }[];
       const values = scores.map((s) => s.score);
       return {
         requirementKey: r.key,
         text: r.text,
-        scores: scores.map((s) => ({ name: names.get(s.userId) ?? s.userId, score: s.score })),
-        average: values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null,
+        scores: scores.map((s) => ({
+          name: names.get(s.userId) ?? s.userId,
+          score: s.score,
+        })),
+        average: values.length
+          ? Math.round(
+              (values.reduce((a, b) => a + b, 0) / values.length) * 10,
+            ) / 10
+          : null,
         spread: values.length ? Math.max(...values) - Math.min(...values) : 0,
       };
     });
     const divergences = byRequirement
       .filter((r) => r.spread >= 2)
-      .map((r) => `“${r.text}”：${r.scores.map((s) => `${s.name} ${s.score} 分`).join('，')}`);
+      .map(
+        (r) =>
+          `“${r.text}”：${r.scores.map((s) => `${s.name} ${s.score} 分`).join('，')}`,
+      );
     const recommendations = new Set(
-      cards.map((c) => (c.recommendation === 'strongYes' || c.recommendation === 'yes' ? 'yes' : 'no')),
+      cards.map((c) =>
+        c.recommendation === 'strongYes' || c.recommendation === 'yes'
+          ? 'yes'
+          : 'no',
+      ),
     );
     if (recommendations.size > 1)
       divergences.push(
         `面试官的推荐不一致：${cards.map((c) => `${names.get(c.userId) ?? c.userId}（${c.recommendation}）`).join('，')}`,
       );
     const toVerify = [
-      ...byRequirement.filter((r) => r.scores.length < cards.length).map((r) => `“${r.text}”有面试官未评分`),
-      ...byRequirement.filter((r) => r.average !== null && r.average <= 2.5).map((r) => `“${r.text}”评分偏低，建议进一步核实`),
-      ...requirements.filter((r) => r.type === 'certificate').map((r) => `“${r.text}”需查验证书原件`),
+      ...byRequirement
+        .filter((r) => r.scores.length < cards.length)
+        .map((r) => `“${r.text}”有面试官未评分`),
+      ...byRequirement
+        .filter((r) => r.average !== null && r.average <= 2.5)
+        .map((r) => `“${r.text}”评分偏低，建议进一步核实`),
+      ...requirements
+        .filter((r) => r.type === 'certificate')
+        .map((r) => `“${r.text}”需查验证书原件`),
     ];
     return { byRequirement, divergences, toVerify };
   }
 
-  async function interviewSummary(run: AutomationRunContext, interviewId: string) {
+  async function interviewSummary(
+    run: AutomationRunContext,
+    interviewId: string,
+  ) {
     const interview = await deps.interviews.get(interviewId);
-    if (interview.summaryAt) return { status: 'skipped' as const, output: { reason: 'EXISTS' } };
-    const application = await deps.candidates.applicationRow(interview.applicationId);
+    if (interview.summaryAt)
+      return { status: 'skipped' as const, output: { reason: 'EXISTS' } };
+    const application = await deps.candidates.applicationRow(
+      interview.applicationId,
+    );
     const posting = await deps.postings.get(application.postingId);
     const requisition = await deps.requisitions.get(posting.requisitionId);
     const actor = await recruiterOf(requisition);
-    if (!actor) return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
+    if (!actor)
+      return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
     const names = new Map<string, string>();
-    for (const u of interview.interviewerUserIds) names.set(u, (await platform.userName(u)) ?? u);
-    const summary: Record<string, unknown> = ruleSummary(posting.requirements, interview.scorecards, names);
+    for (const u of interview.interviewerUserIds)
+      names.set(u, (await platform.userName(u)) ?? u);
+    const summary: Record<string, unknown> = ruleSummary(
+      posting.requirements,
+      interview.scorecards,
+      names,
+    );
     try {
       const answer = await structured(
         run,
@@ -774,7 +940,17 @@ export function createRecruitingAssistant(
         '面试汇总',
         [
           '把下面各面试官已写的评分与记录整理成一段汇总：按任职要求说明评分分布，指出分歧点和待核实事项。只整理面试官写了的内容，不给录用建议。',
-          JSON.stringify({ requirements: posting.requirements.map((r) => ({ key: r.key, text: r.text })), rule: summary, notes: interview.scorecards.map((c) => ({ name: names.get(c.userId), notes: c.notes ?? '' })) }),
+          JSON.stringify({
+            requirements: posting.requirements.map((r) => ({
+              key: r.key,
+              text: r.text,
+            })),
+            rule: summary,
+            notes: interview.scorecards.map((c) => ({
+              name: names.get(c.userId),
+              notes: c.notes ?? '',
+            })),
+          }),
         ].join('\n'),
         z.object({ text: z.string().min(1).max(2000) }),
         { linkConversation: false },
@@ -787,13 +963,21 @@ export function createRecruitingAssistant(
     await deps.interviews.saveSummaryTrusted(interviewId, summary);
     await platform.notify({
       key: `interviewSummary:${interviewId}`,
-      userIds: [requisition.hiringManagerUserId, requisition.recruiterUserId!].filter(Boolean),
+      userIds: [
+        requisition.hiringManagerUserId,
+        requisition.recruiterUserId!,
+      ].filter(Boolean),
       message: 'recruitingInterviewSummary',
       params: { position: posting.title },
       path: `/talent/interviews/${interviewId}`,
     });
     run.summarize(`interview ${interviewId}`);
-    return { output: { interviewId, divergences: (summary.divergences as unknown[]).length } };
+    return {
+      output: {
+        interviewId,
+        divergences: (summary.divergences as unknown[]).length,
+      },
+    };
   }
 
   // ---------- 每天 18:00 汇总 ----------
@@ -806,7 +990,11 @@ export function createRecruitingAssistant(
       .query()
       .selectFrom('applications')
       .innerJoin('jobPostings', 'jobPostings.id', 'applications.postingId')
-      .innerJoin('jobRequisitions', 'jobRequisitions.id', 'jobPostings.requisitionId')
+      .innerJoin(
+        'jobRequisitions',
+        'jobRequisitions.id',
+        'jobPostings.requisitionId',
+      )
       .select([
         'applications.id as id',
         'applications.screeningSuggestion as screeningSuggestion',
@@ -822,16 +1010,40 @@ export function createRecruitingAssistant(
           return at >= from.getTime() && at <= to.getTime();
         }),
       );
-    const byRecruiter = new Map<string, { total: number; high: number; medium: number; low: number; pending: number; knockout: number }>();
+    const byRecruiter = new Map<
+      string,
+      {
+        total: number;
+        high: number;
+        medium: number;
+        low: number;
+        pending: number;
+        knockout: number;
+      }
+    >();
     for (const r of rows) {
       if (!r.recruiterUserId) continue;
       const key = str(r.recruiterUserId);
-      const stats = byRecruiter.get(key) ?? { total: 0, high: 0, medium: 0, low: 0, pending: 0, knockout: 0 };
+      const stats = byRecruiter.get(key) ?? {
+        total: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        pending: 0,
+        knockout: 0,
+      };
       stats.total += 1;
-      const level = json<ScreeningSuggestion | null>(r.screeningSuggestion, null)?.matchLevel;
+      const level = json<ScreeningSuggestion | null>(
+        r.screeningSuggestion,
+        null,
+      )?.matchLevel;
       if (level) stats[level] += 1;
       else stats.pending += 1;
-      if (json<{ meetsExpected: boolean | null }[]>(r.knockoutAnswers, []).some((k) => k.meetsExpected === false))
+      if (
+        json<{ meetsExpected: boolean | null }[]>(r.knockoutAnswers, []).some(
+          (k) => k.meetsExpected === false,
+        )
+      )
         stats.knockout += 1;
       byRecruiter.set(key, stats);
     }
@@ -852,21 +1064,37 @@ export function createRecruitingAssistant(
         path: '/talent/candidates',
       });
     run.summarize(`${date}: ${byRecruiter.size} recruiters`);
-    return { output: { date, recruiters: byRecruiter.size, applications: rows.length } };
+    return {
+      output: { date, recruiters: byRecruiter.size, applications: rows.length },
+    };
   }
 
   // ---------- 用工测算（人事助理）----------
 
-  function ruleNotes(plan: Awaited<ReturnType<WorkforceService['trustedGet']>>) {
+  function ruleNotes(
+    plan: Awaited<ReturnType<WorkforceService['trustedGet']>>,
+  ) {
     const c = plan.calculation!;
     const overtime = plan.options.find((o) => o.type === 'overtime');
     const transfer = plan.options.find((o) => o.type === 'transfer');
     const hire = plan.options.find((o) => o.type === 'hire');
     const increase =
-      c.currentOutput !== null ? `，比本月的 ${c.currentOutput.toLocaleString('zh-CN')} 件增加 ${(c.plannedOutput - c.currentOutput).toLocaleString('zh-CN')} 件` : '';
-    const od = (overtime?.detail ?? {}) as { hoursPerPerson?: number | null; limitHours?: number };
-    const td = (transfer?.detail ?? {}) as { maxHeadcount?: number; covers?: boolean };
-    const hd = (hire?.detail ?? {}) as { recruitingCycleDays?: number; onboardingDays?: number; readyInWeeks?: number };
+      c.currentOutput !== null
+        ? `，比本月的 ${c.currentOutput.toLocaleString('zh-CN')} 件增加 ${(c.plannedOutput - c.currentOutput).toLocaleString('zh-CN')} 件`
+        : '';
+    const od = (overtime?.detail ?? {}) as {
+      hoursPerPerson?: number | null;
+      limitHours?: number;
+    };
+    const td = (transfer?.detail ?? {}) as {
+      maxHeadcount?: number;
+      covers?: boolean;
+    };
+    const hd = (hire?.detail ?? {}) as {
+      recruitingCycleDays?: number;
+      onboardingDays?: number;
+      readyInWeeks?: number;
+    };
     return {
       summary: `${plan.month} ${plan.departmentTitle}${plan.positionTitle}计划产量 ${c.plannedOutput.toLocaleString('zh-CN')} 件${increase}。现有在岗 ${c.headcount} 人，按人均每班 ${c.outputPerShift} 件、每月 ${c.shiftsPerMonth} 个班，可产出 ${c.capacity.toLocaleString('zh-CN')} 件，缺口 ${c.gapHeadcount} 人。是否招聘、借调谁，由用人部门负责人决定。`,
       overtime: overtime
@@ -887,7 +1115,8 @@ export function createRecruitingAssistant(
     const plan = await deps.workforce.trustedGet(planId);
     if (!plan.calculation || plan.calculation.gapHeadcount <= 0)
       return { status: 'skipped' as const, output: { reason: 'NO_GAP' } };
-    if (plan.aiSummaryCurrent) return { status: 'skipped' as const, output: { reason: 'CURRENT' } };
+    if (plan.aiSummaryCurrent)
+      return { status: 'skipped' as const, output: { reason: 'CURRENT' } };
     let notes = ruleNotes(plan);
     try {
       const answer = await structured(
@@ -897,12 +1126,26 @@ export function createRecruitingAssistant(
         `用工测算 · ${plan.departmentTitle}`,
         [
           '只解释下面服务端算出的数字，不自行估算。先说缺口有多大、原因（计划产量增加多少），再逐个方案说清能补多少、什么时候能补上、有什么风险；超过法定加班上限的方案明确写“不可行”，不建议变通；是否招聘、借调谁由用人部门负责人决定，不评价具体员工。',
-          JSON.stringify({ plan: { month: plan.month, department: plan.departmentTitle, position: plan.positionTitle }, calculation: plan.calculation, options: plan.options.map((o) => ({ type: o.type, feasible: o.feasible, detail: o.detail, risks: o.risks })) }),
+          JSON.stringify({
+            plan: {
+              month: plan.month,
+              department: plan.departmentTitle,
+              position: plan.positionTitle,
+            },
+            calculation: plan.calculation,
+            options: plan.options.map((o) => ({
+              type: o.type,
+              feasible: o.feasible,
+              detail: o.detail,
+              risks: o.risks,
+            })),
+          }),
         ].join('\n'),
         notesSchema,
       );
       // The words must carry the server's gap; otherwise the rule text is used.
-      if (answer.summary.includes(String(plan.calculation.gapHeadcount))) notes = answer;
+      if (answer.summary.includes(String(plan.calculation.gapHeadcount)))
+        notes = answer;
       else run.markFallback();
     } catch (error) {
       if (!(error instanceof AIUnavailableError)) throw error;
@@ -910,7 +1153,11 @@ export function createRecruitingAssistant(
     }
     await deps.workforce.saveNotes(run.owner, planId, {
       aiSummary: notes.summary,
-      optionNotes: { overtime: notes.overtime, transfer: notes.transfer, hire: notes.hire },
+      optionNotes: {
+        overtime: notes.overtime,
+        transfer: notes.transfer,
+        hire: notes.hire,
+      },
     });
     const head = await ctx.headOfDepartment(plan.departmentId);
     if (head)
@@ -940,21 +1187,60 @@ export function createRecruitingAssistant(
 
     onRequisitionOpened(requisitionId: string) {
       return Promise.all([
-        automation().run(TASKS.postingDraft, 'event', { triggerRef: { requisitionId }, dedupeKey: `requisition:${requisitionId}` }, (run) => postingDraft(run, requisitionId)),
-        automation().run(TASKS.poolReuse, 'event', { triggerRef: { requisitionId }, dedupeKey: `requisition:${requisitionId}` }, (run) => poolReuse(run, requisitionId)),
+        automation().run(
+          TASKS.postingDraft,
+          'event',
+          {
+            triggerRef: { requisitionId },
+            dedupeKey: `requisition:${requisitionId}`,
+          },
+          (run) => postingDraft(run, requisitionId),
+        ),
+        automation().run(
+          TASKS.poolReuse,
+          'event',
+          {
+            triggerRef: { requisitionId },
+            dedupeKey: `requisition:${requisitionId}`,
+          },
+          (run) => poolReuse(run, requisitionId),
+        ),
       ]);
     },
     onNewApplication(applicationId: string) {
-      return automation().run(TASKS.screening, 'event', { triggerRef: { applicationId }, dedupeKey: `application:${applicationId}` }, (run) => screening(run, applicationId));
+      return automation().run(
+        TASKS.screening,
+        'event',
+        {
+          triggerRef: { applicationId },
+          dedupeKey: `application:${applicationId}`,
+        },
+        (run) => screening(run, applicationId),
+      );
     },
     onInterviewDue(interviewId: string) {
-      return automation().run(TASKS.interviewQuestions, 'event', { triggerRef: { interviewId }, dedupeKey: `interview:${interviewId}` }, (run) => interviewQuestions(run, interviewId));
+      return automation().run(
+        TASKS.interviewQuestions,
+        'event',
+        { triggerRef: { interviewId }, dedupeKey: `interview:${interviewId}` },
+        (run) => interviewQuestions(run, interviewId),
+      );
     },
     onAllScored(interviewId: string) {
-      return automation().run(TASKS.interviewSummary, 'event', { triggerRef: { interviewId }, dedupeKey: `interview:${interviewId}` }, (run) => interviewSummary(run, interviewId));
+      return automation().run(
+        TASKS.interviewSummary,
+        'event',
+        { triggerRef: { interviewId }, dedupeKey: `interview:${interviewId}` },
+        (run) => interviewSummary(run, interviewId),
+      );
     },
     onPlanCalculated(planId: string, hash: string) {
-      return automation().run(TASKS.workforceExplain, 'event', { triggerRef: { planId }, dedupeKey: `plan:${planId}:${hash}` }, (run) => workforceExplain(run, planId));
+      return automation().run(
+        TASKS.workforceExplain,
+        'event',
+        { triggerRef: { planId }, dedupeKey: `plan:${planId}:${hash}` },
+        (run) => workforceExplain(run, planId),
+      );
     },
     dailyDigest,
   };

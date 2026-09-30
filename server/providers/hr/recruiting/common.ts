@@ -56,6 +56,51 @@ export interface KnockoutQuestion {
   expected?: string | null;
 }
 
+const YES = new Set([
+  'yes',
+  'y',
+  'true',
+  '是',
+  '是的',
+  '能',
+  '可以',
+  '有',
+  '接受',
+  '愿意',
+  '同意',
+]);
+const NO = new Set([
+  'no',
+  'n',
+  'false',
+  '否',
+  '不',
+  '不是',
+  '不能',
+  '不可以',
+  '没有',
+  '无',
+  '不接受',
+  '不愿意',
+]);
+
+/**
+ * A yes/no answer or expectation in its stored form. The contract is
+ * 'yes' | 'no'; the recruiting assistant or an administrator may have written
+ * 是 / 能 / 可以, and a comparison must not fail on the wording.
+ */
+export function yesNoValue(
+  value: string | null | undefined,
+): 'yes' | 'no' | null {
+  const text = (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[。.!！]$/u, '');
+  if (YES.has(text)) return 'yes';
+  if (NO.has(text)) return 'no';
+  return null;
+}
+
 export interface InterviewSlot {
   start: string;
   end: string;

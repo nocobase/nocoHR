@@ -344,6 +344,8 @@ export interface OnboardDraft {
     email?: string | null;
     effectiveDate?: string;
     probationMonths?: number;
+    /** Estimated from the resume's work years; HR may correct it. */
+    careerStartDate?: string | null;
   };
   departmentTitle: string;
   positionTitle: string;

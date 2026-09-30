@@ -42,6 +42,7 @@ import {
   type Requirement,
   type ScreeningSuggestion,
   type Stage,
+  yesNoValue,
 } from './common.js';
 import type { RecruitingContext } from './context.js';
 import type { PostingService, PostingView } from './postings.js';
@@ -184,6 +185,10 @@ export function judgeAnswer(
   answer: string,
 ): boolean | null {
   if (question.answerType === 'shortText' || !question.expected) return null;
+  if (question.answerType === 'yesNo') {
+    const expected = yesNoValue(question.expected);
+    return expected ? yesNoValue(answer) === expected : null;
+  }
   return answer.trim() === question.expected.trim();
 }
 

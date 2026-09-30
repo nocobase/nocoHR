@@ -3489,6 +3489,9 @@ const enUS = {
       EMPLOYEE_MANAGER_SELF: 'An employee cannot be their own manager.',
       EMPLOYEE_NOT_FOUND:
         'The employee was not found or is not visible to you.',
+      EMPLOYEE_NO_ACCOUNT:
+        'This employee has no sign-in account yet. Link one first.',
+      RESET_OWN_PASSWORD: 'Change your own password from your account menu.',
       EMPLOYEE_NOT_LINKED: 'Your account is not linked to an employee record.',
       EMPLOYEE_NO_TAKEN: 'This employee number is already used.',
       EMPLOYEE_POSITION_NOT_FOUND:
@@ -3856,6 +3859,19 @@ const enUS = {
       leaveDone: '{{name}} was marked as left',
       linkUser: 'Link user',
       relinkUser: 'Change linked user',
+      resetPassword: 'Reset sign-in password',
+      resetPasswordTitle: 'Give {{name}} a temporary password?',
+      resetPasswordDescription:
+        'A new password is generated for their sign-in, and they are signed out everywhere. Hand it over in person; they can change it after signing in.',
+      resetPasswordConfirm: 'Generate',
+      resetPasswordIssued: 'Temporary password',
+      resetPasswordShownOnce:
+        'It is shown only this once and not stored. Give it to the employee now.',
+      resetPasswordLogin: 'Sign in as',
+      resetPasswordValue: 'Password',
+      resetPasswordCopy: 'Copy the password',
+      resetPasswordCopied: 'Password copied',
+      resetPasswordDone: 'Done',
       accountFromProvider: 'Create login with {{provider}}',
       linkTitle: 'Link a login user to {{name}}',
       currentUser: 'Currently linked to {{name}}.',

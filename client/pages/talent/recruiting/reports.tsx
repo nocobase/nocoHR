@@ -141,7 +141,11 @@ export default function RecruitingReportsPage(): ReactElement {
                 <TableBody>
                   {data.channels.map((c) => (
                     <TableRow key={c.name}>
-                      <TableCell>{c.name}</TableCell>
+                      <TableCell>
+                        {t(`recruiting.labels.source.${c.name}`, {
+                          defaultValue: c.name,
+                        })}
+                      </TableCell>
                       <TableCell className='text-right tabular-nums'>
                         {c.applications}
                       </TableCell>
