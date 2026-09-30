@@ -5,7 +5,7 @@
  * 周迪's (2 years on CNC lathes), which he submits on the careers page. Every
  * resume states gender, age and a photo line on purpose: screening must not
  * use them. "虚构" is written only in the document properties. Mobiles and
- * emails are test values (@demo.test). Only the demo seed and the tests read
+ * emails are test values (@qiheng.test). Only the demo seed and the tests read
  * this module.
  */
 
@@ -60,7 +60,7 @@ export const DEMO_RESUMES: readonly DemoResume[] = Array.from({ length: 29 }, (_
     file: `简历-${String(i).padStart(2, '0')}.docx`,
     name: person(i),
     phone,
-    email: `candidate${String(i).padStart(2, '0')}@demo.test`,
+    email: `candidate${String(i).padStart(2, '0')}@qiheng.test`,
     gender: i % 4 === 0 ? '女' : '男',
     age: 20 + (i % 15),
     education: kind === 'unrelated' && i % 2 ? '大专 某职业学院 市场营销专业 毕业' : i % 3 === 0 ? '中专 某技工学校 数控技术专业 毕业' : '高中 某中学 毕业',
@@ -83,7 +83,7 @@ export const ZHOU_DI_RESUME: DemoResume = {
   file: '周迪-简历.docx',
   name: '周迪',
   phone: '13900007100',
-  email: 'zhoudi@demo.test',
+  email: 'zhoudi@qiheng.test',
   gender: '男',
   age: 24,
   education: '中专 成都某技工学校 数控技术专业 毕业',
@@ -98,8 +98,8 @@ export const ZHOU_DI_RESUME: DemoResume = {
 
 /** 另 2 名公开页投递的候选人: one answers "不能" to 三班倒. */
 export const PUBLIC_APPLICANTS = [
-  { name: '邱明', phone: '13900007201', email: 'qiuming@demo.test', shiftWork: 'no' },
-  { name: '黎平', phone: '13900007202', email: 'liping@demo.test', shiftWork: 'yes' },
+  { name: '邱明', phone: '13900007201', email: 'qiuming@qiheng.test', shiftWork: 'no' },
+  { name: '黎平', phone: '13900007202', email: 'liping@qiheng.test', shiftWork: 'yes' },
 ] as const;
 
 export function resumeLines(r: DemoResume): string[] {

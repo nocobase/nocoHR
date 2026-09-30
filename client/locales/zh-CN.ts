@@ -1006,8 +1006,15 @@ const zhCN: AppResource = {
       },
     },
   },
+  inbox: {
+    title: '通知',
+    description: '提醒、审批，以及 AI 员工为你备好的材料。',
+    button: '通知',
+    buttonUnread: '通知（{{count}} 条未读）',
+  },
   workbench: {
     title: '工作台',
+    showDetail: '展开 / 收起全文',
     description: '集中处理审批、AI 准备事项与系统提醒。',
     today: '今天要处理',
     week: '本周',

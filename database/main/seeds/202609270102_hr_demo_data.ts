@@ -162,7 +162,7 @@ const seed: SeedDefinition = defineSeed({
           hireDate,
           positionSince: hireDate,
           email: person.account
-            ? `${person.account.replace(/_/gu, '.')}@demo.test`
+            ? `${person.account.replace(/_/gu, '.')}@qiheng.test`
             : null,
           mobile: person.mobile,
           note: null,

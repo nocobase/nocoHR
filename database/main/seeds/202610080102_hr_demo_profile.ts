@@ -108,7 +108,7 @@ const seed: SeedDefinition = defineSeed({
       const qa = await ensureDemoAccount(query, {
         username: 'qa_audit',
         name: '马骏',
-        email: 'qa.audit@demo.test',
+        email: 'qa.audit@qiheng.test',
       });
       if (!(await exists('employees', 'emp-qa-audit'))) {
         await query
@@ -126,7 +126,7 @@ const seed: SeedDefinition = defineSeed({
             status: 'active',
             hireDate: '2021-09-01',
             positionSince: '2021-09-01',
-            email: 'qa.audit@demo.test',
+            email: 'qa.audit@qiheng.test',
             mobile: '13900006001',
             note: null,
             gender: 'male',
@@ -167,7 +167,7 @@ const seed: SeedDefinition = defineSeed({
           id: integration,
           name: '质量管理系统集成',
           username: 'integration_qms',
-          email: 'integration.qms@demo.test',
+          email: 'integration.qms@qiheng.test',
           emailVerified: true,
           ...stamp,
         })

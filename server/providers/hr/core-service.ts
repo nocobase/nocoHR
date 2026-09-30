@@ -3467,7 +3467,12 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           }))
         : [];
       // A head holds contract access for their own contract only: nothing of this employee's is theirs to see.
-      const contracts = visibleContracts.length ? visibleContracts : null;
+      // null means "not for this viewer to see"; an HR administrator gets [] when there really is none.
+      const contracts = visibleContracts.length
+        ? visibleContracts
+        : (await isHrAdmin(ctx))
+          ? []
+          : null;
       const events = await service
         .myEvents(ctx, employeeId, locale)
         .catch(() => []);

@@ -95,6 +95,8 @@ describe('app client routes', () => {
     // The talent pages each carry their own page grant; nested pages inherit the grant of their first page.
     expect(pageAuthorizations(resolved.routes)).toEqual([
       { name: 'home', authorizedAs: null },
+      // 通知 (站内信): every signed-in user's own inbox, like the landing page.
+      { name: 'talent-inbox', authorizedAs: null },
       { name: 'talent-workbench', authorizedAs: 'talent.workbench' },
       { name: 'talent-me', authorizedAs: 'talent.me' },
       { name: 'talent-me-leave-new', authorizedAs: 'talent.me' },

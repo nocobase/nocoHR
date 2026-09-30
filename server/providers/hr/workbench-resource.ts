@@ -9,6 +9,7 @@ export const WORK_ITEM_FIELDS = [
   'type',
   'title',
   'summary',
+  'detail',
   'link',
   'sourceKind',
   'aiEmployee',

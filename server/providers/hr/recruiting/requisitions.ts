@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { authorizeAction } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
 import { HrError, newId, str } from '../shared.js';
+import { closeWorkItems } from '../work-item-store.js';
 import {
   day,
   iso,
@@ -80,10 +81,7 @@ export function presentRequisition(row: Record<string, unknown>) {
       ? str(row.replacingEmployeeId)
       : null,
     targetDate: day(row.targetDate),
-    requirementsChecklist: json<ChecklistItem[]>(
-      row.requirementsChecklist,
-      [],
-    ),
+    requirementsChecklist: json<ChecklistItem[]>(row.requirementsChecklist, []),
     note: row.note ? str(row.note) : null,
     requesterUserId: str(row.requesterUserId),
     hiringManagerUserId: str(row.hiringManagerUserId),
@@ -163,10 +161,11 @@ export function createRequisitionService(
       can: {
         edit:
           r.status === 'draft' &&
-          (hrAdmin || r.requesterUserId === actor.userId ||
-            (await platform.organization.managedDepartments(actor.userId)).includes(
-              r.departmentId,
-            )),
+          (hrAdmin ||
+            r.requesterUserId === actor.userId ||
+            (
+              await platform.organization.managedDepartments(actor.userId)
+            ).includes(r.departmentId)),
         approve:
           r.status === 'pending' &&
           Boolean(pending) &&
@@ -472,6 +471,10 @@ export function createRequisitionService(
           .where('id', '=', id)
           .where('status', '=', 'pending')
           .execute();
+        // The decided level's 待审批招聘需求 to-do is over.
+        await closeWorkItems(database.query(), {
+          refIds: [`requisition:${id}:level:${pending.level}`],
+        });
         await platform.notify({
           key: `requisition:${id}:rejected:${pending.level}:${now.getTime()}`,
           userIds: [current.requesterUserId],
@@ -511,6 +514,10 @@ export function createRequisitionService(
         .execute();
       if (!(updated.updatedCount ?? 1))
         throw new HrError('REQUISITION_NOT_PENDING', 409);
+      // The decided level's 待审批招聘需求 to-do is over; the next level gets its own.
+      await closeWorkItems(database.query(), {
+        refIds: [`requisition:${id}:level:${pending.level}`],
+      });
       const fresh = await row(id);
       if (opened) {
         await platform.notify({

@@ -100,6 +100,14 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
     path: '/',
   },
   {
+    // 通知 (站内信): every signed-in user's own inbox, reached from the header bell; no menu entry.
+    authz: 'skip',
+    auth: 'required',
+    componentLoader: () => import('./pages/talent/inbox/index.js'),
+    name: 'talent-inbox',
+    path: '/talent/inbox',
+  },
+  {
     // 人事：一级菜单（总纲“界面约定”）。分组只组织菜单，每个页面各自声明页面权限；用户一个都打不开的分组会隐藏。
     name: 'hr',
     navigation: { title: 'navigation.hr', icon: Briefcase },
@@ -830,7 +838,10 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
         path: '/talent/talent-reviews',
         auth: 'required',
         authz: page('talent.talentReviews'),
-        navigation: { title: 'navigation.talentTalentReviews', icon: Grid2x2Check },
+        navigation: {
+          title: 'navigation.talentTalentReviews',
+          icon: Grid2x2Check,
+        },
         breadcrumb: { title: 'navigation.talentTalentReviews' },
         componentLoader: () => import('./pages/talent/talent-reviews/index.js'),
         children: [
@@ -838,7 +849,8 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
             name: 'talent-talent-review',
             path: ':reviewId',
             breadcrumb: { title: 'talentReview.navigation.detail' },
-            componentLoader: () => import('./pages/talent/talent-reviews/detail.js'),
+            componentLoader: () =>
+              import('./pages/talent/talent-reviews/detail.js'),
           },
         ],
       },
@@ -855,7 +867,8 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
             name: 'talent-succession-plan',
             path: ':planId',
             breadcrumb: { title: 'talentReview.navigation.detail' },
-            componentLoader: () => import('./pages/talent/succession/detail.js'),
+            componentLoader: () =>
+              import('./pages/talent/succession/detail.js'),
           },
         ],
       },
@@ -1020,8 +1033,12 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
             path: '/talent/instructors',
             auth: 'required',
             authz: page('talent.instructors'),
-            navigation: { title: 'navigation.talentInstructors', icon: Presentation },
-            componentLoader: () => import('./pages/talent/instructors/index.js'),
+            navigation: {
+              title: 'navigation.talentInstructors',
+              icon: Presentation,
+            },
+            componentLoader: () =>
+              import('./pages/talent/instructors/index.js'),
           },
           {
             name: 'talent-training-evaluations',
@@ -1050,9 +1067,13 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
             path: '/talent/translations',
             auth: 'required',
             authz: page('talent.translations'),
-            navigation: { title: 'navigation.talentTranslations', icon: Languages },
+            navigation: {
+              title: 'navigation.talentTranslations',
+              icon: Languages,
+            },
             breadcrumb: { title: 'navigation.talentTranslations' },
-            componentLoader: () => import('./pages/talent/translations/index.js'),
+            componentLoader: () =>
+              import('./pages/talent/translations/index.js'),
             children: [
               {
                 name: 'talent-translation',
@@ -1182,7 +1203,10 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
             path: '/talent/practicals',
             auth: 'required',
             authz: page('talent.practicals'),
-            navigation: { title: 'navigation.talentPracticals', icon: ClipboardCheck },
+            navigation: {
+              title: 'navigation.talentPracticals',
+              icon: ClipboardCheck,
+            },
             breadcrumb: { title: 'navigation.talentPracticals' },
             componentLoader: () => import('./pages/talent/practicals/index.js'),
             children: [
@@ -1190,7 +1214,8 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
                 name: 'talent-practical-record',
                 path: 'records/:recordId',
                 breadcrumb: { title: 'talentReview.navigation.record' },
-                componentLoader: () => import('./pages/talent/practicals/record.js'),
+                componentLoader: () =>
+                  import('./pages/talent/practicals/record.js'),
               },
             ],
           },

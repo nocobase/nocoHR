@@ -15,7 +15,7 @@ import { ServiceProvider } from '@nocobase/service-provider';
 import { createAIRunner } from './ai-runner.js';
 import { workbenchResource } from './workbench-resource.js';
 import { documentConflictResource } from './content-resources.js';
-import { createWorkItemStore } from './work-item-store.js';
+import { createWorkItemStore, workItemText } from './work-item-store.js';
 import { createCustomFieldService } from './custom-fields.js';
 import { createPersonnelSettingsService } from './personnel-settings.js';
 import { createJobEventProcessor } from './job-events.js';
@@ -1098,10 +1098,11 @@ export default class HrProvider extends ServiceProvider<Application> {
                 refType: approvalId ? 'personnelAction' : taskType,
                 refId: approvalId ?? key,
                 title: t(`notifications.${message}.title`, values),
-                // Import reports and preparation summaries may contain personal data: link to them, never copy the body.
-                summary: fromHrAssistant
-                  ? null
-                  : t(`notifications.${message}.body`, values),
+                // An AI employee's material goes to this recipient only, like the inbox message carrying it:
+                // the card shows its first lines and expands to the full text (工作台 · AI 员工备好的材料).
+                ...(fromHrAssistant
+                  ? workItemText(t(`notifications.${message}.body`, values))
+                  : { summary: t(`notifications.${message}.body`, values) }),
                 link: path,
                 sourceKind: approvalId
                   ? 'approval'

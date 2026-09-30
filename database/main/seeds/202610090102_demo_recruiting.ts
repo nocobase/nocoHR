@@ -131,7 +131,7 @@ const seed: SeedDefinition = defineSeed({
     const recruit01 = await ensureDemoAccount(query, {
       username: 'recruit01',
       name: '苏晴',
-      email: 'recruit01@demo.test',
+      email: 'recruit01@qiheng.test',
     });
     if (!(await exists('employees', 'emp-recruit01')) && (await exists('positions', 'pos-office-recruiter'))) {
       await query
@@ -147,7 +147,7 @@ const seed: SeedDefinition = defineSeed({
           status: 'active',
           hireDate: '2023-03-06',
           positionSince: '2023-03-06',
-          email: 'recruit01@demo.test',
+          email: 'recruit01@qiheng.test',
           mobile: '13900000043',
           note: null,
           gender: 'female',
@@ -188,7 +188,7 @@ const seed: SeedDefinition = defineSeed({
           id: integration,
           name: 'ERP 集成账号',
           username: 'integration_mes',
-          email: 'integration_mes@demo.test',
+          email: 'integration_mes@qiheng.test',
           emailVerified: true,
           ...stamp,
         })
@@ -430,7 +430,7 @@ const seed: SeedDefinition = defineSeed({
           id: 'cand-pool-qinchuan',
           name: '秦川',
           phone: '13900007300',
-          email: 'qinchuan@demo.test',
+          email: 'qinchuan@qiheng.test',
           resumeFileId: null,
           parsedProfile: {
             education: [{ level: 'vocational', school: '某技工学校', major: '数控技术' }],

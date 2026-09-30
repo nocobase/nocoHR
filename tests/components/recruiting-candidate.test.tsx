@@ -88,7 +88,7 @@ function detail(can: Record<string, boolean>, contact = false) {
       id: 'cand-1',
       name: '邱明',
       phone: contact ? '13900007201' : null,
-      email: contact ? 'qiuming@demo.test' : null,
+      email: contact ? 'qiuming@qiheng.test' : null,
       resumeAvailable: contact,
       parsedProfile: {
         education: [],

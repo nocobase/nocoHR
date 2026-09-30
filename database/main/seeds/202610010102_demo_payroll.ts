@@ -176,7 +176,7 @@ const seed: SeedDefinition = defineSeed({
       const userId = await ensureDemoAccount(query, {
         username: p.username,
         name: p.name,
-        email: `${p.username}@demo.test`,
+        email: `${p.username}@qiheng.test`,
       });
       userIds.set(p.username, userId);
       if (await exists('employees', p.id)) continue;
@@ -193,7 +193,7 @@ const seed: SeedDefinition = defineSeed({
           status: 'active',
           hireDate: p.hireDate,
           positionSince: p.hireDate,
-          email: `${p.username}@demo.test`,
+          email: `${p.username}@qiheng.test`,
           mobile: p.mobile,
           note: null,
           gender: p.gender,

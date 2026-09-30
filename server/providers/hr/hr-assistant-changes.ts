@@ -24,6 +24,7 @@ import {
   type ComplianceService,
 } from './compliance.js';
 import type { Platform } from './platform.js';
+import { describeWorkItems } from './work-item-store.js';
 
 type Structured = <T>(
   run: AutomationRunContext,
@@ -183,6 +184,15 @@ export function createHrAssistantChanges(deps: {
       () => fallback.summary,
     );
     await service.saveNotes(checklistId, { ...notes, summary: text });
+    // The workbench to-do for this checklist shows what the HR assistant wrote (工作台 · AI 员工备好的材料).
+    const lines = checklist.items
+      .map((item) => notes.items[item.key])
+      .filter((note): note is string => Boolean(note));
+    await describeWorkItems(
+      platform.database.query(),
+      `checklist:${checklistId}:`,
+      [text, ...lines.map((note) => `· ${note}`)].join('\n'),
+    );
     run.summarize(
       `为${checklist.employeeName}的${KIND_TEXT[checklist.kind]}清单写了说明`,
     );

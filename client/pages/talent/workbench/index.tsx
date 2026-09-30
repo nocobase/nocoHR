@@ -23,6 +23,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
   Card,
   CardHeader,
   CardTitle,
@@ -52,6 +57,8 @@ interface Item {
   id: string;
   title: string;
   summary: string | null;
+  /** The full text an AI employee prepared, when the summary is only its start. */
+  detail?: string | null;
   link: string;
   sourceKind: 'approval' | 'ai' | 'rule';
   status: 'open' | 'done' | 'dismissed';
@@ -357,7 +364,30 @@ function Workbench(): ReactElement {
                   </div>
                 </CardHeader>
                 <CardContent className='space-y-2 break-words'>
-                  {item.summary ? <p>{item.summary}</p> : null}
+                  {item.detail ? (
+                    <Collapsible>
+                      {/* The first lines; the full text an AI employee prepared expands below. */}
+                      <p>{item.summary}</p>
+                      <CollapsibleContent>
+                        <p className='mt-2 whitespace-pre-line rounded-md bg-muted p-3 text-sm'>
+                          {item.detail}
+                        </p>
+                      </CollapsibleContent>
+                      <CollapsibleTrigger
+                        render={
+                          <Button
+                            variant='link'
+                            size='sm'
+                            className='h-auto px-0'
+                          />
+                        }
+                      >
+                        {t('workbench.showDetail')}
+                      </CollapsibleTrigger>
+                    </Collapsible>
+                  ) : item.summary ? (
+                    <p>{item.summary}</p>
+                  ) : null}
                   <p className='text-muted-foreground'>
                     {item.dueAt
                       ? new Intl.DateTimeFormat(locale, {

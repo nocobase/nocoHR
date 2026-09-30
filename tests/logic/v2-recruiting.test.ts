@@ -502,6 +502,17 @@ describe('V2-07 需求与职位', () => {
       { decision: 'approve', recruiterUserId: await userIdOf('recruit01') },
     );
     expect(approve.json.data.status).toBe('open');
+    // 待审批招聘需求 is not left open once decided.
+    const openApprovals = await (
+      await db()
+    )
+      .query()
+      .selectFrom('workItems')
+      .select(['id'])
+      .where('refId', 'like', `requisition:${state.requisitionId}:level:%`)
+      .where('status', '=', 'open')
+      .execute();
+    expect(openApprovals).toEqual([]);
     const posting = await until(
       async () =>
         (
@@ -799,7 +810,7 @@ describe('V2-07 公开页投递与初筛', () => {
         {
           name: `测试${i}`,
           phone: `1380000${String(1000 + i)}`,
-          email: `rate${i}@demo.test`,
+          email: `rate${i}@qiheng.test`,
           consent: 'true',
           answers: JSON.stringify(answers('yes')),
         },
@@ -821,7 +832,7 @@ describe('V2-07 公开页投递与初筛', () => {
       {
         name: '测试10',
         phone: '13800001010',
-        email: 'rate10@demo.test',
+        email: 'rate10@qiheng.test',
         consent: 'true',
         answers: JSON.stringify(answers('yes')),
         challengeId,
@@ -1065,6 +1076,22 @@ describe('V2-07 面试', () => {
       /建议录用|录用建议|建议淘汰/u,
     );
     expect(await notified(`interviewSummary:${state.interviewId}`)).toBe(true);
+    // Everyone has scored: no 面试安排 / 面试题 to-do for this interview stays open.
+    const openInterview = await (
+      await db()
+    )
+      .query()
+      .selectFrom('workItems')
+      .select(['refId'])
+      .where('status', '=', 'open')
+      .where((eb) =>
+        eb.or([
+          eb('refId', 'like', `interview:${state.interviewId}:scheduled:%`),
+          eb('refId', '=', `interviewQuestions:${state.interviewId}`),
+        ]),
+      )
+      .execute();
+    expect(openInterview).toEqual([]);
   });
 
   it('hr01 cannot open the candidate list and sees 周迪 only in 我的面试', async () => {
@@ -1417,7 +1444,10 @@ describe('V2-07 录用与入职', () => {
           'content-type': 'application/json',
           origin: 'http://localhost',
         },
-        body: JSON.stringify({ email: 'zhoudi@demo.test', password: PASSWORD }),
+        body: JSON.stringify({
+          email: 'zhoudi@qiheng.test',
+          password: PASSWORD,
+        }),
       }),
     );
     expect(signin.status).toBe(200);
@@ -1615,7 +1645,7 @@ describe('V2-07 可定制、隐私与权限', () => {
       {
         name: '黎平',
         phone: '13900007202',
-        email: 'liping@demo.test',
+        email: 'liping@qiheng.test',
         consent: 'true',
         answers: JSON.stringify(answers('yes')),
         customFields: JSON.stringify({ [fieldKey]: addDays(today(), 10) }),

@@ -5,6 +5,7 @@ import type {
   AppClientSettingIcon,
 } from '@nocobase/app-client/plugins';
 import {
+  apiClientToken,
   ClientApplicationContext,
   type ClientApplication,
 } from '@nocobase/app-client';
@@ -708,6 +709,8 @@ function renderWithAuthentication(
     (request) => authorization?.can(request) ?? Promise.resolve(true),
   );
   const registered = new Map<unknown, unknown>([
+    // The header's 通知 bell asks for the unread count.
+    [apiClientToken, { request: vi.fn().mockResolvedValue({ count: 0 }) }],
     [authenticationClientToken, authClient],
     [authorizationClientToken, authorizationClient],
   ]);

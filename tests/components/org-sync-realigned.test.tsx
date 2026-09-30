@@ -139,14 +139,14 @@ describe('手工指定', () => {
       />,
     );
     fireEvent.change(screen.getByLabelText('Email'), {
-      target: { value: 'sunli@demo.test' },
+      target: { value: 'sunli@qiheng.test' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create and link' }));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     expect(state.request).toHaveBeenCalledWith({
       path: 'talent/org-sync/employees/emp-sunli/account',
       method: 'POST',
-      json: { email: 'sunli@demo.test' },
+      json: { email: 'sunli@qiheng.test' },
     });
   });
 });

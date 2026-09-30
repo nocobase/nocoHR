@@ -70,7 +70,7 @@ const seed: SeedDefinition = defineSeed({
     const trainer = await ensureDemoAccount(query, {
       username: 'trainer01',
       name: '郑老师',
-      email: 'trainer01@demo.test',
+      email: 'trainer01@qiheng.test',
     });
     if (!(await exists('employees', 'emp-trainer01'))) {
       await query
@@ -86,7 +86,7 @@ const seed: SeedDefinition = defineSeed({
           status: 'active',
           hireDate: '2021-05-06',
           positionSince: '2021-05-06',
-          email: 'trainer01@demo.test',
+          email: 'trainer01@qiheng.test',
           mobile: '13900000008',
           note: null,
           gender: 'female',

@@ -302,7 +302,7 @@ const seed: SeedDefinition = defineSeed({
           id: integration,
           name: '工单系统集成',
           username: 'integration_ticket',
-          email: 'integration.ticket@demo.test',
+          email: 'integration.ticket@qiheng.test',
           emailVerified: true,
           ...stamp,
         })

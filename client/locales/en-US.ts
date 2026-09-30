@@ -1111,8 +1111,16 @@ const enUS = {
       },
     },
   },
+  inbox: {
+    title: 'Notifications',
+    description:
+      'Reminders, approvals and what the AI employees prepared for you.',
+    button: 'Notifications',
+    buttonUnread: 'Notifications ({{count}} unread)',
+  },
   workbench: {
     title: 'Workbench',
+    showDetail: 'Show / hide the full text',
     description:
       'Review your approvals, AI-prepared items and system reminders.',
     today: 'Today',

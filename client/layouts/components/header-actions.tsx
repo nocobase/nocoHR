@@ -11,6 +11,7 @@ import {
 
 import { ThemeSettings } from '../../theme/index.js';
 import { AiAssistantButton } from './ai-assistant-button.js';
+import { NotificationsButton } from './notifications-button.js';
 import { UserMenu } from './user-menu.js';
 
 const ACTION_LINK_CLASS =
@@ -32,6 +33,8 @@ export function HeaderActions({
         {/* Application addition (V1-04): the unified AI entry opens from every layout's header, for users who may
           use talent.aiAssistant. A route's navigation cannot place a header control, so the shell carries it. */}
         <AiAssistantButton className={ACTION_LINK_CLASS} />
+        {/* Application addition: the in-app inbox (通知), for every signed-in user; see notifications-button.tsx. */}
+        <NotificationsButton className={ACTION_LINK_CLASS} />
         {/* The dev entry sits left of settings and exists only while developing: a production build evaluates this to
           false and drops the link along with the whole dev surface it points at. */}
         {showDev ? (

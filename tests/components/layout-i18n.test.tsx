@@ -28,6 +28,9 @@ vi.mock('../../client/theme/index.js', () => ({ ThemeSettings: () => null }));
 vi.mock('../../client/layouts/components/ai-assistant-button.js', () => ({
   AiAssistantButton: () => null,
 }));
+vi.mock('../../client/layouts/components/notifications-button.js', () => ({
+  NotificationsButton: () => null,
+}));
 vi.mock('../../client/layouts/components/user-menu.js', () => ({
   UserMenu: () => null,
 }));

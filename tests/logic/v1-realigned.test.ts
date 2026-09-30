@@ -239,7 +239,7 @@ describe('the HR assistant in a conversation', () => {
     const fengtao = answer.issues.find(
       (i) => i.type === 'newMember' && i.externalId === 'fs-u-fengtao',
     )!;
-    expect(fengtao.detail.email).toBe('fe***@demo.test');
+    expect(fengtao.detail.email).toBe('fe***@qiheng.test');
     expect(String(fengtao.detail.mobile)).toContain('****');
     expect(JSON.stringify(answer)).not.toMatch(/1390000\d{4}/u);
     const sunli = answer.issues.find((i) => i.type === 'noAccount')!;
@@ -337,7 +337,7 @@ describe('开通账号 from a noAccount item', () => {
       'hr01',
       'POST',
       '/org-sync/employees/emp-sunli/account',
-      { email: 'sunli@demo.test' },
+      { email: 'sunli@qiheng.test' },
     );
     expect(created.status).toBe(201);
     expect((await employee('emp-sunli')).userId).toBe(created.json.data.userId);
@@ -350,7 +350,7 @@ describe('开通账号 from a noAccount item', () => {
     expect(
       (
         await call('hr01', 'POST', '/org-sync/employees/emp-sunli/account', {
-          email: 'sunli2@demo.test',
+          email: 'sunli2@qiheng.test',
         })
       ).json.code,
     ).toBe('EMPLOYEE_USER_TAKEN');

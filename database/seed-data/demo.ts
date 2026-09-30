@@ -661,7 +661,7 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
 export const DEMO_ACCOUNTS = DEMO_PEOPLE.filter((p) => p.account).map((p) => ({
   username: p.account!,
   name: p.name,
-  email: `${p.account!.replace(/_/gu, '.')}@demo.test`,
+  email: `${p.account!.replace(/_/gu, '.')}@qiheng.test`,
 }));
 
 /**
@@ -689,7 +689,7 @@ export const DEMO_IMPORT_SAMPLE: readonly (readonly string[])[] = [
     'CNC 操作工',
     'QH1003',
     '2025-02-15',
-    'emp.njl.2@demo.test',
+    'emp.njl.2@qiheng.test',
     '13900000005',
   ],
   [

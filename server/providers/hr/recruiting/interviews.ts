@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { authorizeAction } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
 import { HrError, newId, str } from '../shared.js';
+import { closeWorkItems } from '../work-item-store.js';
 import type { Calendar } from './calendar.js';
 import type { CandidateService } from './candidates.js';
 import { fill, iso, json, localDateTime, num } from './common.js';
@@ -41,7 +42,10 @@ export const questionPlanSchema = z
         requirementKey: z.string().min(1).max(40),
         question: z.string().trim().min(1).max(500),
         lookFor: z.string().trim().min(1).max(500),
-        followUps: z.array(z.string().trim().min(1).max(300)).max(3).default([]),
+        followUps: z
+          .array(z.string().trim().min(1).max(300))
+          .max(3)
+          .default([]),
       })
       .strict(),
   )
@@ -90,12 +94,13 @@ export function presentInterview(row: Record<string, unknown>) {
     locationOrLink: row.locationOrLink ? str(row.locationOrLink) : null,
     interviewerUserIds: json<string[]>(row.interviewerUserIds, []),
     questionPlan: json<
-      {
-        requirementKey: string;
-        question: string;
-        lookFor: string;
-        followUps: string[];
-      }[] | null
+      | {
+          requirementKey: string;
+          question: string;
+          lookFor: string;
+          followUps: string[];
+        }[]
+      | null
     >(row.questionPlan, null),
     questionPlanAt: iso(row.questionPlanAt),
     scorecards: json<Scorecard[]>(row.scorecards, []),
@@ -138,7 +143,9 @@ export function createInterviewService(
   }
 
   async function access(actor: ActorContext, interview: InterviewView) {
-    const application = await candidates.applicationRow(interview.applicationId);
+    const application = await candidates.applicationRow(
+      interview.applicationId,
+    );
     const a = await candidates.access(actor, application);
     const interviewer = interview.interviewerUserIds.includes(actor.userId);
     return { application, ...a, interviewer };
@@ -214,7 +221,11 @@ export function createInterviewService(
       const rows = await database
         .query()
         .selectFrom('interviews')
-        .innerJoin('applications', 'applications.id', 'interviews.applicationId')
+        .innerJoin(
+          'applications',
+          'applications.id',
+          'interviews.applicationId',
+        )
         .innerJoin('candidates', 'candidates.id', 'applications.candidateId')
         .innerJoin('jobPostings', 'jobPostings.id', 'applications.postingId')
         .innerJoin(
@@ -322,11 +333,15 @@ export function createInterviewService(
       const conflicts = await calendar.conflicts({
         interviewerUserIds: data.interviewerUserIds,
         start: start.toISOString(),
-        end: new Date(start.getTime() + data.durationMinutes * 60_000).toISOString(),
+        end: new Date(
+          start.getTime() + data.durationMinutes * 60_000,
+        ).toISOString(),
       });
       if (conflicts.length)
         throw new HrError('INTERVIEW_CALENDAR_CONFLICT', 409, {
-          names: [...new Set(conflicts.map((c) => c.name ?? c.userId))].join('、'),
+          names: [...new Set(conflicts.map((c) => c.name ?? c.userId))].join(
+            '、',
+          ),
           conflicts,
         });
       const id = await service.createTrusted({
@@ -412,7 +427,10 @@ export function createInterviewService(
           updatedAt: now,
         })
         .execute();
-      if (input.mode !== 'ai' && ['applied', 'screening'].includes(application.stage))
+      if (
+        input.mode !== 'ai' &&
+        ['applied', 'screening'].includes(application.stage)
+      )
         await candidates.stamp(
           input.applicationId,
           application.stage,
@@ -495,10 +513,14 @@ export function createInterviewService(
         throw new HrError('INTERVIEW_NOT_SCHEDULED', 409);
       const parsed = scorecardSchema.safeParse(input);
       if (!parsed.success) throw new HrError('INVALID_INPUT', 400);
-      const application = await candidates.applicationRow(interview.applicationId);
+      const application = await candidates.applicationRow(
+        interview.applicationId,
+      );
       const posting = (await candidates.access(actor, application)).posting;
       const keys = new Set(posting.requirements.map((r) => r.key));
-      if (parsed.data.requirementScores.some((s) => !keys.has(s.requirementKey)))
+      if (
+        parsed.data.requirementScores.some((s) => !keys.has(s.requirementKey))
+      )
         throw new HrError('INTERVIEW_PLAN_REQUIREMENT_INVALID', 400);
       const card: Scorecard = {
         userId: actor.userId,
@@ -524,6 +546,13 @@ export function createInterviewService(
         })
         .where('id', '=', id)
         .execute();
+      // This interviewer has scored: their 面试安排 and 面试题 to-dos are done;
+      // once everyone has, nobody's are left open.
+      await closeWorkItems(database.query(), {
+        refIds: [`interviewQuestions:${id}`],
+        prefixes: [`interview:${id}:scheduled:`],
+        ...(complete ? {} : { recipientUserId: actor.userId }),
+      });
       if (complete) deps.onAllScored(id);
       return service.detail(actor, id);
     },

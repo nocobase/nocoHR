@@ -105,7 +105,7 @@ const seed: SeedDefinition = defineSeed({
         await ensureDemoAccount(query, {
           username: person.account,
           name: person.name,
-          email: `${person.account.replace(/_/gu, '.')}@demo.test`,
+          email: `${person.account.replace(/_/gu, '.')}@qiheng.test`,
         }),
       );
 
@@ -195,7 +195,7 @@ const seed: SeedDefinition = defineSeed({
           status: 'active',
           hireDate: person.hireDate,
           positionSince: person.hireDate,
-          email: `${person.account.replace(/_/gu, '.')}@demo.test`,
+          email: `${person.account.replace(/_/gu, '.')}@qiheng.test`,
           mobile: person.mobile,
           note: null,
           gender: person.gender,

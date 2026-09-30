@@ -31,6 +31,8 @@ const inputSchema = identitySchema
   .extend({
     title: z.string().trim().min(1).max(255),
     summary: z.string().trim().max(500).nullable().default(null),
+    /** The full text behind the summary (what an AI employee prepared), expandable on the card. */
+    detail: z.string().trim().max(20000).nullable().default(null),
     link: z.string().max(1000).refine(internalLink),
     sourceKind: z.enum(['approval', 'ai', 'rule']),
     aiEmployee: key.nullable().default(null),
@@ -86,4 +88,70 @@ export function createWorkItemStore(connection: DatabaseConnection) {
       });
     },
   };
+}
+
+/**
+ * Closes the open to-dos a finished business step made obsolete (审批完成的招聘需求,
+ * 已评分的面试): those whose refId is one of `refIds` or starts with one of
+ * `prefixes`, optionally for one recipient only. Approval to-dos stay with
+ * `closeApproval`; this is for rule and AI to-dos whose step is over.
+ */
+export async function closeWorkItems(
+  /** `database.query()` or a transaction connection's `query`. */
+  query: DatabaseConnection['query'],
+  input: {
+    readonly refIds?: readonly string[];
+    readonly prefixes?: readonly string[];
+    readonly recipientUserId?: string;
+  },
+): Promise<void> {
+  const refIds = input.refIds ?? [];
+  const prefixes = input.prefixes ?? [];
+  if (!refIds.length && !prefixes.length) return;
+  const stamp = new Date();
+  let update = query
+    .updateTable('workItems')
+    .set({ status: 'done', doneAt: stamp, updatedAt: stamp })
+    .where('status', '=', 'open')
+    .where((eb) =>
+      eb.or([
+        ...(refIds.length ? [eb('refId', 'in', [...refIds])] : []),
+        ...prefixes.map((prefix) => eb('refId', 'like', `${prefix}%`)),
+      ]),
+    );
+  if (input.recipientUserId)
+    update = update.where('recipientUserId', '=', input.recipientUserId);
+  await update.execute();
+}
+
+/** A work item's summary (the first lines, at most 160 characters) and, when longer, the full text. */
+export function workItemText(body: string): {
+  summary: string | null;
+  detail: string | null;
+} {
+  const text = body.trim();
+  if (!text) return { summary: null, detail: null };
+  const plain = text
+    .replace(/[*_`#>]+/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  const summary = plain.length > 160 ? `${plain.slice(0, 159)}…` : plain;
+  return { summary, detail: plain.length > 160 ? text : null };
+}
+
+/** An AI employee's later wording for its own to-dos (变动影响清单说明): the open ones whose refId starts with `prefix`. */
+export async function describeWorkItems(
+  query: DatabaseConnection['query'],
+  prefix: string,
+  body: string,
+): Promise<void> {
+  const text = workItemText(body);
+  if (!text.summary) return;
+  await query
+    .updateTable('workItems')
+    .set({ ...text, updatedAt: new Date() })
+    .where('status', '=', 'open')
+    .where('sourceKind', '=', 'ai')
+    .where('refId', 'like', `${prefix}%`)
+    .execute();
 }

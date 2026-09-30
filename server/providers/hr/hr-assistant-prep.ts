@@ -153,7 +153,12 @@ export function createHrAssistantPrep(deps: HrAssistantPrepDeps) {
         : null;
     return [
       head,
-      history ? `合同：${history}。` : null,
+      // null: this recipient may not see contracts (a head's copy), not "no contract".
+      history
+        ? `合同：${history}。`
+        : contracts === null
+          ? '合同信息由 HR 核对。'
+          : '尚无劳动合同记录，请 HR 核对签订情况。',
       learning,
       compliance.length ? `合规提示：${compliance.join(' ')}` : null,
       confirm ? `待确认：${confirm}。` : null,
@@ -182,7 +187,11 @@ export function createHrAssistantPrep(deps: HrAssistantPrepDeps) {
               kind === 'probation'
                 ? '请为下面这位试用期即将结束的员工写一段转正准备摘要（不超过 300 字）：入职日期、岗位、试用期内的异动、合同（如有）和需要主管确认的事项。'
                 : '请为下面这份即将到期的劳动合同写一段续签准备摘要（不超过 300 字）：合同历史、司龄、已订立的固定期限合同次数，以及 HR 需要核对的事项。'
-            }只陈述事实与待确认事项，不下结论；涉及劳动法规的判断只提示 HR 核对，不给法律结论。toConfirm 中的代码含义：${JSON.stringify(CONFIRM_TEXT)}。数据：${JSON.stringify(summary)}`,
+            }只陈述事实与待确认事项，不下结论；涉及劳动法规的判断只提示 HR 核对，不给法律结论。${
+              summary.contracts === null
+                ? '数据中 contracts 为 null，表示这位接收人无权查看合同，并不是没有合同：不要写“未查到合同”，只写“合同信息由 HR 核对”。'
+                : ''
+            }toConfirm 中的代码含义：${JSON.stringify(CONFIRM_TEXT)}。数据：${JSON.stringify(summary)}`,
             z.object({ summary: z.string().min(1).max(800) }),
           )
         ).summary,
