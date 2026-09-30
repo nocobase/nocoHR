@@ -322,7 +322,8 @@ export function createProfileInsights(
         gaps.length
           ? `岗位要求中 ${gaps.length} 项未达标（${gaps
               .slice(0, 2)
-              .map((g) => g.label.split(' ')[0])
+              // The label is `<competency> 当前 N 级，…`; a competency name may itself contain spaces (安全生产与 5S).
+              .map((g) => g.label.replace(/ 当前 .*$/u, ''))
               .join('、')}）`
           : '岗位要求的能力均已达标',
       );

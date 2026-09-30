@@ -859,6 +859,10 @@ describe('V3-11 profile, finding people and the dashboard', () => {
       hr.json.data.sentences.every((s: Json) => s.evidence.length > 0),
     ).toBe(true);
     expect(hr.json.data.summary).not.toContain('端面跳动超差');
+    // A gap's competency keeps its full name, spaces included.
+    expect(hr.json.data.summary).not.toMatch(/（[^）]*安全生产与）/u);
+    if (String(hr.json.data.summary).includes('项未达标'))
+      expect(hr.json.data.summary).toMatch(/项未达标（[^）]+）/u);
     expect(hr.json.data.canRegenerate).toBe(true);
     const own = await call('emp_njl_1', 'GET', '/profiles/me/summary');
     expect(own.json.data.summary).toBe(hr.json.data.summary);
