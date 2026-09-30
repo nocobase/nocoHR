@@ -265,6 +265,8 @@ const zhCN: AppServerResource = {
     leavePending: {
       title: '{{name}} 提交了{{leaveType}}申请',
       body: '{{from}} 至 {{to}}，共 {{duration}}。请在“审批”中处理。',
+      body_day: '{{from}} 至 {{to}}，共 {{duration}} 天。请在“审批”中处理。',
+      body_hour: '{{from}} 至 {{to}}，共 {{duration}} 小时。请在“审批”中处理。',
     },
     leaveApproved: {
       title: '你的{{leaveType}}申请已批准',
@@ -603,6 +605,7 @@ const zhCN: AppServerResource = {
   },
   // V1-04 办公软件机器人与飞书卡片 (server/providers/hr/im-channel.ts, im-cards/)
   imBot: {
+    textOnly: '目前只能回答文字消息，请直接用文字提问。',
     payLinkOnly: '请在 NocoHR 工资条页验证身份后查看：{{link}}',
     groupOnly: '请私聊提问，避免在群里发出个人信息。',
     unbound:

@@ -274,6 +274,10 @@ const enUS = {
     leavePending: {
       title: '{{name}} requested {{leaveType}}',
       body: '{{from}} to {{to}}, {{duration}} in total. Decide it under Approvals.',
+      body_day:
+        '{{from}} to {{to}}, {{duration}} days in total. Decide it under Approvals.',
+      body_hour:
+        '{{from}} to {{to}}, {{duration}} hours in total. Decide it under Approvals.',
     },
     leaveApproved: {
       title: 'Your {{leaveType}} request is approved',
@@ -612,6 +616,8 @@ const enUS = {
   },
   // V1-04 办公软件机器人与飞书卡片 (server/providers/hr/im-channel.ts, im-cards/)
   imBot: {
+    textOnly:
+      'I can only answer text messages for now. Please type your question.',
     payLinkOnly:
       'Please open your payslip in NocoHR and verify your identity there: {{link}}',
     groupOnly:

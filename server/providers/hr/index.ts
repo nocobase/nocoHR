@@ -23,6 +23,11 @@ import path from 'node:path';
 import { DEMO_DIRECTORY } from '../../../database/seed-data/org-sync-mock.js';
 import { createAliasService } from './org-sync/alias-service.js';
 import { createMockSource } from './org-sync/source.js';
+import { createFeishuSource } from './org-sync/feishu-source.js';
+import { scheduleChecklistProvider } from './schedule-checklist.js';
+import { createFeishuApi, type FeishuApi } from './feishu/api.js';
+import { createFeishuTransport } from './feishu/transport.js';
+import { startFeishuLongConnection } from './feishu/long-connection.js';
 import { createOrgSyncService } from './org-sync/sync-service.js';
 import { createAiEntryService } from './ai-entry-service.js';
 import { createImChannel } from './im-channel.js';
@@ -155,6 +160,7 @@ import { licensedServicesToken } from './tokens.js';
 // V4-14 end
 // V4-13 end
 import type { TalentConfig } from '../../config/talent.js';
+import type { FeishuConfig } from '../../config/feishu.js';
 import {
   automationServiceToken,
   automationTasksToken,
@@ -293,8 +299,40 @@ export default class HrProvider extends ServiceProvider<Application> {
         platform: this.app.container.resolve(platformToken),
         entry: () => this.app.container.resolve(aiEntryServiceToken),
         ai: createAIRunner(this.app.container),
-        publicUrl: (path) =>
-          `${this.app.publicBasePath.replace(/\/$/u, '')}${path}`,
+        // Absolute once an origin is known: a Feishu message has no base URL.
+        publicUrl: (path) => this.feishuLink(path),
+        // The configured Feishu app replaces the development mock channel.
+        ...(this.feishuApp()
+          ? {
+              transport: createFeishuTransport({
+                api: this.feishuApp()!.api,
+                link: (path) => this.feishuLink(path),
+                messages: {
+                  get: async (cardId) => {
+                    const row = await this.app.container
+                      .resolve(databaseManagerToken)
+                      .query()
+                      .selectFrom('imCards')
+                      .select(['externalMessageId'])
+                      .where('id', '=', cardId)
+                      .executeTakeFirst();
+                    return row?.externalMessageId
+                      ? str(row.externalMessageId)
+                      : null;
+                  },
+                  set: async (cardId, messageId) => {
+                    await this.app.container
+                      .resolve(databaseManagerToken)
+                      .query()
+                      .updateTable('imCards')
+                      .set({ externalMessageId: messageId })
+                      .where('id', '=', cardId)
+                      .execute();
+                  },
+                },
+              }),
+            }
+          : {}),
         // V1-04 飞书卡片与推送: the card kinds call the core service; texts come from the server locales.
         core: () => this.app.container.resolve(hrCoreServiceToken),
         translate: async () => {
@@ -600,7 +638,10 @@ export default class HrProvider extends ServiceProvider<Application> {
               ): Promise<{ password?: string | null } | null | undefined>;
             };
             password: {
-              verify(input: { hash: string; password: string }): Promise<boolean>;
+              verify(input: {
+                hash: string;
+                password: string;
+              }): Promise<boolean>;
             };
           };
           const account =
@@ -750,13 +791,17 @@ export default class HrProvider extends ServiceProvider<Application> {
    * the directory is the mock file (模拟数据源，仅开发环境), created from the
    * demo directory on first use. `ORG_SYNC_MOCK_FILE` points elsewhere (tests);
    * `ORG_SYNC_CALLBACK_SECRET` signs directory callbacks — unset, every
-   * callback is refused. Credentials for a real tenant belong to its plugin.
+   * callback is refused. With a Feishu self-built app configured (`feishu`
+   * config, FEISHU_APP_ID / FEISHU_APP_SECRET) the real tenant replaces the
+   * mock; there is no office-suite plugin to hold those credentials instead.
    */
   private registerOrgSync(): void {
     const container = this.app.container;
     container.singleton(positionAliasServiceToken, () =>
       createAliasService(container.resolve(databaseManagerToken)),
     );
+    const feishu = this.feishuApp();
+    const live = feishu ? createFeishuSource({ api: feishu.api }) : undefined;
     const mock =
       process.env.NODE_ENV === 'production'
         ? undefined
@@ -779,7 +824,8 @@ export default class HrProvider extends ServiceProvider<Application> {
         talent: () => container.resolve(talentServiceToken),
         personnel: container.resolve(personnelSettingsToken),
         jobEvents: () => container.resolve(jobEventProcessorToken),
-        source: (provider) => (provider === 'feishu' ? mock : undefined),
+        source: (provider) =>
+          provider === 'feishu' ? (live ?? mock) : undefined,
         createAccount: async (input, connection) =>
           users.withConnection(connection).create(input),
         notify: this.notifier(),
@@ -1234,6 +1280,56 @@ export default class HrProvider extends ServiceProvider<Application> {
     courseId: string,
   ) => Promise<void>;
 
+  private feishuState?: { api: FeishuApi; config: FeishuConfig } | null;
+
+  /**
+   * The configured Feishu self-built app (FEISHU_APP_ID / FEISHU_APP_SECRET),
+   * shared by the directory sync, the bot transport and the long connection.
+   * Never under Vitest: a developer's `.env.local` credentials must not make a
+   * test read or message the real tenant.
+   */
+  private feishuApp(): { api: FeishuApi; config: FeishuConfig } | undefined {
+    if (this.feishuState === undefined) {
+      const raw = this.app.config.get<Partial<FeishuConfig>>('feishu') ?? {};
+      const config: FeishuConfig = {
+        appId: raw.appId ?? '',
+        appSecret: raw.appSecret ?? '',
+        encryptKey: raw.encryptKey ?? '',
+        verificationToken: raw.verificationToken ?? '',
+        baseUrl: raw.baseUrl || 'https://open.feishu.cn',
+        longConnection: raw.longConnection !== false,
+        linkOrigin: raw.linkOrigin ?? '',
+      };
+      this.feishuState =
+        config.appId && config.appSecret && !process.env.VITEST
+          ? {
+              config,
+              api: createFeishuApi({
+                appId: config.appId,
+                appSecret: config.appSecret,
+                baseUrl: config.baseUrl,
+              }),
+            }
+          : null;
+    }
+    return this.feishuState ?? undefined;
+  }
+
+  /** An app path as a link: absolute when an origin is known. */
+  private feishuLink(path: string): string {
+    const configured =
+      this.feishuApp()?.config.linkOrigin ||
+      this.app.config.get<{ publicOrigin?: string }>('app')?.publicOrigin ||
+      '';
+    const port = this.app.config.get<{ port?: number }>('server')?.port;
+    const origin =
+      configured ||
+      (process.env.NODE_ENV !== 'production' && this.feishuApp() && port
+        ? `http://localhost:${port}`
+        : '');
+    return `${origin.replace(/\/$/u, '')}${this.app.publicBasePath.replace(/\/$/u, '')}${path}`;
+  }
+
   private talentConfig(): TalentConfig {
     const config = this.app.config.get<Partial<TalentConfig>>('talent') ?? {};
     return {
@@ -1332,8 +1428,9 @@ export default class HrProvider extends ServiceProvider<Application> {
         },
         config: () => {
           const profile =
-            this.app.config.get<Partial<TalentProfileConfig>>('talentProfile') ??
-            {};
+            this.app.config.get<Partial<TalentProfileConfig>>(
+              'talentProfile',
+            ) ?? {};
           const app =
             this.app.config.get<{ publicOrigin?: string }>('app') ?? {};
           return {
@@ -1493,13 +1590,13 @@ export default class HrProvider extends ServiceProvider<Application> {
         defaultRules: () => this.talentConfig().examCompetency,
         onLicensedOperationChanged: async () => {
           // V4-14: a switch change through this V3-10 endpoint reaches the audit log too (设置 / 持证上岗 keeps its own list).
-          container
-            .resolve(loggingToken)
-            .getLogger('hr-audit')
-            .info(
-              { event: 'licensedOperation.settingsChanged', via: 'exam-settings' },
-              'HR audit',
-            );
+          container.resolve(loggingToken).getLogger('hr-audit').info(
+            {
+              event: 'licensedOperation.settingsChanged',
+              via: 'exam-settings',
+            },
+            'HR audit',
+          );
           const authz = container.resolve(authorizationToken);
           const holders = await container
             .resolve(databaseManagerToken)
@@ -1716,7 +1813,8 @@ export default class HrProvider extends ServiceProvider<Application> {
       const reference = authz.compositeResources.define(resource.build());
       authz.ui.place(reference, {
         section: 'talent',
-        group: reference.name === 'demo.forklift' ? 'talent.demo' : 'talent.exams',
+        group:
+          reference.name === 'demo.forklift' ? 'talent.demo' : 'talent.exams',
       });
     }
     // V4-14 end
@@ -1851,6 +1949,26 @@ export default class HrProvider extends ServiceProvider<Application> {
     });
     this.inBackground('licensed.start', () => licensed.start());
     // V4-14 end
+    // Real Feishu bot: messages and card button presses over the long connection.
+    const feishu = this.feishuApp();
+    if (feishu?.config.longConnection) {
+      const channel = container.resolve(imChannelToken);
+      const logger = container.resolve(loggingToken).getLogger('hr');
+      this.feishuConnection = startFeishuLongConnection({
+        appId: feishu.config.appId,
+        appSecret: feishu.config.appSecret,
+        baseUrl: feishu.config.baseUrl,
+        transport: channel.transport,
+        link: (path) => this.feishuLink(path),
+        handleMessage: (message) => channel.handle(message),
+        handleCardAction: (callback) => channel.cards.handleCallback(callback),
+        textOnly: async () => (await channel.translate())('imBot.textOnly'),
+        log: {
+          info: (detail, message) => logger.info(detail, message),
+          warn: (detail, message) => logger.warn(detail, message),
+        },
+      });
+    }
     this.releaseSubjects = () => {
       releaseOrganization();
       releaseCertification();
@@ -2070,7 +2188,8 @@ export default class HrProvider extends ServiceProvider<Application> {
       });
       scheduler.defineSchedule({
         key: 'hr.profile-daily',
-        title: 'Talent profile: expire undecided suggestions and recommendations',
+        title:
+          'Talent profile: expire undecided suggestions and recommendations',
         schedule: { cron: '0 9 * * *', timezone: this.talentConfig().timeZone },
         target: { type: 'app.hr-profile-daily', config: {} },
       });
@@ -2098,7 +2217,8 @@ export default class HrProvider extends ServiceProvider<Application> {
       });
       scheduler.defineSchedule({
         key: 'hr.performance-daily',
-        title: 'Performance: stage deadline reminders, auto-advance and acknowledgement',
+        title:
+          'Performance: stage deadline reminders, auto-advance and acknowledgement',
         schedule: { cron: '0 9 * * *', timezone: this.talentConfig().timeZone },
         target: { type: 'app.hr-performance-daily', config: {} },
       });
@@ -2106,9 +2226,12 @@ export default class HrProvider extends ServiceProvider<Application> {
       // V4-13: hourly — outdated translations are redrafted; 09:00 — evaluation tasks, reminders, expiry, versions.
       scheduler.registerTarget({
         type: 'app.hr-talent-review',
-        title: 'Talent review: evaluation tasks, translations and model versions',
+        title:
+          'Talent review: evaluation tasks, translations and model versions',
         validate: (config) =>
-          config !== null && typeof config === 'object' && !Array.isArray(config)
+          config !== null &&
+          typeof config === 'object' &&
+          !Array.isArray(config)
             ? { valid: true }
             : { valid: false, reason: 'config-must-be-an-object' },
         start: async () => {
@@ -2133,8 +2256,12 @@ export default class HrProvider extends ServiceProvider<Application> {
       });
       scheduler.defineSchedule({
         key: 'hr.talent-review-hourly',
-        title: 'Talent review: hourly scan (09:00 evaluation tasks and version reconciliation)',
-        schedule: { cron: '10 * * * *', timezone: this.talentConfig().timeZone },
+        title:
+          'Talent review: hourly scan (09:00 evaluation tasks and version reconciliation)',
+        schedule: {
+          cron: '10 * * * *',
+          timezone: this.talentConfig().timeZone,
+        },
         target: { type: 'app.hr-talent-review', config: {} },
       });
       // V4-13 end
@@ -2189,9 +2316,12 @@ export default class HrProvider extends ServiceProvider<Application> {
       // 18:00 self-booking reminders. The AI employees' daily work runs through hr.ai-automations.
       scheduler.registerTarget({
         type: 'app.hr-recruiting',
-        title: 'Recruiting: interview questions, reminders, offer expiry, anonymization',
+        title:
+          'Recruiting: interview questions, reminders, offer expiry, anonymization',
         validate: (config) =>
-          config !== null && typeof config === 'object' && !Array.isArray(config)
+          config !== null &&
+          typeof config === 'object' &&
+          !Array.isArray(config)
             ? { valid: true }
             : { valid: false, reason: 'config-must-be-an-object' },
         start: async () => {
@@ -2207,7 +2337,8 @@ export default class HrProvider extends ServiceProvider<Application> {
             hourly: await recruiting.tasks.run('hourly'),
           };
           if (hour === 9) result.daily = await recruiting.tasks.run('daily');
-          if (hour === 18) result.evening = await recruiting.tasks.run('evening');
+          if (hour === 18)
+            result.evening = await recruiting.tasks.run('evening');
           return {
             state: 'completed',
             outcome: 'succeeded',
@@ -2305,6 +2436,10 @@ export default class HrProvider extends ServiceProvider<Application> {
       container
         .resolve(checklistServiceToken)
         .register(salaryChecklistProvider()),
+      // V2-05: the change checklist's 排班 item (scope before, revalidation result after).
+      container
+        .resolve(checklistServiceToken)
+        .register(scheduleChecklistProvider()),
     );
     // V2-06 end
     // V3-08: targets achieved on a position change; the change checklist's 能力差距 items; to-dos on first confirmation.
@@ -2554,7 +2689,10 @@ export default class HrProvider extends ServiceProvider<Application> {
     ];
   }
 
+  private feishuConnection?: { close(): void };
+
   public override shutdown(): Promise<void> {
+    this.feishuConnection?.close();
     this.releaseSubjects?.();
     return Promise.resolve();
   }

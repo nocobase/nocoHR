@@ -709,6 +709,7 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
         'employees.name as name',
         'employees.userId as userId',
         'leaveTypes.title as typeTitle',
+        'leaveTypes.unit as unit',
       ])
       .where('leaveRequests.id', '=', id)
       .executeTakeFirst();
@@ -724,6 +725,8 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
       from: local(row.startAt),
       to: local(new Date(new Date(str(row.endAt)).getTime() - 1)),
       duration: String(Number(row.duration)),
+      // i18next context: hourly leave is counted in hours, day and half-day leave in days.
+      context: str(row.unit) === 'hour' ? 'hour' : 'day',
     };
     const status = str(row.status);
     if (status === 'pending') {
@@ -1048,7 +1051,11 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
         approvalsOnly ? 'approve' : 'request',
       );
       const hasHr = Boolean(
-        await tryAuthorizeAction(ctx.authz, 'talent.leaveRequest', 'manageTypes'),
+        await tryAuthorizeAction(
+          ctx.authz,
+          'talent.leaveRequest',
+          'manageTypes',
+        ),
       );
       const isHr = approvalsOnly && hasHr;
       const ownEmployee = await employeeForUser(
@@ -1114,12 +1121,7 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
       // Definitions are read before the transaction (SQLite: one connection).
       // A draft may be incomplete: required fields are enforced on submit.
       const definitions = await fieldDefinitions();
-      const values = prepareValues(
-        definitions,
-        body.customFields,
-        {},
-        {},
-      );
+      const values = prepareValues(definitions, body.customFields, {}, {});
       return lock(ctx, async (connection) => {
         const own = await employeeForUser(connection, ctx.userId);
         const employeeId =

@@ -539,6 +539,15 @@ describe('变动影响清单', () => {
       suggested: '周宏',
     });
     expect(byKey.contract.code).toBe('contractAmend');
+    // V2-05: the published shifts from the effective date on are rechecked on effect.
+    expect(byKey.schedule).toMatchObject({
+      provider: 'schedule',
+      code: 'scheduleRevalidatePending',
+      status: 'auto',
+    });
+    expect(Number(byKey.schedule.params.count)).toBeGreaterThan(0);
+    // V1-03: no office-suite binding, so no account line on a transfer.
+    expect(byKey.externalAccount).toBeUndefined();
     expect(
       (await call('emp_njl_1', 'GET', `/checklists/${checklist.id}`)).status,
     ).toBe(404);

@@ -26,6 +26,7 @@
     "@nocobase/app-websocket": "^0.0.1",
     "@nocobase/dev-config": "0.1.0-beta.14",
     "@nocobase/drive": "^0.1.0-beta.4",
+    "@nocobase/hub-cli": "^0.1.0-beta.0",
     "@nocobase/logging": "^0.1.0-beta.6",
     "@nocobase/session": "^0.1.0-beta.2",
     "@playwright/test": "^1.62.1",
@@ -97,8 +98,7 @@
     "tw-animate-css": "^1.2.5",
     "typescript": "^6.0.3",
     "vite": "^6.3.5",
-    "vitest": "^4.1.10",
-    "@nocobase/hub-cli": "^0.1.0-beta.0"
+    "vitest": "^4.1.10"
   },
   "files": [
     ".prettierignore",
@@ -141,6 +141,7 @@
     ]
   },
   "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.74.0",
     "@nocobase/ai-employee": "^0.2.0-beta.8",
     "@nocobase/app-cli": "^1.0.0-beta.10",
     "@nocobase/app-plugin-ai-employee": "^1.0.0-beta.27",
@@ -166,6 +167,7 @@
     "@nocobase/db": "^1.0.0-beta.16",
     "@nocobase/db-sqlite": "^0.1.0-beta.3",
     "@nocobase/i18n": "^1.0.0-beta.4",
+    "@nocobase/jobs": "^0.1.0-beta.0",
     "@nocobase/queue": "^0.1.0-beta.7",
     "@nocobase/repository-input": "^0.1.0-beta.1",
     "@nocobase/service-provider": "^0.0.2-beta.1",
@@ -176,8 +178,7 @@
     "mammoth": "^1.13.0",
     "unpdf": "^1.8.1",
     "xlsx": "0.18.5",
-    "zod": "^4.6.5",
-    "@nocobase/jobs": "^0.1.0-beta.0"
+    "zod": "^4.6.5"
   },
   "scripts": {
     "postinstall": "nocobase skills sync",

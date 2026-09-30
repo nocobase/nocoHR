@@ -39,6 +39,7 @@ import { createImCards, recordOnce } from './im-cards/service.js';
 import {
   createMockTransport,
   createUnconfiguredTransport,
+  type ImTransport,
 } from './im-cards/transport.js';
 import type { Translate } from './im-cards/types.js';
 import type { Platform } from './platform.js';
@@ -94,11 +95,14 @@ export function createImChannel(deps: {
   readonly warn: (detail: Record<string, unknown>, message: string) => void;
   /** production: no transport until one is configured; otherwise the mock channel. */
   readonly production: boolean;
+  /** A real office-suite transport (the configured Feishu app); replaces the mock. */
+  readonly transport?: ImTransport;
 }) {
   const { platform } = deps;
   const { database } = platform;
-  const mock = deps.production ? undefined : createMockTransport();
-  const transport = mock ?? createUnconfiguredTransport();
+  const mock =
+    deps.transport || deps.production ? undefined : createMockTransport();
+  const transport = deps.transport ?? mock ?? createUnconfiguredTransport();
   const cards = createImCards({
     database,
     authz: platform.authz,
@@ -164,6 +168,9 @@ export function createImChannel(deps: {
   return {
     cards,
     push,
+    /** What delivers to the office suite (mock, Feishu, or none). */
+    transport,
+    translate: deps.translate,
     draftProfileChange,
     /** Adds a bot turn hook (see BotTurnHook). */
     addHook(hook: BotTurnHook): void {
@@ -250,8 +257,7 @@ export function createImChannel(deps: {
           employee === 'hrAssistant'
             ? await afterTurn(userId, message.provider, since)
             : undefined;
-        const text =
-          drafted && cardLine ? `${body}\n\n${drafted.reply}` : body;
+        const text = drafted && cardLine ? `${body}\n\n${drafted.reply}` : body;
         return {
           reply: `${maskSensitive(text)}\n\n${t('imBot.viewInApp', { link })}`,
           handledBy: employee,

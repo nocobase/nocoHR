@@ -1061,17 +1061,36 @@ export function createAttendanceService(deps: {
 
     /**
      * 模拟考勤机导出 (dev only): the machining workshop's punches for the
-     * three days before today, from their schedules — 李敏 12 minutes late
+     * three days before today, from their schedules (including people who
+     * have since transferred out) — 李敏 12 minutes late
      * two days ago, 钱进 without a check-out on the last two days, a night
      * shift punching out the next morning, and a row with an unknown number.
      */
     async demoWorkbook(ctx: ActorContext): Promise<Buffer> {
       if (process.env.NODE_ENV === 'production')
         throw new HrError('NOT_FOUND', 404);
-      const { employees } = await employeesFor(ctx, 'import', {
+      const today = platform.currentDate();
+      // Whoever was in the workshop on those days: its members now, plus
+      // anyone who left it since (李敏's transfer runs before this step).
+      const movedOut = await database
+        .query()
+        .selectFrom('jobEvents')
+        .select(['employeeId'])
+        .where('fromDepartmentId', '=', 'sz-mc')
+        .where('effectiveDate', '>=', addDays(today, -3))
+        .execute();
+      const { employees: current } = await employeesFor(ctx, 'import', {
         departmentId: 'sz-mc',
       });
-      const today = platform.currentDate();
+      const { employees: moved } = movedOut.length
+        ? await employeesFor(ctx, 'import', {
+            employeeIds: movedOut.map((row) => str(row.employeeId)),
+          })
+        : { employees: [] };
+      const employees = [
+        ...current,
+        ...moved.filter((m) => !current.some((c) => c.id === m.id)),
+      ];
       const rows: (string | null)[][] = [['工号', '姓名', '打卡时间']];
       const wall = (instant: number) =>
         new Intl.DateTimeFormat('sv-SE', {

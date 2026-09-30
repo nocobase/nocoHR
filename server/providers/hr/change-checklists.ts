@@ -363,10 +363,23 @@ export function coreProviders(): ChecklistProvider[] {
     },
     {
       key: 'account',
-      kinds: ['offboard'],
+      kinds: ['offboard', 'change'],
       async items(ctx) {
         const employee = ctx.employee;
         if (!employee) return [];
+        // V1-03: a change keeps the office-suite account; the sync follows the new department.
+        if (ctx.kind === 'change')
+          return employee.externalUserId
+            ? [
+                {
+                  key: 'externalAccount',
+                  code: 'externalAccountUnchanged',
+                  params: {},
+                  status: 'auto',
+                  link: null,
+                },
+              ]
+            : [];
         const items: ProviderItem[] = [];
         if (employee.userId)
           items.push({

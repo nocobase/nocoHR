@@ -6,6 +6,8 @@ allowBuilds:
   esbuild: true
   msgpackr-extract: set this to true or false
   oracledb: true
+  # @larksuiteoapi/node-sdk: its install script only prints a version notice.
+  protobufjs: false
   tesseract.js: false
 
 # Install dependencies explicitly instead of during dev/build/start.

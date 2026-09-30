@@ -58,6 +58,8 @@ const en = {
       hint: 'Each suggested colleague gets a Feishu card to accept or decline. The first to accept goes into a draft of that shift for you to publish.',
       title: 'Cover invitations',
       sent: 'Invitations sent: {{count}}.',
+      noneSent:
+        'No invitation was sent: see why next to each colleague, and arrange the cover in person.',
       results: {
         sent: 'Sent',
         duplicate: 'Already invited',
@@ -138,6 +140,7 @@ const zh: typeof en = {
       hint: '向推荐的同事发送飞书卡片（接受 / 不方便）。第一个接受的人进入该班次的排班草稿，由你确认后发布。',
       title: '顶班邀请',
       sent: '已发出 {{count}} 份顶班邀请。',
+      noneSent: '没有发出邀请：原因见每位同事旁的说明，请当面安排顶班。',
       results: {
         sent: '已发送',
         duplicate: '已邀请过',

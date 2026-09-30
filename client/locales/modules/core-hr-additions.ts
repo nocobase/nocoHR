@@ -193,6 +193,17 @@ const en = {
         learningNoPath: 'The new position has no learning path.',
         salaryStructureCheck:
           'The position changes: check whether the salary structure needs an adjustment.',
+        externalAccountUnchanged:
+          'The Feishu account stays as it is; the sync follows the new department.',
+        scheduleRevalidatePending:
+          '{{count}} published shifts from {{from}} to {{to}} are rechecked on effect; the schedulers are told.',
+        scheduleRevalidated:
+          'Rechecked: {{count}} shifts from {{from}} to {{to}} no longer apply to the department; the schedulers were told.',
+        scheduleStillValid: 'Rechecked: the published shifts still apply.',
+        scheduleClearPending:
+          '{{count}} shifts after the leaving day ({{from}} to {{to}}) are removed on effect.',
+        annualLeaveRemaining:
+          '{{days}} days of annual leave unused: settle them in the final pay.',
         salaryFinalSettlement:
           'Final settlement: the last payroll and stopping social insurance.',
       },
@@ -511,6 +522,15 @@ const zh: Shape = {
         learningNoPath: '新岗位没有配置学习路径。',
         salaryStructureCheck:
           '岗位变化，核对薪资结构是否需要调整（发起调薪单）。',
+        externalAccountUnchanged: '飞书账号无需变动，同步会跟随新部门。',
+        scheduleRevalidatePending:
+          '生效后重新校验 {{from}} 至 {{to}} 已发布的 {{count}} 个班次，并通知排班人。',
+        scheduleRevalidated:
+          '已重新校验：{{from}} 至 {{to}} 有 {{count}} 个班次不再适用于所在部门，已通知排班人。',
+        scheduleStillValid: '已重新校验：已发布的排班仍然适用。',
+        scheduleClearPending:
+          '离职日之后的 {{count}} 个班次（{{from}} 至 {{to}}）将在生效时清除。',
+        annualLeaveRemaining: '未休年假 {{days}} 天，需在离职结算中折算。',
         salaryFinalSettlement: '离职结算：核对最后一期工资并办理社保减员。',
       },
       profileFields: {

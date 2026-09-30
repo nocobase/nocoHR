@@ -19,8 +19,8 @@ export interface ImAddress {
 }
 
 export interface ImTransport {
-  /** `mock` in development and tests; `none` when nothing can deliver. */
-  readonly name: 'mock' | 'none';
+  /** `mock` in development and tests; `feishu` with a configured app; `none` when nothing can deliver. */
+  readonly name: 'mock' | 'feishu' | 'none';
   sendText(to: ImAddress, text: string): Promise<void>;
   sendCard(to: ImAddress, cardId: string, view: CardView): Promise<void>;
   /** Replaces a sent card's content with its latest state. */

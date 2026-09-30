@@ -23,6 +23,8 @@ import workflow from './workflow.js';
 import talent from './talent.js';
 // V3-11
 import talentProfile from './talent-profile.js';
+// Feishu self-built app (organization sync, bot)
+import feishu from './feishu.js';
 
 const defaultConfigs: AppConfigFactory<{
   auth: ReturnType<typeof auth>;
@@ -45,6 +47,7 @@ const defaultConfigs: AppConfigFactory<{
   workflow: ReturnType<typeof workflow>;
   talent: ReturnType<typeof talent>;
   talentProfile: ReturnType<typeof talentProfile>;
+  feishu: ReturnType<typeof feishu>;
 }> = defaultAppConfigs({
   auth,
   authorization,
@@ -66,6 +69,7 @@ const defaultConfigs: AppConfigFactory<{
   workflow,
   talent,
   talentProfile,
+  feishu,
 });
 
 export default defaultConfigs;

@@ -117,14 +117,18 @@ function CoverDialogBody({
         json: { candidateIds: suggested.map((c) => c.employeeId) },
       });
       setSent(response.data);
-      toast.add({
-        type: 'success',
-        title: t('attendanceV2.invite.sent', {
-          count: Object.values(response.data.results).filter(
-            (r) => r === 'sent',
-          ).length,
-        }),
-      });
+      const sentCount = Object.values(response.data.results).filter(
+        (r) => r === 'sent',
+      ).length;
+      // Nobody reached (no account or no Feishu binding): say so instead of a success.
+      toast.add(
+        sentCount
+          ? {
+              type: 'success',
+              title: t('attendanceV2.invite.sent', { count: sentCount }),
+            }
+          : { type: 'warning', title: t('attendanceV2.invite.noneSent') },
+      );
       onInvited?.();
     } catch (cause) {
       toast.add({ type: 'error', title: attendanceErrorMessage(cause, t) });
