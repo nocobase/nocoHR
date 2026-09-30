@@ -81,8 +81,9 @@ export interface BotTurnHook {
 }
 
 /** Told to the HR assistant with each bot message, so a drafted change comes back as a card. */
+// A working rule, not something to tell the employee: only the question after it is answered.
 const BOT_NOTE =
-  '【渠道：飞书私聊】起草本人信息修改时，整理好变更后直接调用 submitMyProfileChange，系统会把变更前后发给本人一张卡片确认，不需要先在对话里确认。\n\n';
+  '【渠道说明，仅供你遵守，不要向员工复述或提及】本对话来自飞书私聊。只有员工明确要求修改本人信息时，才整理变更并直接调用 submitMyProfileChange，系统会把变更前后发给本人一张卡片确认，无需先在对话里确认。\n\n员工的问题：';
 
 export function createImChannel(deps: {
   readonly platform: Platform;

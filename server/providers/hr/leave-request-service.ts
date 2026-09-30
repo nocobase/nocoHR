@@ -25,7 +25,12 @@ import {
   type CustomFieldDefinition,
   type CustomFieldService,
 } from './custom-fields.js';
-import { calculateLeaveDuration, leaveRangeDates } from './leave-duration.js';
+import {
+  calculateLeaveDuration,
+  leaveRangeDates,
+  zonedInstant,
+} from './leave-duration.js';
+import { shiftInterval } from './attendance-compute.js';
 import { leaveBalanceAmounts } from './leave-policy.js';
 import { HrError, addDays, newId, str } from './shared.js';
 import { lockAttendanceSettings } from './attendance-settings.js';
@@ -797,6 +802,87 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
 
   return {
     /** 与本人已发布排班的冲突 of a leave the user may read (their own draft, or one they approve). */
+    /**
+     * Whole days as the signed-in employee works them (V2-05: a cross-midnight
+     * shift belongs to its start date). A range from local midnight to local
+     * midnight becomes the first day's shift start to the last day's shift
+     * end; an unscheduled first day still starts after the previous night
+     * shift ends. Any other range is returned unchanged.
+     */
+    async wholeDayWindow(
+      ctx: ActorContext,
+      startAt: string,
+      endAt: string,
+    ): Promise<{ startAt: string; endAt: string }> {
+      const start = Date.parse(startAt);
+      const end = Date.parse(endAt);
+      const localDate = (instant: number) =>
+        new Intl.DateTimeFormat('en-CA', { timeZone }).format(
+          new Date(instant),
+        );
+      const first = localDate(start);
+      const afterLast = localDate(end);
+      if (
+        !Number.isFinite(start) ||
+        !Number.isFinite(end) ||
+        end <= start ||
+        zonedInstant(first, '00:00', timeZone) !== start ||
+        zonedInstant(afterLast, '00:00', timeZone) !== end
+      )
+        return { startAt, endAt };
+      const last = addDays(afterLast, -1);
+      const own = await database
+        .query()
+        .selectFrom('employees')
+        .select(['id'])
+        .where('userId', '=', ctx.userId)
+        .executeTakeFirst();
+      if (!own) return { startAt, endAt };
+      const cells = await database
+        .query()
+        .selectFrom('shiftSchedules')
+        .innerJoin('shifts', 'shifts.id', 'shiftSchedules.shiftId')
+        .select([
+          'shiftSchedules.date as date',
+          'shifts.startTime as startTime',
+          'shifts.endTime as endTime',
+        ])
+        .where('shiftSchedules.employeeId', '=', str(own.id))
+        .where('shiftSchedules.status', '=', 'published')
+        .where('shiftSchedules.date', '>=', addDays(first, -1))
+        .where('shiftSchedules.date', '<=', last)
+        .execute();
+      const window = (date: string) => {
+        const cell = cells.find(
+          (c) =>
+            (c.date instanceof Date
+              ? c.date.toISOString().slice(0, 10)
+              : str(c.date).slice(0, 10)) === date,
+        );
+        return cell
+          ? shiftInterval(
+              date,
+              {
+                startTime: str(cell.startTime).slice(0, 5),
+                endTime: str(cell.endTime).slice(0, 5),
+              },
+              timeZone,
+            )
+          : null;
+      };
+      const firstShift = window(first);
+      const previous = window(addDays(first, -1));
+      const lastShift = window(last);
+      const from = firstShift
+        ? firstShift.start
+        : Math.max(start, previous?.end ?? start);
+      const to = lastShift ? Math.max(lastShift.end, from + 1) : end;
+      if (to <= from) return { startAt, endAt };
+      return {
+        startAt: new Date(from).toISOString(),
+        endAt: new Date(to).toISOString(),
+      };
+    },
     async scheduleConflicts(ctx: ActorContext, id: string) {
       const row = (await this.get(ctx, id)) as unknown as Record<
         string,

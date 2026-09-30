@@ -3,7 +3,8 @@
  * when a self-built app is configured. Messages go to one member by
  * `user_id` (the id the directory sync binds):
  *
- * - text: `msg_type: text`;
+ * - text: a `post` with one `md` element, so the AI's Markdown renders
+ *   (plain `text` if Feishu refuses it);
  * - a card: `msg_type: interactive`, rendered from the card's `CardView`;
  *   its message id is kept on the card (`imCards.externalMessageId`) so a
  *   later state change replaces the same message instead of sending a new
@@ -83,7 +84,7 @@ export function createFeishuTransport(deps: {
 }): ImTransport {
   async function send(
     to: ImAddress,
-    msgType: 'text' | 'interactive',
+    msgType: 'text' | 'post' | 'interactive',
     content: unknown,
   ): Promise<string | null> {
     if (to.provider !== 'feishu') throw new Error('IM_PROVIDER_UNSUPPORTED');
@@ -104,7 +105,14 @@ export function createFeishuTransport(deps: {
   return {
     name: 'feishu',
     async sendText(to, text) {
-      await send(to, 'text', { text });
+      // Replies are Markdown (the AI employees write it): a post's md element renders it.
+      try {
+        await send(to, 'post', {
+          zh_cn: { content: [[{ tag: 'md', text }]] },
+        });
+      } catch {
+        await send(to, 'text', { text });
+      }
     },
     async sendCard(to, cardId, view) {
       const messageId = await send(

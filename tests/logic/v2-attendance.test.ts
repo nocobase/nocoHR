@@ -1086,3 +1086,51 @@ describe('V2-05 application time and the demo Feishu pull', () => {
     expect(again.json.data.pulled).toBe(0);
   });
 });
+
+describe('whole-day leave on a night shift', () => {
+  it('turns a whole day into that day’s shift, so one night is one day', async () => {
+    const { leaveRequestServiceToken } =
+      await import('../../server/providers/hr/tokens.ts');
+    const leave = server.application.container.resolve(
+      leaveRequestServiceToken,
+    );
+    const night = await (
+      await db()
+    )
+      .query()
+      .selectFrom('shiftSchedules')
+      .select(['date'])
+      .where('employeeId', '=', 'emp-wanglei')
+      .where('shiftId', '=', 'shift-mc-night')
+      .where('status', '=', 'published')
+      .where('date', '>', day(0))
+      .orderBy('date', 'asc')
+      .executeTakeFirst();
+    expect(night).toBeDefined();
+    const date = String(
+      night!.date instanceof Date
+        ? night!.date.toISOString().slice(0, 10)
+        : night!.date,
+    ).slice(0, 10);
+    const userId = await userIdOf('emp_njl_1');
+    const range = await leave.wholeDayWindow(
+      { userId } as Parameters<typeof leave.wholeDayWindow>[0],
+      local(date, '00:00'),
+      local(addDays(date, 1), '00:00'),
+    );
+    expect(range).toEqual({
+      startAt: new Date(local(date, '22:00')).toISOString(),
+      endAt: new Date(local(addDays(date, 1), '06:00')).toISOString(),
+    });
+    // A range that is not whole days is left as it is.
+    const partial = await leave.wholeDayWindow(
+      { userId } as Parameters<typeof leave.wholeDayWindow>[0],
+      local(date, '09:00'),
+      local(date, '12:00'),
+    );
+    expect(partial).toEqual({
+      startAt: local(date, '09:00'),
+      endAt: local(date, '12:00'),
+    });
+  });
+});

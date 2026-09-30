@@ -137,8 +137,10 @@ describe('Feishu transport', () => {
       path: '/im/v1/messages?receive_id_type=user_id',
       body: {
         receive_id: 'u-wang',
-        msg_type: 'text',
-        content: '{"text":"你好"}',
+        msg_type: 'post',
+        content: JSON.stringify({
+          zh_cn: { content: [[{ tag: 'md', text: '你好' }]] },
+        }),
       },
     });
     expect(sends[1]).toMatchObject({ body: { msg_type: 'interactive' } });
@@ -147,5 +149,42 @@ describe('Feishu transport', () => {
       method: 'PATCH',
       path: '/im/v1/messages/om_1',
     });
+  });
+});
+
+describe('Feishu transport text fallback', () => {
+  it('falls back to plain text when a post is refused', async () => {
+    const types: string[] = [];
+    const fetchImpl = (async (input: string, init?: RequestInit) => {
+      const path = new URL(input).pathname;
+      if (path.includes('/auth/'))
+        return new Response(
+          JSON.stringify({ code: 0, tenant_access_token: 't', expire: 7200 }),
+        );
+      const body = JSON.parse(String(init?.body)) as { msg_type: string };
+      types.push(body.msg_type);
+      return new Response(
+        JSON.stringify(
+          body.msg_type === 'post'
+            ? { code: 230001, msg: 'invalid post' }
+            : { code: 0, data: { message_id: 'om_2' } },
+        ),
+      );
+    }) as typeof fetch;
+    const transport = createFeishuTransport({
+      api: createFeishuApi({
+        appId: 'cli',
+        appSecret: 's',
+        baseUrl: 'https://open.feishu.test',
+        fetch: fetchImpl,
+      }),
+      link,
+      messages: { get: async () => null, set: async () => undefined },
+    });
+    await transport.sendText(
+      { provider: 'feishu', externalUserId: 'u-wang' },
+      '**你好**',
+    );
+    expect(types).toEqual(['post', 'text']);
   });
 });
