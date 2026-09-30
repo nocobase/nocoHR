@@ -78,16 +78,28 @@ describe('V2-05 leave policy', () => {
       ).toThrow('INVALID_BALANCE');
     },
   );
-  it('rejects malformed history and refuses unsupported expiring carryover', () => {
+  it('rejects malformed history; carryover is used first and its unused rest lapses after expiry', () => {
     expect(() => readAdjustmentHistory({ delta: 1 })).toThrow(
       'INVALID_BALANCE',
     );
-    expect(() =>
+    // Used and pending (4) exceed the carried 2: nothing of it is left to lapse.
+    expect(
+      leaveBalanceAmounts({ ...balance, expiresAt: '2026-03-31' }, '2026-09-28')
+        .available,
+    ).toBe(8);
+    // Nothing used: the carried 2 lapse after 03-31, but count before it.
+    expect(
       leaveBalanceAmounts(
-        { ...balance, expiresAt: '2026-03-31' },
+        { ...balance, used: 0, pending: 0, expiresAt: '2026-03-31' },
         '2026-09-28',
       ),
-    ).toThrow('CARRYOVER_POLICY_REQUIRED');
+    ).toMatchObject({ carriedOver: 0, available: 10 });
+    expect(
+      leaveBalanceAmounts(
+        { ...balance, used: 0, pending: 0, expiresAt: '2026-03-31' },
+        '2026-03-31',
+      ).available,
+    ).toBe(12);
     expect(
       leaveBalanceAmounts(
         { ...balance, carriedOver: 0, expiresAt: '2026-03-31' },

@@ -1,4 +1,5 @@
 import { useApiClient } from '@nocobase/app-client';
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useLocale, useTranslation } from '@nocobase/i18n/client';
 import {
   CheckCircle2Icon,
@@ -7,13 +8,21 @@ import {
   XCircleIcon,
 } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
-import { useOutletContext, useParams } from 'react-router';
+import { Link, useOutletContext, useParams } from 'react-router';
 
 import { RouteDrawer } from '@/components/route-drawer';
 import { ActionStatusBadge } from '@/components/talent/badges';
+import { ActionChecklist } from '@/components/talent/change-checklist';
+import { ActionCompetencyGap } from '@/components/talent/competency-gap-block';
+import { CustomFieldValues } from '@/components/talent/custom-fields';
+import {
+  useCustomFieldDefinitions,
+  type CustomValues,
+} from '@/components/talent/custom-field-model';
 import { errorMessage } from '@/components/talent/errors';
 import { BlockSkeleton, LoadError } from '@/components/talent/states';
 import type { PersonnelAction } from '@/components/talent/types';
+import { stepTitle } from '@/components/talent/chain-text';
 import { useLookups } from '@/components/talent/use-lookups';
 import { useRemote } from '@/components/talent/use-remote';
 import { str } from '@/components/talent/text';
@@ -217,20 +226,23 @@ function ActionBody({
                 />
                 <div>
                   <p>
-                    {step.kind === 'hrAdmin'
-                      ? t('talent.actions.hrAdmin')
-                      : t('talent.actions.levelHeadOf', {
-                          department:
-                            lookups.departmentTitle(step.departmentId) || '—',
-                        })}
+                    {stepTitle(step, t, lookups.departmentTitle)}
                     <span className='text-muted-foreground'>
                       {' '}
                       · {t(`talent.approvalStatus.${step.status}`)}
                     </span>
                   </p>
+                  {step.fallback ? (
+                    <p className='text-muted-foreground'>
+                      {t(`talent.chain.${step.fallback}`)}
+                    </p>
+                  ) : null}
                   {step.decidedAt && step.status !== 'pending' ? (
                     <p className='text-muted-foreground'>
                       {format.format(new Date(step.decidedAt))}
+                      {step.via
+                        ? ` · ${t(`talent.approvalVia.${step.via}`)}`
+                        : ''}
                     </p>
                   ) : null}
                   {step.comment ? (
@@ -259,6 +271,20 @@ function ActionBody({
           ) : null}
         </ol>
       </div>
+      {action.actionType === 'onboard' ? (
+        <>
+          <OfferOrigin candidate={action.candidate} />
+          <OnboardCustomFields values={action.candidate?.customFields} />
+        </>
+      ) : null}
+      {/* V3-08: the target position's gap for a transfer or promotion; renders nothing otherwise. */}
+      <ActionCompetencyGap actionId={action.id} />
+      {['onboard', 'transfer', 'promote', 'offboard'].includes(
+        action.actionType,
+      ) ? (
+        // V1-02 变动影响清单: the approver sees the impact preview, HR the open checklist.
+        <ActionChecklist key={action.status} actionId={action.id} />
+      ) : null}
       {action.can.approve || action.can.cancel ? (
         <div className='space-y-3 border-t pt-4'>
           {action.can.approve ? (
@@ -303,5 +329,92 @@ function ActionBody({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Fields an ID can yield, labelled from talent.fields; anything else shows its name. */
+const RECOGNIZED_LABELS = new Set([
+  'name',
+  'idType',
+  'idNumber',
+  'birthDate',
+  'gender',
+  'address',
+  'mobile',
+]);
+
+/** 来自 Offer (V2-07): the accepted offer an onboarding action was raised from, and what the uploaded ID yielded. */
+function OfferOrigin({
+  candidate,
+}: {
+  candidate: Record<string, unknown> | null;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  // hr.admin does not see offer details by default; link only for those who may open the page.
+  const offers = useCan({
+    resource: { type: 'page', id: 'talent.offers' },
+    action: 'access',
+  });
+  const offerId =
+    typeof candidate?.offerId === 'string' ? candidate.offerId : null;
+  if (!offerId) return null;
+  const recognized = Array.isArray(candidate?.recognizedFields)
+    ? candidate.recognizedFields.filter(
+        (f): f is string => typeof f === 'string',
+      )
+    : [];
+  return (
+    <section className='space-y-1 rounded-md border p-3 text-sm'>
+      <p className='font-medium'>
+        {t('offerOrigin.fromOffer')}
+        {offers.can ? (
+          <>
+            {' · '}
+            <Link
+              className='text-primary underline-offset-4 hover:underline'
+              to={`/talent/offers/${encodeURIComponent(offerId)}`}
+            >
+              {t('offerOrigin.open')}
+            </Link>
+          </>
+        ) : null}
+      </p>
+      {recognized.length ? (
+        <>
+          <p>
+            {t('offerOrigin.recognized', {
+              fields: recognized
+                .map((f) =>
+                  RECOGNIZED_LABELS.has(f) ? t(`talent.fields.${f}`) : f,
+                )
+                .join('、'),
+            })}
+          </p>
+          <p className='text-muted-foreground'>
+            {t('offerOrigin.recognizedHint')}
+          </p>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+/** 界面追加字段 filled on the onboarding form (工服尺码, 宿舍号…), written to the employee on effect. */
+function OnboardCustomFields({
+  values,
+}: {
+  values: unknown;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  const { definitions } = useCustomFieldDefinitions('employees', 'onboardForm');
+  if (!definitions.length || !values || typeof values !== 'object') return null;
+  return (
+    <section className='space-y-2'>
+      <p className='text-sm font-medium'>{t('customFields.onboardSection')}</p>
+      <CustomFieldValues
+        definitions={definitions}
+        values={values as CustomValues}
+      />
+    </section>
   );
 }

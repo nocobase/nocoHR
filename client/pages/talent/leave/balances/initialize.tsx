@@ -11,6 +11,8 @@ import {
   useSearchParams,
 } from 'react-router';
 import { z } from 'zod';
+import { useAppTimeZone } from '@/components/talent/attendance/app-time';
+import { today } from '@/components/talent/attendance/dates';
 import {
   Field,
   FieldError,
@@ -53,16 +55,17 @@ function InitializeForm() {
   const list = useOutletContext<LeaveListContext<LeaveBalance>>();
   const [params] = useSearchParams();
   const [error, setError] = useState<unknown>();
+  const zone = useAppTimeZone();
   const schema = z.object({
     asOf: z.iso.date({ error: t('attendance.leave.invalid') }),
   });
-  const [now] = useState(() => new Date());
-  const initialYear = params.get('year') || String(now.getFullYear());
+  const [now] = useState(() => today(zone));
+  const initialYear = params.get('year') || now.slice(0, 4);
   const form = useForm({
     resolver: zodResolver(schema),
     mode: 'onTouched',
     defaultValues: {
-      asOf: `${initialYear}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+      asOf: `${initialYear}-${now.slice(5)}`,
     },
   });
   return (

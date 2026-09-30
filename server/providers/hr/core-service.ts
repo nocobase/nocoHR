@@ -5,7 +5,22 @@ import type { DatabaseConnection, DatabaseManager } from '@nocobase/db';
 import { authorizeAction, policyOf, tryAuthorizeAction } from './authorize.js';
 import type { ActorContext } from './framework-service.js';
 import type { OrganizationService } from './organization-service.js';
-import type { PersonnelSettingsService } from './personnel-settings.js';
+import {
+  isPromotion,
+  loadPositionGrades,
+  recordJobEvent,
+  type JobEventProcessor,
+  type JobEventType,
+} from './job-events.js';
+import {
+  readValues,
+  type CustomFieldDefinition,
+  type CustomFieldService,
+} from './custom-fields.js';
+import type {
+  ChainRule,
+  PersonnelSettingsService,
+} from './personnel-settings.js';
 import {
   addDays,
   daysBetween,
@@ -36,6 +51,31 @@ export const ACTION_TYPES = [
   'promote',
   'offboard',
 ] as const;
+/** 来自 Offer (V2-07): the offer an onboarding action was raised from and the field names recognized from the ID. */
+function offerOrigin(input: Record<string, unknown>): {
+  offerId?: string;
+  recognizedFields?: string[];
+} {
+  if (input.offerId === undefined || input.offerId === null) return {};
+  if (
+    typeof input.offerId !== 'string' ||
+    !input.offerId ||
+    input.offerId.length > 64
+  )
+    throw new HrError('INVALID_INPUT', 400);
+  const recognized = input.recognizedFields ?? [];
+  if (
+    !Array.isArray(recognized) ||
+    recognized.length > 20 ||
+    recognized.some((f) => typeof f !== 'string' || !f || f.length > 32)
+  )
+    throw new HrError('INVALID_INPUT', 400);
+  return {
+    offerId: input.offerId,
+    recognizedFields: [...new Set(recognized as string[])],
+  };
+}
+
 export const ACTION_STATUSES = [
   'draft',
   'pending',
@@ -81,16 +121,68 @@ export const PROFILE_CHANGE_FIELDS = [
 
 /** The settings item HR administrators hold; the second approval level. */
 export const HR_ADMIN_SETTINGS = 'talent.hr';
+/**
+ * What the HR assistant may propose from an attachment: identity fields from
+ * an ID card, an education from a diploma, the dates and number of the active
+ * contract from its scan. They go through HR review like any change request.
+ */
+export const AI_PROFILE_FIELDS = [
+  'idNumber',
+  'birthDate',
+  'gender',
+  'address',
+  'education',
+  'contract',
+] as const;
 
 export interface ApprovalStep {
   level: number;
-  kind: 'departmentHead' | 'hrAdmin';
+  /** departmentHead and hrAdmin are the default two levels; extra is a level an administrator added for a department. */
+  kind: 'departmentHead' | 'hrAdmin' | 'extra';
+  /** The added level's name, such as "厂长审批"; default levels are named by kind. */
+  name?: string | null;
+  /** The added-level rule this step came from. */
+  ruleId?: string | null;
+  /** Levels folded into this one because the same person approves them. */
+  merged?: { kind: ApprovalStep['kind']; name: string | null }[];
   approverUserId: string | null;
+  /** Everyone who may decide this level; empty when any HR administrator decides. */
+  approverUserIds?: string[];
+  /** Any HR administrator decides: the HR level, or a level whose approver could not be found. */
+  anyHrAdmin?: boolean;
+  /** Why the level is not decided by its configured approver. */
+  fallback?: 'noApprover' | 'selfEscalated' | null;
   departmentId: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'auto';
   decidedBy: string | null;
   decidedAt: string | null;
   comment: string | null;
+  /** Where the decision was made; absent when it was made on the page. */
+  via?: 'feishuCard' | null;
+}
+
+/** Who may decide a step; snapshots written before the chain became configurable carry only kind and approverUserId. */
+export function stepApprovers(step: ApprovalStep): {
+  anyHrAdmin: boolean;
+  userIds: string[];
+} {
+  const anyHrAdmin = step.anyHrAdmin ?? step.kind === 'hrAdmin';
+  const userIds = anyHrAdmin
+    ? []
+    : (step.approverUserIds ??
+      (step.approverUserId ? [step.approverUserId] : []));
+  return { anyHrAdmin, userIds };
+}
+
+export interface ChainPreviewInput {
+  actionType: (typeof ACTION_TYPES)[number];
+  /** The department the chain is resolved for: the target for onboard and transfer, the employee's otherwise. */
+  approvalDepartmentId: string | null;
+  employeeUserId: string | null;
+  applicantUserId: string;
+  applicantIsHrAdmin: boolean;
+  /** V1-02 一句话改配置: rules being drafted, tried on top of the saved ones. */
+  extraRules?: readonly ChainRule[];
 }
 
 export interface PersonnelAction {
@@ -141,6 +233,13 @@ export interface ProfileChangeRequest {
   employeeName: string;
   changes: Record<string, unknown>;
   current: Record<string, unknown>;
+  /** self: the employee's request; assistant: the employee's request through the HR assistant; feishuCard: the employee's request submitted from a Feishu card; ai: the HR assistant's reading of an attachment. */
+  source: 'self' | 'assistant' | 'feishuCard' | 'ai';
+  attachmentFileId: string | null;
+  /** The protected content path of that attachment, for HR to open it beside the suggestion. */
+  attachmentPath: string | null;
+  /** For ai: each field's confidence (0–1) and the text it was read from. */
+  confidence: Record<string, { confidence: number; snippet: string }> | null;
   status: string;
   reviewerUserId: string | null;
   reviewedAt: string | null;
@@ -208,11 +307,18 @@ export interface HrCoreService {
     id: string,
   ): Promise<PersonnelAction | undefined>;
   createAction(ctx: ActorContext, input: unknown): Promise<PersonnelAction>;
+  /** The chain an action would get now, for the action form and the settings preview tool. */
+  previewChain(
+    ctx: ActorContext,
+    input: unknown,
+  ): Promise<(ApprovalStep & { approverNames: string[] })[]>;
   decideAction(
     ctx: ActorContext,
     id: string,
     decision: 'approve' | 'reject',
     comment: string | null,
+    /** feishuCard: decided on a Feishu approval card; shown as 经飞书卡片 on the approval record. */
+    via?: 'feishuCard',
   ): Promise<PersonnelAction>;
   cancelAction(ctx: ActorContext, id: string): Promise<PersonnelAction>;
   listContracts(
@@ -258,7 +364,14 @@ export interface HrCoreService {
   requestProfileChange(
     ctx: ActorContext,
     changes: unknown,
+    /** assistant: submitted in a conversation with the HR assistant after the employee approved it; feishuCard: submitted from a Feishu card. */
+    source?: 'self' | 'assistant' | 'feishuCard',
   ): Promise<ProfileChangeRequest>;
+  /** The self-service form: the built-in fields the settings allow, and the added fields placed for self-service. */
+  selfServiceFields(): Promise<{
+    fields: string[];
+    customFields: CustomFieldDefinition[];
+  }>;
   listProfileChanges(
     ctx: ActorContext,
     status: string | undefined,
@@ -268,7 +381,58 @@ export interface HrCoreService {
     id: string,
     decision: 'approve' | 'reject',
     comment: string | null,
+    /** For a suggestion from the HR assistant: the fields adopted, each with HR's final value. */
+    values?: unknown,
   ): Promise<ProfileChangeRequest>;
+  /**
+   * Writes the HR assistant's reading of an attachment as a pending `source=ai`
+   * request with only the fields that differ from the record. Called by the
+   * attachment recognition task as its owner, who must hold `extract`.
+   */
+  createAiSuggestion(
+    ctx: ActorContext,
+    input: {
+      employeeId: string;
+      attachmentFileId: string;
+      fields: Record<
+        string,
+        { value: unknown; confidence: number; snippet: string }
+      >;
+    },
+  ): Promise<{ id: string; fields: string[] } | null>;
+  /** 岗位变动 (V1-03): events within the viewer's scope, newest first, with filters. */
+  listJobEvents(
+    ctx: ActorContext,
+    filters: {
+      eventType?: string;
+      source?: string;
+      departmentId?: string;
+      from?: string;
+      to?: string;
+      failedOnly?: boolean;
+    },
+    locale: string,
+  ): Promise<{ items: Record<string, unknown>[]; can: { retry: boolean } }>;
+  /** Hands a failed event to its handlers again. */
+  retryJobEvent(
+    ctx: ActorContext,
+    id: string,
+  ): Promise<Record<string, unknown>>;
+  /** Everyone holding the HR administration settings item: default recipients of HR notices. */
+  hrAdministrators(): Promise<string[]>;
+  /** Everyone who holds a permission set now, through any subject. */
+  holdersOf(setKey: string): Promise<string[]>;
+  /** The caller's own record, contracts, probation and job history, for the HR assistant's answers. */
+  myHrProfile(
+    ctx: ActorContext,
+    locale: string,
+  ): Promise<Record<string, unknown>>;
+  /** What a probation or renewal review needs, read with the viewer's own permissions. */
+  hrSummary(
+    ctx: ActorContext,
+    employeeId: string,
+    locale: string,
+  ): Promise<Record<string, unknown>>;
   myProfileChange(ctx: ActorContext): Promise<ProfileChangeRequest | undefined>;
   report(
     ctx: ActorContext,
@@ -292,8 +456,38 @@ export interface HrCoreService {
   runDaily(options?: { asOf?: string }): Promise<DailyRunReport>;
 }
 
+interface EffectResult {
+  affected: string[];
+  recipients: string[];
+  employeeId: string;
+  eventIds: string[];
+}
+
 export interface HrCoreServiceDeps {
   settings: PersonnelSettingsService;
+  /** 界面追加字段: the onboarding form and self-service carry employee fields placed there. */
+  customFields: CustomFieldService;
+  /** Resolved lazily: the processor's handlers are registered at boot. */
+  jobEvents: () => JobEventProcessor;
+  /** V1-03: the data master; in external mode transfers, promotions and offboardings come from the sync. */
+  orgMaster?: () => Promise<'nocohr' | 'external'>;
+  /** V1-03: pending sync items an action is raised from. */
+  syncIssues?: () => {
+    assertIssueOpen(key: string): Promise<void>;
+    linkAction(key: string, actionId: string): Promise<void>;
+  };
+  /** V1-02 变动影响清单: an action was raised, decided, cancelled or took effect. */
+  onActionChanged?: () => ((actionId: string) => void) | undefined;
+  /** V1-02 用工合规检查: a contract was created, renewed, terminated or edited. */
+  onContractChanged?: () => ((employeeId: string) => void) | undefined;
+  /** After an HR administrator attaches an ID card, diploma or contract scan: starts the HR assistant's recognition. */
+  onAttachmentUploaded?: () =>
+    | ((input: {
+        attachmentId: string;
+        employeeId: string;
+        uploaderUserId: string;
+      }) => void)
+    | undefined;
   database: DatabaseManager;
   authz: AppAuthorization;
   organization: OrganizationService;
@@ -319,6 +513,10 @@ const ACTION_FIELDS = [
   'actionType',
   'employeeId',
   'candidate',
+  'fromDepartmentId',
+  'fromPositionId',
+  'approvalDepartmentId',
+  'currentApproverUserIds',
   'toDepartmentId',
   'toPositionId',
   'effectiveDate',
@@ -487,10 +685,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
     let approve = false;
     let cancel = false;
     if (ctx && current && status === 'pending') {
-      const eligible =
-        current.kind === 'hrAdmin'
-          ? await isHrAdmin(ctx)
-          : current.approverUserId === ctx.userId;
+      const eligible = mayDecide(current, ctx.userId, await isHrAdmin(ctx));
       approve =
         eligible &&
         (await can(ctx, ACTION, 'approve')) &&
@@ -509,8 +704,19 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           ? candidate.name
           : null,
       candidate,
-      fromDepartmentId: employee?.departmentId ?? null,
-      fromPositionId: employee?.positionId ?? null,
+      // As raised; actions raised before these columns existed show the employee's current place.
+      fromDepartmentId:
+        row.fromDepartmentId != null
+          ? str(row.fromDepartmentId)
+          : String(row.actionType) === 'onboard'
+            ? null
+            : (employee?.departmentId ?? null),
+      fromPositionId:
+        row.fromPositionId != null
+          ? str(row.fromPositionId)
+          : String(row.actionType) === 'onboard'
+            ? null
+            : (employee?.positionId ?? null),
       toDepartmentId:
         row.toDepartmentId == null ? null : str(row.toDepartmentId),
       toPositionId: row.toPositionId == null ? null : str(row.toPositionId),
@@ -532,68 +738,237 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
     };
   }
 
-  async function buildChain(input: {
-    actionType: string;
-    employee?: EmployeeRecord;
-    toDepartmentId: string | null;
-    applicantUserId: string;
-  }): Promise<ApprovalStep[]> {
-    const departmentId =
-      input.actionType === 'onboard' || input.actionType === 'transfer'
-        ? input.toDepartmentId
-        : (input.employee?.departmentId ?? null);
-    let head = departmentId
-      ? await organization.resolveHead(departmentId)
-      : undefined;
-    // Nobody approves an action about themselves: escalate to the next head up.
-    if (
-      head &&
-      input.employee?.userId &&
-      head.userId === input.employee.userId
-    ) {
-      const parent = (await organization.getDepartment(head.departmentId))
-        ?.parentId;
-      head = parent ? await organization.resolveHead(parent) : undefined;
-      if (head && head.userId === input.employee.userId) head = undefined;
-    }
-    const first: ApprovalStep = {
-      level: 1,
-      kind: 'departmentHead',
-      approverUserId: head?.userId ?? null,
-      departmentId: head?.departmentId ?? departmentId,
-      status: 'pending',
-      decidedBy: null,
-      decidedAt: null,
-      comment: null,
-    };
-    if (!head || head.userId === input.applicantUserId) {
-      // No head to ask, or the applicant is the head: this level passes by itself.
-      first.status = 'auto';
-      first.decidedAt = now().toISOString();
-    }
-    const second: ApprovalStep = {
-      level: 2,
-      kind: 'hrAdmin',
-      approverUserId: null,
+  /**
+   * The approval chain for a new action (V1-02 审批与自动化): the head of the
+   * approval department, then HR, with the levels administrators added for
+   * the department or an ancestor inserted after the first level or after HR
+   * in rule order. Nobody approves an action about themselves; a level whose
+   * approver cannot be found falls to HR. Adjacent levels with the same
+   * approver merge when the setting says so, and a level the applicant would
+   * approve passes by itself. The result is the snapshot the action keeps.
+   */
+  async function buildChain(input: ChainPreviewInput): Promise<ApprovalStep[]> {
+    const saved = (await deps.settings.read('approvalChain')).value;
+    const chainSettings = input.extraRules?.length
+      ? { ...saved, rules: [...saved.rules, ...input.extraRules] }
+      : saved;
+    const self = input.employeeUserId;
+    const blank = (
+      kind: ApprovalStep['kind'],
+    ): Omit<ApprovalStep, 'approverUserId' | 'approverUserIds'> => ({
+      level: 0,
+      kind,
+      name: null,
+      ruleId: null,
+      merged: [],
+      anyHrAdmin: false,
+      fallback: null,
       departmentId: null,
       status: 'pending',
       decidedBy: null,
       decidedAt: null,
       comment: null,
-    };
-    return [first, second];
+    });
+    const toHr = (
+      step: Omit<ApprovalStep, 'approverUserId' | 'approverUserIds'>,
+      fallback: ApprovalStep['fallback'],
+    ): ApprovalStep => ({
+      ...step,
+      approverUserId: null,
+      approverUserIds: [],
+      anyHrAdmin: true,
+      fallback,
+    });
+    /** The head of a department, escalating past the employee the action is about. */
+    async function headFor(
+      departmentId: string,
+    ): Promise<
+      { userId: string; departmentId: string; escalated: boolean } | undefined
+    > {
+      let head = await organization.resolveHead(departmentId);
+      let escalated = false;
+      while (head && self && head.userId === self) {
+        escalated = true;
+        const parent = (await organization.getDepartment(head.departmentId))
+          ?.parentId;
+        head = parent ? await organization.resolveHead(parent) : undefined;
+      }
+      return head ? { ...head, escalated } : undefined;
+    }
+
+    const first = blank('departmentHead');
+    let firstStep: ApprovalStep;
+    const head = input.approvalDepartmentId
+      ? await headFor(input.approvalDepartmentId)
+      : undefined;
+    if (head) {
+      firstStep = {
+        ...first,
+        departmentId: head.departmentId,
+        approverUserId: head.userId,
+        approverUserIds: [head.userId],
+        fallback: head.escalated ? 'selfEscalated' : null,
+      };
+    } else {
+      const unescalated = input.approvalDepartmentId
+        ? await organization.resolveHead(input.approvalDepartmentId)
+        : undefined;
+      firstStep = toHr(
+        { ...first, departmentId: input.approvalDepartmentId },
+        unescalated ? 'selfEscalated' : 'noApprover',
+      );
+    }
+    const hrStep = toHr(blank('hrAdmin'), null);
+    hrStep.fallback = null;
+
+    const afterFirst: ApprovalStep[] = [];
+    const afterHr: ApprovalStep[] = [];
+    if (input.approvalDepartmentId) {
+      for (const rule of chainSettings.rules) {
+        if (!rule.enabled || !rule.actionTypes.includes(input.actionType))
+          continue;
+        const scope = await organization.descendantsOf(rule.departmentId);
+        if (!scope.includes(input.approvalDepartmentId)) continue;
+        const base = { ...blank('extra'), name: rule.name, ruleId: rule.id };
+        let userIds: string[] = [];
+        let departmentId: string | null = null;
+        if (rule.approver.type === 'departmentHead') {
+          const ruleHead = await headFor(rule.approver.departmentId);
+          if (ruleHead) {
+            userIds = [ruleHead.userId];
+            departmentId = ruleHead.departmentId;
+          }
+        } else if (rule.approver.type === 'user') {
+          const user = await users
+            .get(rule.approver.userId)
+            .catch(() => undefined);
+          if (user) userIds = [rule.approver.userId];
+        } else {
+          userIds = await holdersOf(rule.approver.key);
+        }
+        userIds = userIds.filter((id) => id !== self);
+        const step: ApprovalStep = userIds.length
+          ? {
+              ...base,
+              departmentId,
+              approverUserId: userIds.length === 1 ? userIds[0] : null,
+              approverUserIds: userIds,
+            }
+          : toHr(base, 'noApprover');
+        (rule.position === 'afterHr' ? afterHr : afterFirst).push(step);
+      }
+    }
+    let steps = [firstStep, ...afterFirst, hrStep, ...afterHr];
+
+    if (chainSettings.mergeAdjacent) {
+      const identity = (step: ApprovalStep) => {
+        const who = stepApprovers(step);
+        return who.anyHrAdmin ? 'hr' : [...who.userIds].sort().join(',');
+      };
+      const merged: ApprovalStep[] = [];
+      for (const step of steps) {
+        const previous = merged.at(-1);
+        if (previous && identity(previous) === identity(step)) {
+          previous.merged = [
+            ...(previous.merged ?? []),
+            { kind: step.kind, name: step.name ?? null },
+            ...(step.merged ?? []),
+          ];
+          continue;
+        }
+        merged.push(step);
+      }
+      steps = merged;
+    }
+    const stamp = now().toISOString();
+    for (const [index, step] of steps.entries()) {
+      step.level = index + 1;
+      const who = stepApprovers(step);
+      const applicantDecides = who.anyHrAdmin
+        ? input.applicantIsHrAdmin
+        : who.userIds.includes(input.applicantUserId);
+      // The applicant never approves an action about themselves, so no auto-pass for them either.
+      if (applicantDecides && input.applicantUserId !== self) {
+        step.status = 'auto';
+        step.decidedAt = stamp;
+      }
+    }
+    return steps;
+  }
+
+  /** Everyone who currently holds a permission set, through users, positions, departments or department heads. */
+  async function holdersOf(setKey: string): Promise<string[]> {
+    const result = new Set<string>();
+    for (const assignment of await authz.permissionSets
+      .listAssignments(setKey)
+      .catch(() => [])) {
+      await addSubjectUsers(result, assignment.subject);
+    }
+    return [...result];
+  }
+
+  async function addSubjectUsers(
+    result: Set<string>,
+    subject: { type: string; id: string },
+  ): Promise<void> {
+    const { type, id } = subject;
+    if (type === 'user') result.add(id);
+    else if (type === 'org.position') {
+      for (const row of await database
+        .query()
+        .selectFrom('employees')
+        .select(['userId'])
+        .where('positionId', '=', id)
+        .where('status', '!=', 'leave')
+        .execute())
+        if (row.userId) result.add(str(row.userId));
+    } else if (type === 'org.department') {
+      for (const departmentId of await organization.descendantsOf(id)) {
+        for (const member of await organization.directMembers(departmentId))
+          result.add(member.userId);
+      }
+    } else if (type === 'org.departmentHead') {
+      for (const department of await organization.listTree())
+        if (department.managerId && department.active)
+          result.add(department.managerId);
+    }
+  }
+
+  function approvalDepartmentOf(
+    actionType: string,
+    toDepartmentId: string | null,
+    employee: EmployeeRecord | undefined,
+  ): string | null {
+    return actionType === 'onboard' || actionType === 'transfer'
+      ? toDepartmentId
+      : (employee?.departmentId ?? null);
+  }
+
+  async function currentApprovers(
+    approvals: ApprovalStep[],
+  ): Promise<string[]> {
+    const step = approvals.find((s) => s.status === 'pending');
+    if (!step) return [];
+    const who = stepApprovers(step);
+    return who.anyHrAdmin ? await hrAdministrators() : who.userIds;
+  }
+
+  function mayDecide(
+    step: ApprovalStep | undefined,
+    userId: string,
+    hrAdmin: boolean,
+  ): boolean {
+    if (!step) return false;
+    const who = stepApprovers(step);
+    return who.anyHrAdmin ? hrAdmin : who.userIds.includes(userId);
   }
 
   async function notifyApprovers(
     action: PersonnelAction,
     level: ApprovalStep,
   ): Promise<void> {
-    const recipients =
-      level.kind === 'hrAdmin'
-        ? await hrAdministrators()
-        : level.approverUserId
-          ? [level.approverUserId]
-          : [];
+    const who = stepApprovers(level);
+    const recipients = who.anyHrAdmin ? await hrAdministrators() : who.userIds;
     if (!recipients.length) return;
     await notify({
       key: `action:${action.id}:level:${level.level}`,
@@ -607,13 +982,14 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
   async function takeEffect(
     connection: DatabaseConnection,
     row: Record<string, unknown>,
-  ): Promise<{ affected: string[]; recipients: string[]; employeeId: string }> {
+  ): Promise<EffectResult> {
     const actionId = String(row.id);
     const type = String(row.actionType);
     const effectiveDate =
       toDateOnly(row.effectiveDate as string) ?? currentDate();
     const stamp = now();
     const affected: string[] = [];
+    const eventIds: string[] = [];
     let employee: EmployeeRecord | undefined = row.employeeId
       ? await loadEmployee(str(row.employeeId), connection)
       : undefined;
@@ -665,10 +1041,18 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
               ? candidate.employmentType
               : 'fullTime',
           probationEndDate,
+          ...(typeof candidate.externalUserId === 'string'
+            ? {
+                externalProvider: str(candidate.externalProvider ?? 'feishu'),
+                externalUserId: candidate.externalUserId,
+              }
+            : {}),
           createdAt: stamp,
           updatedAt: stamp,
         })
         .execute();
+      if (isRecord(candidate.customFields))
+        await talent.writeCustomFields(connection, id, candidate.customFields);
       if (userId) {
         await organization.syncPrimaryMembership(
           userId,
@@ -683,10 +1067,8 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         .where('id', '=', actionId)
         .execute();
       employee = (await loadEmployee(id, connection))!;
-      await connection.query
-        .insertInto('jobEvents')
-        .values({
-          id: newId(),
+      eventIds.push(
+        await recordJobEvent(connection, {
           employeeId: id,
           eventType: 'onboard',
           fromDepartmentId: null,
@@ -694,11 +1076,11 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           fromPositionId: null,
           toPositionId: employee.positionId,
           effectiveDate,
+          source: 'action',
           actionId,
-          createdAt: stamp,
-          updatedAt: stamp,
-        })
-        .execute();
+          note: null,
+        }),
+      );
     } else {
       if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
       const from = {
@@ -761,22 +1143,20 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         );
       }
       const after = (await loadEmployee(employee.id, connection))!;
-      await connection.query
-        .insertInto('jobEvents')
-        .values({
-          id: newId(),
+      eventIds.push(
+        await recordJobEvent(connection, {
           employeeId: employee.id,
-          eventType: type,
+          eventType: type as JobEventType,
           fromDepartmentId: from.departmentId,
           toDepartmentId: after.departmentId,
           fromPositionId: from.positionId,
           toPositionId: after.positionId,
           effectiveDate,
+          source: 'action',
           actionId,
-          createdAt: stamp,
-          updatedAt: stamp,
-        })
-        .execute();
+          note: null,
+        }),
+      );
       employee = after;
     }
     await connection.query
@@ -790,7 +1170,21 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       ? await organization.resolveHead(employee.departmentId, connection)
       : undefined;
     if (head) recipients.add(head.userId);
-    return { affected, recipients: [...recipients], employeeId: employee.id };
+    return {
+      affected,
+      recipients: [...recipients],
+      employeeId: employee.id,
+      eventIds,
+    };
+  }
+
+  /** After the effect's transaction commits: refresh sessions, then hand the new events to their handlers. */
+  async function afterEffect(effect: EffectResult): Promise<void> {
+    await talent.notifyUsers(effect.affected);
+    await deps
+      .jobEvents()
+      .process(effect.eventIds)
+      .catch(() => 0);
   }
 
   async function reloadAction(
@@ -1039,6 +1433,12 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         .set({ ...scalar, updatedAt: stamp })
         .where('id', '=', employeeId)
         .execute();
+    if (isRecord(changes.customFields))
+      await talent.writeCustomFields(
+        connection,
+        employeeId,
+        changes.customFields,
+      );
     for (const kind of [
       'educations',
       'experiences',
@@ -1071,9 +1471,37 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
   ): Promise<ProfileChangeRequest> {
     const employee = await loadEmployee(String(row.employeeId));
     const changes = parseJson<Record<string, unknown>>(row.changes, {});
+    const source =
+      row.source === 'ai'
+        ? 'ai'
+        : row.source === 'assistant' || row.source === 'feishuCard'
+          ? row.source
+          : 'self';
     const current: Record<string, unknown> = {};
+    if (employee && isRecord(changes.customFields)) {
+      const stored = await database
+        .query()
+        .selectFrom('employees')
+        .select(['customFields'])
+        .where('id', '=', employee.id)
+        .executeTakeFirst();
+      const values = readValues(stored?.customFields);
+      current.customFields = Object.fromEntries(
+        Object.keys(changes.customFields).map((key) => [
+          key,
+          values[key] ?? null,
+        ]),
+      );
+    }
     if (employee) {
-      for (const key of ['mobile', 'email', 'address'] as const)
+      for (const key of [
+        'mobile',
+        'email',
+        'address',
+        'idNumber',
+        'birthDate',
+        'gender',
+      ] as const)
         if (key in changes) current[key] = employee[key] ?? null;
       for (const kind of [
         'educations',
@@ -1091,6 +1519,25 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           serialize(r as Record<string, unknown>),
         );
       }
+      if ('education' in changes)
+        current.education = (
+          await database
+            .query()
+            .selectFrom('employeeEducations')
+            .selectAll()
+            .where('employeeId', '=', employee.id)
+            .execute()
+        ).map((r) => serialize(r as Record<string, unknown>));
+      if ('contract' in changes) {
+        const active = await database
+          .query()
+          .selectFrom('employmentContracts')
+          .select(['contractNo', 'startDate', 'endDate'])
+          .where('employeeId', '=', employee.id)
+          .where('status', '=', 'active')
+          .executeTakeFirst();
+        current.contract = active ? serialize(active) : null;
+      }
     }
     return {
       id: String(row.id),
@@ -1098,6 +1545,16 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       employeeName: employee?.name ?? '',
       changes,
       current,
+      source,
+      attachmentFileId:
+        row.attachmentFileId == null ? null : str(row.attachmentFileId),
+      attachmentPath: await filePath(
+        row.attachmentFileId == null ? null : str(row.attachmentFileId),
+      ),
+      confidence: parseJson<ProfileChangeRequest['confidence']>(
+        row.confidence,
+        null,
+      ),
       status: String(row.status),
       reviewerUserId:
         row.reviewerUserId == null ? null : str(row.reviewerUserId),
@@ -1108,6 +1565,112 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       comment: row.comment == null ? null : str(row.comment),
       createdAt: new Date(String(row.createdAt)).toISOString(),
     };
+  }
+
+  async function filePath(fileId: string | null): Promise<string | null> {
+    if (!fileId) return null;
+    const file = await database
+      .query()
+      .selectFrom('hrFiles')
+      .select(['id', 'ext'])
+      .where('id', '=', fileId)
+      .executeTakeFirst();
+    return file
+      ? `/uploads/hr-files/${String(file.id)}${file.ext ? `.${str(file.ext).replace(/^\./u, '')}` : ''}`
+      : null;
+  }
+
+  /** Checks one AI-proposed field; answers the value to store, or throws. */
+  function parseAiField(key: string, value: unknown): unknown {
+    switch (key) {
+      case 'idNumber':
+        return requireString(value, 'PROFILE_AI_FIELD_INVALID', { max: 64 });
+      case 'address':
+        return requireString(value, 'PROFILE_AI_FIELD_INVALID', { max: 320 });
+      case 'birthDate': {
+        const date = optionalDate(value, 'PROFILE_AI_FIELD_INVALID');
+        if (!date) throw new HrError('PROFILE_AI_FIELD_INVALID', 400);
+        return date;
+      }
+      case 'gender':
+        return requireEnum(
+          value,
+          ['male', 'female', 'other'] as const,
+          'PROFILE_AI_FIELD_INVALID',
+        );
+      case 'education':
+        return parseProfileItem('educations', value);
+      case 'contract': {
+        if (!isRecord(value))
+          throw new HrError('PROFILE_AI_FIELD_INVALID', 400);
+        const out: Record<string, unknown> = {};
+        if (value.contractNo !== undefined)
+          out.contractNo = requireString(
+            value.contractNo,
+            'PROFILE_AI_FIELD_INVALID',
+            { max: 64 },
+          );
+        for (const date of ['startDate', 'endDate'] as const)
+          if (value[date] !== undefined)
+            out[date] = optionalDate(value[date], 'PROFILE_AI_FIELD_INVALID');
+        if (!Object.keys(out).length)
+          throw new HrError('PROFILE_AI_FIELD_INVALID', 400);
+        return out;
+      }
+      default:
+        throw new HrError('PROFILE_CHANGE_FIELD_NOT_ALLOWED', 400, {
+          field: key,
+        });
+    }
+  }
+
+  /** Writes adopted AI fields: identity fields on the record, an education row, the active contract's number and dates. */
+  async function applyAiChanges(
+    connection: DatabaseConnection,
+    employeeId: string,
+    changes: Record<string, unknown>,
+  ): Promise<void> {
+    const stamp = now();
+    const scalar: Record<string, unknown> = {};
+    for (const key of ['idNumber', 'birthDate', 'gender', 'address'] as const)
+      if (key in changes) scalar[key] = changes[key];
+    if (Object.keys(scalar).length)
+      await connection.query
+        .updateTable('employees')
+        .set({ ...scalar, updatedAt: stamp })
+        .where('id', '=', employeeId)
+        .execute();
+    if (isRecord(changes.education))
+      await connection.query
+        .insertInto('employeeEducations')
+        .values({
+          id: newId(),
+          employeeId,
+          ...changes.education,
+          createdAt: stamp,
+          updatedAt: stamp,
+        })
+        .execute();
+    if (isRecord(changes.contract)) {
+      const active = await connection.query
+        .selectFrom('employmentContracts')
+        .select(['id'])
+        .where('employeeId', '=', employeeId)
+        .where('status', '=', 'active')
+        .executeTakeFirst();
+      if (!active) throw new HrError('CONTRACT_NOT_FOUND', 404);
+      if (typeof changes.contract.contractNo === 'string')
+        await assertContractNoFree(
+          connection,
+          changes.contract.contractNo,
+          String(active.id),
+        );
+      await connection.query
+        .updateTable('employmentContracts')
+        .set({ ...changes.contract, updatedAt: stamp })
+        .where('id', '=', String(active.id))
+        .execute();
+    }
   }
 
   async function reminderOnce(
@@ -1151,13 +1714,11 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         if (view === 'mine' && action.applicantUserId !== ctx.userId) continue;
         if (view === 'inbox') {
           const current = action.approvals.find((s) => s.status === 'pending');
-          const eligible =
-            action.status === 'pending' &&
-            current &&
-            (current.kind === 'hrAdmin'
-              ? hrAdmin
-              : current.approverUserId === ctx.userId);
-          if (!eligible) continue;
+          if (
+            action.status !== 'pending' ||
+            !mayDecide(current, ctx.userId, hrAdmin)
+          )
+            continue;
         }
         items.push(action);
       }
@@ -1186,6 +1747,19 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         'ACTION_DATE_INVALID',
       );
       if (!effectiveDate) throw new HrError('ACTION_DATE_REQUIRED', 400);
+      // V1-03: with the office suite as the data master, these three come from the sync only.
+      if (
+        (actionType === 'transfer' ||
+          actionType === 'promote' ||
+          actionType === 'offboard') &&
+        (await deps.orgMaster?.()) === 'external'
+      )
+        throw new HrError('ACTION_TYPE_SYNC_MANAGED', 409);
+      const syncIssueKey =
+        typeof input.syncIssueKey === 'string' && input.syncIssueKey
+          ? input.syncIssueKey
+          : null;
+      if (syncIssueKey) await deps.syncIssues?.().assertIssueOpen(syncIssueKey);
       const reason = requireString(input.reason, 'INVALID_INPUT', {
         optional: true,
         max: 4000,
@@ -1253,6 +1827,29 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             ) ?? 'fullTime',
           probationMonths,
           createAccount: input.createAccount === true,
+          // 界面追加字段 placed on the onboarding form; written to the employee when the action takes effect.
+          customFields: deps.customFields.prepare(
+            deps.customFields.visible(
+              await deps.customFields.list('employees'),
+              { sensitive: true, placement: 'onboardForm' },
+            ),
+            input.customFields ?? {},
+            {},
+            { enforceRequired: true },
+          ),
+          // V2-07: raised from an accepted offer, with the fields read from the uploaded ID. The values
+          // themselves reach the record through HR's confirmation (an ai profile-change suggestion), not here.
+          ...offerOrigin(input),
+          // From a sync item: the office-suite member the new employee is bound to on effect.
+          ...(typeof input.externalUserId === 'string' && input.externalUserId
+            ? {
+                externalProvider:
+                  typeof input.externalProvider === 'string'
+                    ? input.externalProvider
+                    : 'feishu',
+                externalUserId: input.externalUserId,
+              }
+            : {}),
         };
         if (candidate.createAccount && !candidate.email)
           throw new HrError('ACTION_ACCOUNT_EMAIL_REQUIRED', 400);
@@ -1317,12 +1914,39 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           .executeTakeFirst();
         if (!position) throw new HrError('EMPLOYEE_POSITION_NOT_FOUND', 404);
       }
+      if (actionType === 'promote' && employee) {
+        // 晋升: same job family, a higher grade in the configured order; otherwise it is a transfer.
+        const grades = await loadPositionGrades(database.query(), [
+          employee.positionId,
+          toPositionId,
+        ]);
+        const order = (await deps.settings.read('gradeOrder')).value.families;
+        if (
+          !isPromotion(
+            employee.positionId ? grades.get(employee.positionId) : undefined,
+            toPositionId ? grades.get(toPositionId) : undefined,
+            order,
+          )
+        )
+          throw new HrError('ACTION_PROMOTE_NOT_HIGHER', 400);
+      }
+      const approvalDepartmentId = approvalDepartmentOf(
+        actionType,
+        toDepartmentId,
+        employee,
+      );
       const approvals = await buildChain({
         actionType,
-        employee,
-        toDepartmentId,
+        approvalDepartmentId,
+        employeeUserId: employee?.userId ?? null,
         applicantUserId: ctx.userId,
+        applicantIsHrAdmin: hrAdmin,
       });
+      const allPassed = !approvals.some((s) => s.status === 'pending');
+      const linkIssue = async (actionId: string) => {
+        if (syncIssueKey)
+          await deps.syncIssues?.().linkAction(syncIssueKey, actionId);
+      };
       const stamp = now();
       const id = newId();
       await database
@@ -1334,26 +1958,112 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             actionType,
             employeeId: employee?.id ?? null,
             candidate,
+            fromDepartmentId: employee?.departmentId ?? null,
+            fromPositionId: employee?.positionId ?? null,
+            approvalDepartmentId,
             toDepartmentId,
             toPositionId,
             effectiveDate,
             reason,
             leaveReason,
-            status: 'pending',
+            status: allPassed ? 'approved' : 'pending',
             applicantUserId: ctx.userId,
             approvals,
+            currentApproverUserIds: await currentApprovers(approvals),
             effectiveAt: null,
             createdAt: stamp,
             updatedAt: stamp,
           },
         });
+      await linkIssue(id);
+      if (allPassed && effectiveDate <= currentDate()) {
+        // Every level passed by itself: an action due today takes effect now.
+        const effect = await database.transaction(async (connection) => {
+          const fresh = (await connection.query
+            .selectFrom('personnelActions')
+            .select([...ACTION_FIELDS])
+            .where('id', '=', id)
+            .executeTakeFirst()) as Record<string, unknown>;
+          return takeEffect(connection, fresh);
+        });
+        await afterEffect(effect);
+        const action = await reloadAction(ctx, id);
+        await notify({
+          key: `action:${id}:effective`,
+          userIds: effect.recipients,
+          message: 'actionEffective',
+          params: { type: action.actionType, name: action.employeeName ?? '' },
+          path: `/talent/actions/${id}`,
+        });
+        deps.onActionChanged?.()?.(id);
+        return action;
+      }
       const action = await reloadAction(ctx, id);
       const pending = action.approvals.find((s) => s.status === 'pending');
       if (pending) await notifyApprovers(action, pending);
+      deps.onActionChanged?.()?.(id);
       return action;
     },
 
-    async decideAction(ctx, id, decision, comment) {
+    async previewChain(ctx, input) {
+      if (!isRecord(input)) throw new HrError('INVALID_INPUT', 400);
+      const actionType = requireEnum(
+        input.actionType,
+        ACTION_TYPES,
+        'ACTION_TYPE_INVALID',
+      );
+      const hrAdmin = await isHrAdmin(ctx);
+      let employee: EmployeeRecord | undefined;
+      let departmentId: string | null;
+      if (typeof input.employeeId === 'string' && input.employeeId) {
+        // From the action form: the applicant must be able to raise actions, and sees only what the chain would be.
+        await authorizeAction(ctx.authz, ACTION, 'create');
+        employee = await loadEmployee(input.employeeId);
+        if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+        departmentId = approvalDepartmentOf(
+          actionType,
+          typeof input.toDepartmentId === 'string' && input.toDepartmentId
+            ? input.toDepartmentId
+            : employee.departmentId,
+          employee,
+        );
+      } else {
+        departmentId = requireString(
+          input.departmentId,
+          'ACTION_DEPARTMENT_REQUIRED',
+          { max: 64 },
+        );
+        // The settings tool previews for any department; the action form previews an onboarding for its target.
+        if (!hrAdmin) await authorizeAction(ctx.authz, ACTION, 'create');
+      }
+      if (departmentId && !(await organization.getDepartment(departmentId)))
+        throw new HrError('EMPLOYEE_DEPARTMENT_NOT_FOUND', 404);
+      const steps = await buildChain({
+        actionType,
+        approvalDepartmentId: departmentId,
+        employeeUserId: employee?.userId ?? null,
+        applicantUserId: ctx.userId,
+        applicantIsHrAdmin: hrAdmin,
+        // Only HR administrators draft configuration.
+        extraRules:
+          hrAdmin && Array.isArray(input.extraRules)
+            ? (input.extraRules as ChainRule[])
+            : undefined,
+      });
+      const withNames = [];
+      for (const step of steps) {
+        const who = stepApprovers(step);
+        const names: string[] = [];
+        for (const userId of who.userIds.slice(0, 5)) {
+          const name = await userName(userId);
+          if (name) names.push(name);
+        }
+        withNames.push({ ...step, approverNames: names });
+      }
+      return withNames;
+    },
+
+    async decideAction(ctx, id, decision, comment, via) {
       const policies = await authorizeAction(ctx.authz, ACTION, 'approve');
       if (decision === 'reject' && !comment?.trim())
         throw new HrError('ACTION_REJECT_COMMENT_REQUIRED', 400);
@@ -1370,11 +2080,8 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         const approvals = parseJson<ApprovalStep[]>(row.approvals, []);
         const step = approvals.find((s) => s.status === 'pending');
         if (!step) throw new HrError('ACTION_NOT_PENDING', 409);
-        const eligible =
-          step.kind === 'hrAdmin'
-            ? hrAdmin
-            : step.approverUserId === ctx.userId;
-        if (!eligible) throw new HrError('ACTION_NOT_APPROVER', 403);
+        if (!mayDecide(step, ctx.userId, hrAdmin))
+          throw new HrError('ACTION_NOT_APPROVER', 403);
         const employee = row.employeeId
           ? await loadEmployee(str(row.employeeId), connection)
           : undefined;
@@ -1384,6 +2091,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         step.decidedBy = ctx.userId;
         step.decidedAt = now().toISOString();
         step.comment = comment?.trim() || null;
+        if (via) step.via = via;
         let status: string = 'pending';
         if (decision === 'reject') status = 'rejected';
         else if (!approvals.some((s) => s.status === 'pending'))
@@ -1401,7 +2109,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           },
           values: { status: 'done', doneAt: now(), updatedAt: now() },
         });
-        let effect: { affected: string[]; recipients: string[] } | undefined;
+        let effect: EffectResult | undefined;
         if (
           status === 'approved' &&
           (toDateOnly(row.effectiveDate as string) ?? '') <= currentDate()
@@ -1416,11 +2124,25 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         return {
           status,
           effect,
+          approvals,
           applicant: String(row.applicantUserId),
           next: approvals.find((s) => s.status === 'pending'),
         };
       });
-      if (outcome.effect) await talent.notifyUsers(outcome.effect.affected);
+      if (outcome.effect) await afterEffect(outcome.effect);
+      // Resolved after the commit: finding HR administrators reads outside the transaction's connection.
+      await database
+        .query()
+        .updateTable('personnelActions')
+        .set({
+          currentApproverUserIds: JSON.stringify(
+            outcome.status === 'pending'
+              ? await currentApprovers(outcome.approvals)
+              : [],
+          ),
+        })
+        .where('id', '=', id)
+        .execute();
       const action = await reloadAction(ctx, id);
       if (outcome.status === 'rejected') {
         await notify({
@@ -1445,6 +2167,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       } else if (outcome.next) {
         await notifyApprovers(action, outcome.next);
       }
+      deps.onActionChanged?.()?.(id);
       return action;
     },
 
@@ -1466,7 +2189,11 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           .withPolicy(policyOf(policies, 'personnelActions'))
           .updateOne({
             filter: { id, status: String(row.status) },
-            values: { status: 'cancelled', updatedAt: now() },
+            values: {
+              status: 'cancelled',
+              currentApproverUserIds: [],
+              updatedAt: now(),
+            },
           });
         await connection.repository('workItems').updateMany({
           filter: {
@@ -1480,13 +2207,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       });
       const action = await reloadAction(ctx, id);
       const pending = action.approvals.find((s) => s.status === 'pending');
-      const recipients = pending
-        ? pending.kind === 'hrAdmin'
-          ? await hrAdministrators()
-          : pending.approverUserId
-            ? [pending.approverUserId]
-            : []
-        : [];
+      const recipients = pending ? await currentApprovers([pending]) : [];
       if (recipients.length)
         await notify({
           key: `action:${id}:cancelled`,
@@ -1495,6 +2216,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           params: { type: action.actionType, name: action.employeeName ?? '' },
           path: `/talent/actions/${id}`,
         });
+      deps.onActionChanged?.()?.(id);
       return action;
     },
 
@@ -1579,7 +2301,9 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         });
         return record;
       });
-      return toContract(result, employeeNames());
+      const contract = await toContract(result, employeeNames());
+      deps.onContractChanged?.()?.(contract.employeeId);
+      return contract;
     },
 
     async renewContract(ctx, id, input) {
@@ -1623,7 +2347,9 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         });
         return record;
       });
-      return toContract(result, employeeNames());
+      const contract = await toContract(result, employeeNames());
+      deps.onContractChanged?.()?.(contract.employeeId);
+      return contract;
     },
 
     async terminateContract(ctx, id) {
@@ -1635,7 +2361,9 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         filter: { id },
         values: { status: 'terminated', updatedAt: now() },
       });
-      return toContract(record, employeeNames());
+      const contract = await toContract(record, employeeNames());
+      deps.onContractChanged?.()?.(contract.employeeId);
+      return contract;
     },
 
     async attachContractFile(ctx, id, fileId) {
@@ -1647,7 +2375,9 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         filter: { id },
         values: { fileId, updatedAt: now() },
       });
-      return toContract(record, employeeNames());
+      const contract = await toContract(record, employeeNames());
+      deps.onContractChanged?.()?.(contract.employeeId);
+      return contract;
     },
 
     async getProfile(ctx, employeeId) {
@@ -1744,6 +2474,15 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           updatedAt: stamp,
         },
       });
+      if (
+        kind === 'attachments' &&
+        ['idCard', 'diploma', 'contract'].includes(String(values.category))
+      )
+        deps.onAttachmentUploaded?.()?.({
+          attachmentId: String((record as Record<string, unknown>).id),
+          employeeId,
+          uploaderUserId: ctx.userId,
+        });
       return serialize(record);
     },
 
@@ -1781,12 +2520,48 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       return false;
     },
 
-    async requestProfileChange(ctx, changes) {
+    async selfServiceFields() {
+      return {
+        fields: [...(await deps.settings.read('selfService')).value.fields],
+        customFields: deps.customFields.visible(
+          await deps.customFields.list('employees'),
+          { sensitive: false, placement: 'selfService' },
+        ),
+      };
+    },
+
+    async requestProfileChange(ctx, changes, source = 'self') {
       const policies = await authorizeAction(ctx.authz, CHANGE, 'request');
       if (!isRecord(changes) || !Object.keys(changes).length)
         throw new HrError('INVALID_INPUT', 400);
+      // 人事设置 · 员工自助: only the fields the administrator ticked.
+      const allowed = (await deps.settings.read('selfService')).value
+        .fields as readonly string[];
+      if ('customFields' in changes) {
+        // Added fields placed for self-service; sensitive ones never are.
+        const definitions = deps.customFields.visible(
+          await deps.customFields.list('employees'),
+          { sensitive: false, placement: 'selfService' },
+        );
+        const submitted = changes.customFields;
+        if (!isRecord(submitted) || !Object.keys(submitted).length)
+          throw new HrError('INVALID_INPUT', 400);
+        for (const key of Object.keys(submitted))
+          if (!definitions.some((d) => d.key === key))
+            throw new HrError('PROFILE_CHANGE_FIELD_NOT_ALLOWED', 400, {
+              field: key,
+            });
+        const prepared = deps.customFields.prepare(definitions, submitted, {});
+        changes.customFields = Object.fromEntries(
+          Object.keys(submitted).map((key) => [key, prepared[key] ?? null]),
+        );
+      }
       for (const key of Object.keys(changes))
-        if (!(PROFILE_CHANGE_FIELDS as readonly string[]).includes(key))
+        if (key === 'customFields') continue;
+        else if (
+          !(PROFILE_CHANGE_FIELDS as readonly string[]).includes(key) ||
+          !allowed.includes(key)
+        )
           throw new HrError('PROFILE_CHANGE_FIELD_NOT_ALLOWED', 400, {
             field: key,
           });
@@ -1817,6 +2592,8 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         .select(['id'])
         .where('employeeId', '=', employee.id)
         .where('status', '=', 'pending')
+        // The assistant's suggestions for HR do not block the employee's own request.
+        .where('source', 'in', ['self', 'assistant', 'feishuCard'])
         .executeTakeFirst();
       if (open) throw new HrError('PROFILE_CHANGE_PENDING', 409);
       const stamp = now();
@@ -1828,6 +2605,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             id: newId(),
             employeeId: employee.id,
             changes,
+            source,
             status: 'pending',
             reviewerUserId: null,
             reviewedAt: null,
@@ -1862,8 +2640,9 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       return result;
     },
 
-    async reviewProfileChange(ctx, id, decision, comment) {
+    async reviewProfileChange(ctx, id, decision, comment, values) {
       const policies = await authorizeAction(ctx.authz, CHANGE, 'review');
+      const hrAdmin = await isHrAdmin(ctx);
       const outcome = await database.transaction(async (connection) => {
         const repo = connection
           .repository('profileChangeRequests')
@@ -1874,12 +2653,28 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         if (row.status !== 'pending')
           throw new HrError('PROFILE_CHANGE_NOT_PENDING', 409);
         const employeeId = String(row.employeeId);
-        if (decision === 'approve')
-          await applyProfileChanges(
-            connection,
-            employeeId,
-            parseJson<Record<string, unknown>>(row.changes, {}),
-          );
+        const proposed = parseJson<Record<string, unknown>>(row.changes, {});
+        const fromAi = row.source === 'ai';
+        // Suggestions may carry identity fields: only HR administrators decide them.
+        if (fromAi && !hrAdmin) throw new HrError('FORBIDDEN', 403);
+        let applied = proposed;
+        if (decision === 'approve' && fromAi) {
+          // Field by field: HR adopts some, edits others, leaves the rest.
+          const chosen = values === undefined ? proposed : values;
+          if (!isRecord(chosen) || !Object.keys(chosen).length)
+            throw new HrError('PROFILE_AI_NOTHING_ADOPTED', 400);
+          applied = {};
+          for (const [key, value] of Object.entries(chosen)) {
+            if (!(key in proposed))
+              throw new HrError('PROFILE_CHANGE_FIELD_NOT_ALLOWED', 400, {
+                field: key,
+              });
+            applied[key] = parseAiField(key, value);
+          }
+          await applyAiChanges(connection, employeeId, applied);
+        } else if (decision === 'approve') {
+          await applyProfileChanges(connection, employeeId, proposed);
+        }
         await repo.updateOne({
           filter: { id, status: 'pending' },
           values: {
@@ -1887,11 +2682,42 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             reviewerUserId: ctx.userId,
             reviewedAt: now(),
             comment: comment?.trim() || null,
+            // What was actually written, so adoption (as proposed, edited, discarded) can be told apart.
+            ...(fromAi && decision === 'approve' ? { changes: applied } : {}),
             updatedAt: now(),
           },
         });
-        return { employeeId };
+        const outcomeOf = (): 'adopted' | 'modified' | 'discarded' => {
+          if (decision !== 'approve') return 'discarded';
+          return JSON.stringify(applied) === JSON.stringify(proposed)
+            ? 'adopted'
+            : 'modified';
+        };
+        if (fromAi)
+          await connection.query
+            .updateTable('aiTaskRunItems')
+            .set({
+              outcome: outcomeOf(),
+              outcomeByUserId: ctx.userId,
+              outcomeAt: now(),
+              updatedAt: now(),
+            })
+            .where('entityType', '=', 'profileChangeRequests')
+            .where('entityId', '=', id)
+            .execute();
+        return { employeeId, fromAi };
       });
+      if (outcome.fromAi) {
+        // The employee did not ask for it: no message to them, only the record changes.
+        return toChangeRequest(
+          (await database
+            .query()
+            .selectFrom('profileChangeRequests')
+            .selectAll()
+            .where('id', '=', id)
+            .executeTakeFirst()) as Record<string, unknown>,
+        );
+      }
       const employee = await loadEmployee(outcome.employeeId);
       if (employee?.userId)
         await notify({
@@ -1915,6 +2741,9 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           'reviewerUserId',
           'reviewedAt',
           'comment',
+          'source',
+          'attachmentFileId',
+          'confidence',
           'createdAt',
         ])
         .where('id', '=', id)
@@ -1936,9 +2765,13 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           'reviewerUserId',
           'reviewedAt',
           'comment',
+          'source',
+          'attachmentFileId',
+          'confidence',
           'createdAt',
         ])
         .where('employeeId', '=', employee.id)
+        .where('source', 'in', ['self', 'assistant', 'feishuCard'])
         .orderBy('createdAt', 'desc')
         .executeTakeFirst();
       return row ? toChangeRequest(row) : undefined;
@@ -2267,24 +3100,26 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
     },
 
     async myEvents(ctx, employeeId, locale) {
-      // Events are visible to whoever may view the employee record itself.
+      // talent.jobEvent.view, scoped like the employee record (self, managed departments, all).
       const policies = await authorizeAction(
         ctx.authz,
-        'talent.employee',
+        'talent.jobEvent',
         'view',
       );
-      const employee = await database
-        .repository('employees')
-        .withPolicy(policyOf(policies, 'employees'))
-        .findOne({ filter: { id: employeeId } });
-      if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
-      const rows = await database
-        .query()
-        .selectFrom('jobEvents')
-        .selectAll()
-        .where('employeeId', '=', employeeId)
-        .orderBy('effectiveDate', 'desc')
-        .execute();
+      const rows = (await database
+        .repository('jobEvents')
+        .withPolicy(policyOf(policies, 'jobEvents'))
+        .findMany({
+          filter: { employeeId },
+          sort: (s) => [
+            s.field('effectiveDate').desc(),
+            s.field('createdAt').desc(),
+          ],
+        })) as Record<string, unknown>[];
+      if (!rows.length) {
+        const employee = await loadEmployee(employeeId);
+        if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+      }
       const departmentIds = [
         ...new Set(
           rows
@@ -2343,7 +3178,350 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           ? (positionTitle.get(str(r.toPositionId)) ?? null)
           : null,
         actionId: r.actionId == null ? null : str(r.actionId),
+        source: r.source == null ? 'import' : str(r.source),
+        note: r.note == null ? null : str(r.note),
       }));
+    },
+
+    hrAdministrators,
+    holdersOf,
+
+    async listJobEvents(ctx, filters, locale) {
+      const policies = await authorizeAction(
+        ctx.authz,
+        'talent.jobEvent',
+        'view',
+      );
+      const rows = (
+        (await database
+          .repository('jobEvents')
+          .withPolicy(policyOf(policies, 'jobEvents'))
+          .findMany({
+            sort: (s) => [
+              s.field('effectiveDate').desc(),
+              s.field('createdAt').desc(),
+            ],
+          })) as Record<string, unknown>[]
+      )
+        .filter(
+          (r) =>
+            (!filters.eventType || r.eventType === filters.eventType) &&
+            (!filters.source || (r.source ?? 'import') === filters.source),
+        )
+        .slice(0, 500);
+      const scope = filters.departmentId
+        ? new Set(await organization.descendantsOf(filters.departmentId))
+        : null;
+      const filtered = rows.filter((r) => {
+        const date = toDateOnly(r.effectiveDate as string) ?? '';
+        if (filters.from && date < filters.from) return false;
+        if (filters.to && date > filters.to) return false;
+        if (filters.failedOnly && (r.processedAt || !r.processError))
+          return false;
+        if (
+          scope &&
+          !scope.has(str(r.fromDepartmentId ?? '')) &&
+          !scope.has(str(r.toDepartmentId ?? ''))
+        )
+          return false;
+        return true;
+      });
+      const employees = new Map<string, string>();
+      for (const id of new Set(filtered.map((r) => str(r.employeeId)))) {
+        const e = await loadEmployee(id);
+        if (e) employees.set(id, e.name);
+      }
+      const titles = await database
+        .query()
+        .selectFrom('positions')
+        .select(['id', 'title'])
+        .execute();
+      const positionTitle = new Map(
+        titles.map((p) => [str(p.id), str(p.title)]),
+      );
+      const departments = await organization.listTree();
+      const departmentTitle = new Map(
+        departments.map((d) => [d.id, organization.titleText(d.title, locale)]),
+      );
+      const title = (map: Map<string, string>, id: unknown) =>
+        id == null ? null : (map.get(str(id)) ?? null);
+      return {
+        items: filtered.map((r) => ({
+          id: str(r.id),
+          employeeId: str(r.employeeId),
+          employeeName: employees.get(str(r.employeeId)) ?? null,
+          eventType: str(r.eventType),
+          effectiveDate: toDateOnly(r.effectiveDate as string),
+          fromDepartment: title(departmentTitle, r.fromDepartmentId),
+          toDepartment: title(departmentTitle, r.toDepartmentId),
+          fromPosition: title(positionTitle, r.fromPositionId),
+          toPosition: title(positionTitle, r.toPositionId),
+          source: r.source == null ? 'import' : str(r.source),
+          actionId: r.actionId == null ? null : str(r.actionId),
+          syncRunId: r.syncRunId == null ? null : str(r.syncRunId),
+          note: r.note == null ? null : str(r.note),
+          processedAt:
+            r.processedAt == null
+              ? null
+              : new Date(str(r.processedAt)).toISOString(),
+          processError: r.processError == null ? null : str(r.processError),
+        })),
+        can: { retry: await can(ctx, 'talent.jobEvent', 'retry') },
+      };
+    },
+
+    async retryJobEvent(ctx, id) {
+      const policies = await authorizeAction(
+        ctx.authz,
+        'talent.jobEvent',
+        'retry',
+      );
+      const row = await database
+        .repository('jobEvents')
+        .withPolicy(policyOf(policies, 'jobEvents'))
+        .findOne({ filter: { id } });
+      if (!row) throw new HrError('JOB_EVENT_NOT_FOUND', 404);
+      if (row.processedAt)
+        throw new HrError('JOB_EVENT_ALREADY_PROCESSED', 409);
+      await deps.jobEvents().process([id]);
+      const after = await database
+        .query()
+        .selectFrom('jobEvents')
+        .select(['id', 'processedAt', 'processError'])
+        .where('id', '=', id)
+        .executeTakeFirst();
+      return {
+        id,
+        processedAt:
+          after?.processedAt == null
+            ? null
+            : new Date(str(after.processedAt)).toISOString(),
+        processError:
+          after?.processError == null ? null : str(after.processError),
+      };
+    },
+
+    async createAiSuggestion(ctx, input) {
+      await authorizeAction(ctx.authz, 'talent.hrAssistant', 'extract');
+      const policies = await authorizeAction(ctx.authz, CHANGE, 'review');
+      const employee = await loadEmployee(input.employeeId);
+      if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+      const changes: Record<string, unknown> = {};
+      const confidence: Record<
+        string,
+        { confidence: number; snippet: string }
+      > = {};
+      const activeContract = await database
+        .query()
+        .selectFrom('employmentContracts')
+        .select(['contractNo', 'startDate', 'endDate'])
+        .where('employeeId', '=', employee.id)
+        .where('status', '=', 'active')
+        .executeTakeFirst();
+      const educations = await database
+        .query()
+        .selectFrom('employeeEducations')
+        .select(['school', 'degree'])
+        .where('employeeId', '=', employee.id)
+        .execute();
+      for (const [key, proposal] of Object.entries(input.fields)) {
+        let value: unknown;
+        try {
+          value = parseAiField(key, proposal.value);
+        } catch {
+          continue; // A field the model could not read cleanly is left out, not guessed.
+        }
+        // Only what differs from the record reaches HR.
+        let same: boolean;
+        if (key === 'education' && isRecord(value))
+          same = educations.some(
+            (e) =>
+              str(e.school) === value.school && str(e.degree) === value.degree,
+          );
+        else if (key === 'contract' && isRecord(value))
+          same =
+            Boolean(activeContract) &&
+            Object.entries(value).every(
+              ([field, v]) =>
+                (field === 'contractNo'
+                  ? str(activeContract![field])
+                  : toDateOnly(activeContract![field] as string | null)) === v,
+            );
+        else {
+          const currentValue = employee[key as keyof EmployeeRecord];
+          same =
+            (key === 'birthDate'
+              ? toDateOnly(currentValue as string | null)
+              : currentValue) === value;
+        }
+        if (same) continue;
+        changes[key] = value;
+        confidence[key] = {
+          confidence: Math.max(
+            0,
+            Math.min(1, Number(proposal.confidence) || 0),
+          ),
+          snippet: String(proposal.snippet ?? '').slice(0, 200),
+        };
+      }
+      if (!Object.keys(changes).length) return null;
+      const stamp = now();
+      const id = newId();
+      // The request is the assistant's, not a self-service one: written by the task
+      // after the owner's extract and review permissions were checked above.
+      void policies;
+      await database
+        .query()
+        .insertInto('profileChangeRequests')
+        .values({
+          id,
+          employeeId: employee.id,
+          changes: JSON.stringify(changes),
+          source: 'ai',
+          attachmentFileId: input.attachmentFileId,
+          confidence: JSON.stringify(confidence),
+          status: 'pending',
+          reviewerUserId: null,
+          reviewedAt: null,
+          comment: null,
+          createdAt: stamp,
+          updatedAt: stamp,
+        })
+        .execute();
+      return { id, fields: Object.keys(changes) };
+    },
+
+    async myHrProfile(ctx, locale) {
+      await authorizeAction(ctx.authz, 'talent.hrAssistant', 'use');
+      // Never an employee id from the caller: only the signed-in user's own record.
+      const employee = await talent.employeeOfUser(ctx.userId);
+      if (!employee) return { linked: false };
+      const record = (await loadEmployee(employee.id))!;
+      const contracts = await database
+        .query()
+        .selectFrom('employmentContracts')
+        .select(['contractNo', 'type', 'startDate', 'endDate', 'status'])
+        .where('employeeId', '=', employee.id)
+        .orderBy('startDate', 'desc')
+        .execute();
+      const events = await service
+        .myEvents(ctx, employee.id, locale)
+        .catch(() => []);
+      const department = await organization.getDepartment(record.departmentId);
+      const position = record.positionId
+        ? await database
+            .query()
+            .selectFrom('positions')
+            .select(['title'])
+            .where('id', '=', record.positionId)
+            .executeTakeFirst()
+        : undefined;
+      return {
+        linked: true,
+        name: record.name,
+        employeeNo: record.employeeNo,
+        department: department
+          ? organization.titleText(department.title, locale)
+          : null,
+        position: position ? str(position.title) : null,
+        status: record.status,
+        employmentType: record.employmentType,
+        hireDate: toDateOnly(record.hireDate),
+        probationEndDate: toDateOnly(record.probationEndDate),
+        regularizedAt: toDateOnly(record.regularizedAt),
+        contracts: contracts.map((c) => ({
+          contractNo: str(c.contractNo),
+          type: str(c.type),
+          startDate: toDateOnly(c.startDate as string),
+          endDate: toDateOnly(c.endDate as string | null),
+          status: str(c.status),
+        })),
+        events: events.map((e) => ({
+          eventType: e.eventType,
+          effectiveDate: e.effectiveDate,
+          toDepartment: e.toDepartment,
+          toPosition: e.toPosition,
+        })),
+      };
+    },
+
+    async hrSummary(ctx, employeeId, locale) {
+      // Everything here is read with the viewer's own permissions: a department head sees no contracts.
+      const detail = await talent.getEmployee(ctx, employeeId);
+      if (!detail) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+      const record = detail.employee;
+      const visibleContracts = detail.can.viewContracts
+        ? (await service.listContracts(ctx, { employeeId })).items.map((c) => ({
+            contractNo: c.contractNo,
+            type: c.type,
+            startDate: c.startDate,
+            endDate: c.endDate,
+            status: c.status,
+          }))
+        : [];
+      // A head holds contract access for their own contract only: nothing of this employee's is theirs to see.
+      const contracts = visibleContracts.length ? visibleContracts : null;
+      const events = await service
+        .myEvents(ctx, employeeId, locale)
+        .catch(() => []);
+      const pendingActions = (
+        await service
+          .listActions(ctx, 'all')
+          .catch(() => ({ items: [] as PersonnelAction[] }))
+      ).items
+        .filter(
+          (a) =>
+            a.employeeId === employeeId &&
+            (a.status === 'pending' || a.status === 'approved'),
+        )
+        .map((a) => ({ type: a.actionType, status: a.status }));
+      const toConfirm: string[] = [];
+      if (record.status === 'probation') toConfirm.push('probationEvaluation');
+      if (pendingActions.length) toConfirm.push('openActions');
+      if (detail.can.viewProfile) {
+        const profile = await service.getProfile(ctx, employeeId);
+        if (!profile.educations.length) toConfirm.push('missingEducation');
+        if (detail.can.viewContacts && !profile.emergencyContacts.length)
+          toConfirm.push('missingEmergencyContact');
+      }
+      if (await isHrAdmin(ctx)) {
+        const change = await database
+          .query()
+          .selectFrom('profileChangeRequests')
+          .select(['id'])
+          .where('employeeId', '=', employeeId)
+          .where('status', '=', 'pending')
+          .executeTakeFirst();
+        if (change) toConfirm.push('pendingProfileChange');
+      }
+      const hireDate = toDateOnly(record.hireDate);
+      return {
+        name: record.name,
+        employeeNo: record.employeeNo,
+        department: detail.departmentTitle,
+        position: detail.positionTitle,
+        hireDate,
+        tenureDays: hireDate ? daysBetween(hireDate, currentDate()) : null,
+        probationEndDate: toDateOnly(record.probationEndDate),
+        eventsDuringProbation: events
+          .filter(
+            (e) =>
+              e.eventType !== 'onboard' &&
+              hireDate &&
+              String(e.effectiveDate) >= hireDate,
+          )
+          .map((e) => ({
+            eventType: e.eventType,
+            effectiveDate: e.effectiveDate,
+            toPosition: e.toPosition,
+          })),
+        contracts,
+        fixedTermContracts: contracts
+          ? contracts.filter((c) => c.type === 'fixedTerm').length
+          : null,
+        pendingActions,
+        toConfirm,
+      };
     },
 
     async runDaily(options = {}) {
@@ -2367,7 +3545,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         const effect = await database.transaction(async (connection) =>
           takeEffect(connection, row as Record<string, unknown>),
         );
-        await talent.notifyUsers(effect.affected);
+        await afterEffect(effect);
         const action = await reloadAction(undefined, String(row.id));
         await notify({
           key: `action:${action.id}:effective`,

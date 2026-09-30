@@ -56,6 +56,38 @@ export interface ExamSummary {
   readonly candidates: number;
   readonly passRate: number | null;
   readonly grading: number;
+  /** V3-10 10B 防作弊. */
+  readonly antiCheat: AntiCheat;
+  /** Whether the examiner suggests short-answer scores first. */
+  readonly aiGrading: boolean;
+  readonly aiAgreement: {
+    compared: number;
+    withinOne: number;
+    rate: number | null;
+  };
+  readonly flagged: number;
+}
+
+export interface AntiCheat {
+  readonly shuffleOptions: boolean;
+  readonly disableCopy: boolean;
+  readonly maxBlurCount: number;
+  readonly blurAction: 'flag' | 'submit';
+  readonly singleDevice: boolean;
+}
+
+export interface IntegrityFlag {
+  readonly type: 'blur' | 'multiDevice' | 'pasteAttempt';
+  readonly at: string;
+  readonly detail: string | null;
+}
+
+export interface GradingSuggestion {
+  readonly score: number;
+  readonly matchedPoints: readonly string[];
+  readonly missingPoints: readonly string[];
+  readonly rationale: string;
+  readonly at: string;
 }
 
 export interface ExamDetail extends ExamSummary {
@@ -71,6 +103,8 @@ export interface ExamDetail extends ExamSummary {
     publish: boolean;
     grade: boolean;
     resetAttempts: boolean;
+    reviewIntegrity: boolean;
+    voidAttempt: boolean;
   };
 }
 
@@ -96,6 +130,10 @@ export interface Attempt {
   readonly submittedAt: string | null;
   readonly items: readonly PaperItem[];
   readonly answers: Record<string, unknown>;
+  readonly antiCheat: Omit<AntiCheat, 'shuffleOptions'>;
+  readonly blurCount: number;
+  /** Set when this device started or took over the attempt. */
+  readonly deviceToken: string | null;
 }
 
 export interface AttemptResult {
@@ -122,7 +160,20 @@ export interface AttemptResult {
     explanation?: string | null;
     gradingNotes?: string | null;
     comment?: string | null;
+    aiSuggestion?: GradingSuggestion | null;
   }[];
+  readonly lossByCompetency: readonly {
+    competencyId: string;
+    title: string;
+    lost: number;
+    total: number;
+  }[];
+  readonly integrity: {
+    blurCount: number;
+    flags: readonly IntegrityFlag[];
+    review: string | null;
+    voidReason: string | null;
+  } | null;
   readonly wrongByCompetency: readonly {
     competencyId: string;
     title: string;
@@ -159,9 +210,17 @@ export interface Certificate {
   readonly certificateNo: string;
   readonly issuedAt: string;
   readonly expiresAt: string | null;
-  readonly status: 'valid' | 'expiring' | 'expired' | 'revoked' | 'superseded';
+  readonly status:
+    'valid' | 'expiring' | 'expired' | 'revoked' | 'superseded' | 'pending';
   readonly revokedReason: string | null;
   readonly supersededById: string | null;
+  readonly source: 'internal' | 'external';
+  readonly externalNo: string | null;
+  readonly attachmentFileId: string | null;
+  readonly verifyStatus: 'pending' | 'verified' | 'rejected' | null;
+  readonly verifyNote: string | null;
+  readonly verifiedAt: string | null;
+  readonly issuingAuthority: string | null;
 }
 
 export interface CertificationSummary {
@@ -181,6 +240,12 @@ export interface CertificationSummary {
   readonly courses: readonly { id: string; title: string }[];
   readonly exams: readonly { id: string; title: string }[];
   readonly holderCount: number;
+  readonly kind: 'internal' | 'external';
+  readonly issuingAuthority: string | null;
+  readonly qualifiesPositionId: string | null;
+  readonly qualifiesPositionTitle: string | null;
+  readonly validCount: number;
+  readonly expiringCount: number;
 }
 
 export interface CertificationDetail extends CertificationSummary {

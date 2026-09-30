@@ -2,17 +2,24 @@ import type { DatabaseConnection } from '@nocobase/db';
 import type { CollectionPolicies } from './authorize.js';
 import { policyOf } from './authorize.js';
 import { attendanceRuleSchema } from './attendance-catalog.js';
+import {
+  attendanceConfigDefaults,
+  attendanceConfigSchemas,
+} from './attendance-config.js';
 import type { OrganizationService } from './organization-service.js';
 import { addDays, HrError, str } from './shared.js';
 import {
   validateScheduleCells,
   type ScheduleCell,
 } from './schedule-validation.js';
+// V4-14 排班资质校验: the required certifications and the certificates, on this connection.
+import { loadQualificationInput } from './licensed/qualification.js';
 
 /** Read-only rule preflight. The result is not an authorization to save later. */
 export async function schedulePreflight(input: {
   connection: DatabaseConnection;
-  policies: CollectionPolicies;
+  /** null: a trusted internal check (a swap being approved) over employees already authorized. */
+  policies: CollectionPolicies | null;
   cells: ScheduleCell[];
   organization: OrganizationService;
   timeZone: string;
@@ -22,25 +29,22 @@ export async function schedulePreflight(input: {
   const dates = cells.map((cell) => cell.date).sort();
   if (employeeIds.length > 500 || dates.at(-1)! > addDays(dates[0], 30))
     throw new HrError('SCOPE_TOO_LARGE', 400);
-  const employees = await connection
-    .repository('employees')
-    .withPolicy(policyOf(policies, 'employees'))
-    .findMany({
-      filter: (f) => f.or(employeeIds.map((id) => f.string('id').eq(id))),
-    });
+  const scoped = (name: string) =>
+    policies
+      ? connection.repository(name).withPolicy(policyOf(policies, name))
+      : connection.repository(name);
+  const employees = await scoped('employees').findMany({
+    filter: (f) => f.or(employeeIds.map((id) => f.string('id').eq(id))),
+  });
   if (employees.length !== employeeIds.length)
     throw new HrError('NOT_FOUND', 404);
   const selectedShiftIds = [
     ...new Set(cells.flatMap((cell) => (cell.shiftId ? [cell.shiftId] : []))),
   ];
   if (selectedShiftIds.length) {
-    const visible = await connection
-      .repository('shifts')
-      .withPolicy(policyOf(policies, 'shifts'))
-      .findMany({
-        filter: (f) =>
-          f.or(selectedShiftIds.map((id) => f.string('id').eq(id))),
-      });
+    const visible = await scoped('shifts').findMany({
+      filter: (f) => f.or(selectedShiftIds.map((id) => f.string('id').eq(id))),
+    });
     if (visible.length !== selectedShiftIds.length)
       throw new HrError('NOT_FOUND', 404);
   }
@@ -94,6 +98,45 @@ export async function schedulePreflight(input: {
   const ruleRows = await connection
     .repository('attendanceRules')
     .findMany({ filter: { active: true } });
+  const setting = async <K extends 'overtime' | 'calendar'>(section: K) => {
+    const row = await connection.query
+      .selectFrom('personnelSettings')
+      .select(['value'])
+      .where('id', '=', `attendance.${section}`)
+      .executeTakeFirst();
+    let value: unknown = row?.value ?? attendanceConfigDefaults[section];
+    for (let i = 0; i < 2 && typeof value === 'string'; i++)
+      value = JSON.parse(value);
+    return attendanceConfigSchemas[section].parse(
+      value,
+    ) as (typeof attendanceConfigDefaults)[K];
+  };
+  const calendar = await setting('calendar');
+  const overtimeRows = await connection.query
+    .selectFrom('attendanceAdjustments')
+    .select(['employeeId', 'date', 'details'])
+    .where('employeeId', 'in', employeeIds)
+    .where('type', '=', 'overtime')
+    .where('status', '=', 'approved')
+    .where('date', '>=', addDays(dates[0], -33))
+    .where('date', '<=', addDays(dates.at(-1)!, 33))
+    .execute();
+  const approvedHours = new Map<string, number>();
+  for (const row of overtimeRows) {
+    let details: unknown = row.details;
+    if (typeof details === 'string') details = JSON.parse(details);
+    const key = `${str(row.employeeId)}:${str(row.date).slice(0, 7)}`;
+    approvedHours.set(
+      key,
+      (approvedHours.get(key) ?? 0) +
+        Number((details as { hours?: number } | null)?.hours ?? 0),
+    );
+  }
+  const qualification = await loadQualificationInput(
+    connection.query,
+    selectedShiftIds,
+    employeeIds,
+  );
   const result = validateScheduleCells({
     cells,
     existing: existing.map((row) => ({
@@ -115,6 +158,7 @@ export async function schedulePreflight(input: {
       isNight: Boolean(row.isNight),
       active: Boolean(row.active),
       departmentIds: row.departmentIds as string[] | null,
+      breakMinutes: Number(row.breakMinutes ?? 0),
     })),
     departments: await organization.listTree(connection),
     rules: ruleRows.map((row) => ({
@@ -122,6 +166,7 @@ export async function schedulePreflight(input: {
       ...attendanceRuleSchema.strip().parse(row),
     })),
     leaves: leaves.map((row) => ({
+      id: str(row.id),
       employeeId: str(row.employeeId),
       startAt: str(row.startAt),
       endAt: str(row.endAt),
@@ -132,14 +177,13 @@ export async function schedulePreflight(input: {
       month: str(row.month),
     })),
     timeZone,
+    overtime: {
+      standardDayHours: (await setting('overtime')).standardDayHours,
+      approvedHours,
+      holidays: calendar.years.flatMap((y) => y.holidays),
+      adjustedWorkdays: calendar.years.flatMap((y) => y.adjustedWorkdays),
+    },
+    qualification,
   });
-  return {
-    ...result,
-    writesReady: false as const,
-    pendingRules: [
-      'MONTHLY_OVERTIME_POLICY_REQUIRED',
-      'WRITE_CONCURRENCY_NOT_READY',
-      'PUBLICATION_DELIVERY_NOT_READY',
-    ],
-  };
+  return result;
 }

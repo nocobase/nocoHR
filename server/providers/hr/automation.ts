@@ -58,6 +58,57 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
       },
     },
   },
+  // V1 step 2: attachment recognition on upload; probation and renewal preparation after the daily rules.
+  {
+    key: 'hrAssistant.extractAttachment',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  // V1-03: explain a sync's pending items and draft job-title mappings.
+  {
+    key: 'hrAssistant.syncExplain',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'event',
+    defaults: {
+      params: {
+        // Incremental syncs' new items are explained together once they are this old.
+        mergeMinutes: 60,
+        synonyms: 'CNC/数控机床/数控; 操作工/操作员; 班组长/组长',
+      },
+    },
+  },
+  {
+    key: 'hrAssistant.probationPrep',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'afterDaily',
+    defaults: {},
+  },
+  {
+    key: 'hrAssistant.renewalPrep',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'afterDaily',
+    defaults: {},
+  },
+  // V1-02: notes on change checklists; labour-contract compliance after the daily rules (and on contract saves).
+  {
+    key: 'hrAssistant.checklistNotes',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'hrAssistant.compliance',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'afterDaily',
+    defaults: {},
+  },
   {
     key: 'frameworkAdvisor.draftNewPositions',
     employee: 'frameworkAdvisor',
@@ -85,6 +136,37 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     composite: 'talent.contentWriter',
     kind: 'event',
     defaults: { params: { targetCount: 10 } },
+  },
+  // V2-05: cover for leave conflicts, attendance reminders (after the daily rules), the month-end check.
+  {
+    key: 'hrAssistant.replacementSuggest',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'hrAssistant.attendanceAnomaly',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'afterDaily',
+    // V2-05 (realigned): 考勤异常追问; no reply after replyDays → the employee and the head are reminded.
+    defaults: { params: { replyDays: 2 } },
+  },
+  {
+    key: 'hrAssistant.monthEndCheck',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  // V1-04: a new document or version is checked against the others once it is ready.
+  {
+    key: 'knowledgeAssistant.conflictCheck',
+    employee: 'knowledgeAssistant',
+    composite: 'talent.knowledgeAssistant',
+    kind: 'event',
+    defaults: {},
   },
   {
     key: 'knowledgeAssistant.gapWeeklyReport',
@@ -114,6 +196,28 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     kind: 'event',
     defaults: {},
   },
+  // V3-10: 任职准备材料 when a 任职资格认证 is obtained; 考官 suggested scores; 学习教练 考后补学计划.
+  {
+    key: 'certificationSteward.qualificationPrep',
+    employee: 'certificationSteward',
+    composite: 'talent.certificationSteward',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'examiner.gradingSuggestion',
+    employee: 'examiner',
+    composite: 'talent.examiner',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'learningCoach.examFailedPlan',
+    employee: 'learningCoach',
+    composite: 'talent.learningCoach',
+    kind: 'event',
+    defaults: {},
+  },
   // V2 step 5. The two learning-coach jobs and the exam recommendation run after the daily rules, at 09:00.
   {
     key: 'learningCoach.gapPlans',
@@ -129,6 +233,21 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     kind: 'afterDaily',
     defaults: { params: { lagThreshold: 30, minElapsedPercent: 50 } },
   },
+  // V3-09: a plan after an onboarding, transfer or promotion is processed; a plan for a development target's gaps.
+  {
+    key: 'learningCoach.jobEventPlans',
+    employee: 'learningCoach',
+    composite: 'talent.learningCoach',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'learningCoach.developmentTargetPlans',
+    employee: 'learningCoach',
+    composite: 'talent.learningCoach',
+    kind: 'afterDaily',
+    defaults: {},
+  },
   {
     key: 'practiceCoach.draftScenarioOnPublish',
     employee: 'practiceCoach',
@@ -143,6 +262,309 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     kind: 'afterDaily',
     defaults: {},
   },
+  // V2-06: 算薪异常检查 after each calculation, and 账单上传后处理. Salary data: owned by an hr.payroll holder
+  // (default payroll01) and configured through talent.payrollSettings, which hr.admin does not hold.
+  {
+    key: 'hrAssistant.payrollCheck',
+    employee: 'hrAssistant',
+    composite: 'talent.payrollSettings',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'vendorReconciler.billReview',
+    employee: 'vendorReconciler',
+    composite: 'talent.payrollSettings',
+    kind: 'event',
+    defaults: {},
+  },
+  // V2-07 (recruiting/assistant.ts): 人事助理的用工测算、待入职跟进、新员工回访与材料识别 (owner hr01); 招聘助理的
+  // 职位起草、简历库复用、初筛、面试题、面试汇总与 18:00 汇总 (owner recruit01; each runs as the requisition's recruiter).
+  {
+    key: 'hrAssistant.workforceExplain',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'hrAssistant.preboarding',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'daily',
+    defaults: { hour: 9 },
+  },
+  {
+    key: 'hrAssistant.preboardingExtract',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'hrAssistant.newHireCheckIn',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'daily',
+    defaults: { hour: 9 },
+  },
+  {
+    key: 'recruitingAssistant.postingDraft',
+    employee: 'recruitingAssistant',
+    composite: 'talent.recruitingAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'recruitingAssistant.poolReuse',
+    employee: 'recruitingAssistant',
+    composite: 'talent.recruitingAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'recruitingAssistant.screening',
+    employee: 'recruitingAssistant',
+    composite: 'talent.recruitingAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'recruitingAssistant.interviewQuestions',
+    employee: 'recruitingAssistant',
+    composite: 'talent.recruitingAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'recruitingAssistant.interviewSummary',
+    employee: 'recruitingAssistant',
+    composite: 'talent.recruitingAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'recruitingAssistant.dailyDigest',
+    employee: 'recruitingAssistant',
+    composite: 'talent.recruitingAssistant',
+    kind: 'daily',
+    defaults: { hour: 18 },
+  },
+  // V2-07 end
+  // V3-11 (profile/analyst.ts): the talent analyst's five jobs, the coach's recommendation content, the writer's
+  // version revision and question-quality check. Thresholds are the administrator's; drafts expire at 09:00.
+  {
+    key: 'talentAnalyst.trainingCheck',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'event',
+    defaults: {
+      params: {
+        clusterWindowDays: 90,
+        clusterMinCount: 2,
+        recommendationExpiryDays: 14,
+      },
+    },
+  },
+  {
+    key: 'learningCoach.recommendationItems',
+    employee: 'learningCoach',
+    composite: 'talent.learningCoach',
+    kind: 'event',
+    defaults: { params: { dueWorkingDays: 10, maxItems: 4 } },
+  },
+  {
+    key: 'talentAnalyst.levelSuggestions',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'weekly',
+    defaults: {
+      hour: 9,
+      weekday: 1,
+      params: {
+        windowDays: 180,
+        downgradeMinIssues: 2,
+        upgradeExamPercent: 90,
+        upgradeMinDelivered: 2,
+        suggestionExpiryDays: 30,
+      },
+    },
+  },
+  {
+    key: 'talentAnalyst.monthlyReport',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'monthly',
+    defaults: {
+      hour: 9,
+      monthDay: 1,
+      params: { newHireMonths: 6, retentionDays: 30, retentionMinHires: 10 },
+    },
+  },
+  {
+    key: 'talentAnalyst.summaryRefresh',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'weekly',
+    defaults: { hour: 22, weekday: 7, params: { lookbackDays: 7 } },
+  },
+  {
+    key: 'talentAnalyst.ruleDrafting',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'daily',
+    defaults: { hour: 9 },
+  },
+  {
+    key: 'contentWriter.versionRevision',
+    employee: 'contentWriter',
+    composite: 'talent.contentWriter',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'contentWriter.questionQuality',
+    employee: 'contentWriter',
+    composite: 'talent.contentWriter',
+    kind: 'monthly',
+    defaults: {
+      hour: 9,
+      monthDay: 1,
+      params: {
+        minAttempts: 20,
+        lowPercent: 30,
+        highPercent: 98,
+        minDiscrimination: 0.1,
+      },
+    },
+  },
+  // V3-11 end
+  // V4-12 (performance/assistant.ts): 绩效助理的过程数据摘要、目标草稿、评语初稿、偏差检查与校准材料; 学习教练的低绩效学习计划.
+  {
+    key: 'performanceAssistant.evidenceSummary',
+    employee: 'performanceAssistant',
+    composite: 'talent.performanceAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'performanceAssistant.goalDrafts',
+    employee: 'performanceAssistant',
+    composite: 'talent.performanceAssistant',
+    kind: 'daily',
+    defaults: { hour: 9 },
+  },
+  {
+    key: 'performanceAssistant.reviewDrafts',
+    employee: 'performanceAssistant',
+    composite: 'talent.performanceAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'performanceAssistant.deviationCheck',
+    employee: 'performanceAssistant',
+    composite: 'talent.performanceAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'performanceAssistant.calibrationPack',
+    employee: 'performanceAssistant',
+    composite: 'talent.performanceAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'learningCoach.reviewResultPlans',
+    employee: 'learningCoach',
+    composite: 'talent.learningCoach',
+    kind: 'event',
+    defaults: {},
+  },
+  // V4-12 end
+  // V4-13 (talent-review/): 人才分析师的盘点预放置、继任候选推荐、继任风险提醒与培训效果季报（季度任务按每月 1 日检查季度首月）;
+  // 体系顾问的版本变更说明; 考官的实操辅助记录与考核表起草; 知识助手的知识沉淀; 内容编写员的译文起草; 学习教练的盘点发展计划.
+  {
+    key: 'talentAnalyst.prePlacement',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'talentAnalyst.successorRecommend',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'monthly',
+    defaults: { hour: 9, monthDay: 1 },
+  },
+  {
+    key: 'talentAnalyst.successionRisk',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'monthly',
+    defaults: { hour: 9, monthDay: 1 },
+  },
+  {
+    key: 'talentAnalyst.trainingEffectReport',
+    employee: 'talentAnalyst',
+    composite: 'talent.talentAnalyst',
+    kind: 'monthly',
+    defaults: { hour: 9, monthDay: 1 },
+  },
+  {
+    key: 'frameworkAdvisor.versionChangeNote',
+    employee: 'frameworkAdvisor',
+    composite: 'talent.frameworkAdvisor',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'examiner.structureObservation',
+    employee: 'examiner',
+    composite: 'talent.examiner',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'examiner.draftPracticalChecklist',
+    employee: 'examiner',
+    composite: 'talent.examiner',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'knowledgeAssistant.knowledgeDistill',
+    employee: 'knowledgeAssistant',
+    composite: 'talent.knowledgeAssistant',
+    kind: 'weekly',
+    defaults: { hour: 9, weekday: 1 },
+  },
+  {
+    key: 'contentWriter.translationDraft',
+    employee: 'contentWriter',
+    composite: 'talent.contentWriter',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'learningCoach.talentReviewPlans',
+    employee: 'learningCoach',
+    composite: 'talent.learningCoach',
+    kind: 'event',
+    defaults: {},
+  },
+  // V4-13 end
+  // V4-14 (licensed/): 认证管家的调岗资质检查（transfer / promote 事件处理完成且判定有结果时）.
+  {
+    key: 'certificationSteward.transferCheck',
+    employee: 'certificationSteward',
+    composite: 'talent.certificationSteward',
+    kind: 'event',
+    defaults: {},
+  },
+  // V4-14 end
 ];
 
 export interface AutomationSetting {
@@ -265,6 +687,8 @@ export interface AutomationService {
     options: RunOptions,
     work: (run: AutomationRunContext) => Promise<AutomationWorkResult>,
   ): Promise<RunOutcome>;
+  /** An automation's current parameters, for work that reads them outside a run. */
+  paramsOf(key: string): Promise<Record<string, AutomationParam>>;
   /** Scheduled automations due in the hour containing `now`, with the period key that dedupes them. */
   due(now: Date): Promise<{ key: string; periodKey: string }[]>;
 }
@@ -516,6 +940,10 @@ export function createAutomationService(
 
   const service: AutomationService = {
     definition,
+
+    async paramsOf(key) {
+      return (await resolved(key)).params;
+    },
 
     async list(ctx) {
       const allowed = await configurable(ctx);

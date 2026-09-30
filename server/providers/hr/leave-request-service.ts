@@ -11,12 +11,20 @@ import {
   type CollectionPolicies,
 } from './authorize.js';
 import type { ActorContext } from './framework-service.js';
+import type { AttendanceEngine } from './attendance-engine.js';
 import type { OrganizationService } from './organization-service.js';
+import type { Notify } from './platform.js';
 import { planAttendanceApproval } from './attendance-approval.js';
 import {
   attendanceConfigDefaults,
   attendanceConfigSchemas,
+  decodeSetting,
 } from './attendance-config.js';
+import {
+  readValues,
+  type CustomFieldDefinition,
+  type CustomFieldService,
+} from './custom-fields.js';
 import { calculateLeaveDuration, leaveRangeDates } from './leave-duration.js';
 import { leaveBalanceAmounts } from './leave-policy.js';
 import { HrError, addDays, newId, str } from './shared.js';
@@ -34,6 +42,9 @@ const writable = z
     reason: z.string().trim().max(1000).nullable().optional(),
     attachmentFileId: z.string().min(1).max(128).nullable().optional(),
     source: source.optional(),
+    // 界面追加字段 (e.g. 工作交接人): validated against the definitions by the
+    // custom-field service, which also rejects a non-object.
+    customFields: z.unknown().optional(),
   })
   .strict();
 const draftUpdate = writable.extend({ expectedUpdatedAt: dateTime });
@@ -60,6 +71,25 @@ function json<T>(value: unknown, fallback: T): T {
   }
 }
 
+/** Stored custom values: null rather than an empty object. */
+function storedValues(values: Record<string, unknown>) {
+  return Object.keys(values).length ? values : null;
+}
+
+/** Order-independent comparison of two value objects (jsonb may reorder keys). */
+function sameValues(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
+  const canonical = (values: Record<string, unknown>) =>
+    JSON.stringify(
+      Object.entries(values)
+        .filter(([, value]) => value != null)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    );
+  return canonical(left) === canonical(right);
+}
+
 function stampAfter(value: unknown): Date {
   const previous = value == null ? 0 : new Date(str(value)).getTime();
   return new Date(Math.max(Date.now(), previous + 1));
@@ -74,19 +104,13 @@ interface Approval {
   decidedAt: string | null;
   comment: string | null;
   submittedBy?: string;
+  /** 经飞书卡片: submitted or decided on an office-suite card. */
+  submittedVia?: 'feishuCard';
+  via?: 'feishuCard';
   leaveDates?: string[];
-  attendanceSnapshots?: AttendanceSnapshot[];
-}
-interface AttendanceSnapshot {
-  date: string;
-  recordId: string;
-  appliedUpdatedAt: string;
-  previous: null | {
-    status: string;
-    leaveRequestId: string | null;
-    shiftId: string | null;
-    computedAt: string;
-  };
+  balanceDays?: number;
+  /** Earlier requests kept a restore snapshot; recalculation replaced it. */
+  attendanceSnapshots?: unknown[];
 }
 
 function isCurrentApprover(
@@ -111,6 +135,21 @@ export interface LeaveRequestServiceDeps {
   readonly currentDate: () => string;
   readonly organization: OrganizationService;
   readonly timeZone: string;
+  readonly engine: () => AttendanceEngine;
+  /** Published cells an approved leave now blocks: notify the scheduler, ask for cover. */
+  readonly onLeaveConflict?: () => (input: {
+    requestId: string;
+    scheduleIds: string[];
+  }) => void;
+  /**
+   * V2-05 (realigned): the approver of each pending level is told (an 审批卡片
+   * in Feishu through the push), and the employee when it is decided.
+   */
+  readonly notify?: Notify;
+  /** hr.admin holders, for the hr.admin level. */
+  readonly hrRecipients?: () => Promise<string[]>;
+  /** 界面追加字段 on 请假单 (V2-05): definitions, validation and projection. */
+  readonly customFields: () => CustomFieldService;
 }
 
 export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
@@ -132,12 +171,59 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
       return fn(connection);
     });
 
+  /**
+   * The table's field definitions. Read outside `lock()` (or with its
+   * connection): SQLite has one connection and would deadlock otherwise.
+   */
+  const fieldDefinitions = () => deps.customFields().list('leaveRequests');
+
+  /**
+   * Validates written values: only fields placed on the form are writable
+   * (and required), whoever writes — the applicant or HR entering for them.
+   */
+  function prepareValues(
+    definitions: readonly CustomFieldDefinition[],
+    input: unknown,
+    existing: Record<string, unknown>,
+    options: { enforceRequired?: boolean },
+  ): Record<string, unknown> {
+    const service = deps.customFields();
+    return service.prepare(
+      service.visible(definitions, { sensitive: true, placement: 'form' }),
+      input,
+      existing,
+      options,
+    );
+  }
+
+  /**
+   * The values a reader sees on a detail response: the detail placement, plus
+   * the form placement for whoever may edit the draft. Sensitive fields only
+   * for HR administrators and the applicant.
+   */
+  function projectValues(
+    definitions: readonly CustomFieldDefinition[],
+    row: Record<string, unknown>,
+    options: { sensitive: boolean; editor: boolean },
+  ): Record<string, unknown> {
+    const service = deps.customFields();
+    const read = (placement: 'detail' | 'form') =>
+      service.project(definitions, row.customFields, {
+        sensitive: options.sensitive,
+        placement,
+        includeInactive: true,
+      });
+    return options.editor
+      ? { ...read('form'), ...read('detail') }
+      : read('detail');
+  }
+
   async function config(connection: DatabaseConnection) {
     const row = await connection
       .repository('personnelSettings')
       .findOne({ filter: { id: 'attendance.calendar' } });
     const configured = attendanceConfigSchemas.calendar.parse(
-      row?.value ?? attendanceConfigDefaults.calendar,
+      decodeSetting(row?.value) ?? attendanceConfigDefaults.calendar,
     );
     const holidays = configured.years.flatMap((entry) => entry.holidays);
     const adjustedWorkdays = configured.years.flatMap(
@@ -146,12 +232,23 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
     return { holidays, adjustedWorkdays };
   }
 
+  async function leaveUnits(connection: DatabaseConnection) {
+    const row = await connection.query
+      .selectFrom('personnelSettings')
+      .select(['value'])
+      .where('id', '=', 'attendance.leaveUnits')
+      .executeTakeFirst();
+    return attendanceConfigSchemas.leaveUnits.parse(
+      json(row?.value, attendanceConfigDefaults.leaveUnits),
+    );
+  }
+
   async function leaveApprovalThreshold(connection: DatabaseConnection) {
     const row = await connection.repository('personnelSettings').findOne({
       filter: { id: 'attendance.limits' },
     });
     return attendanceConfigSchemas.limits.parse(
-      row?.value ?? attendanceConfigDefaults.limits,
+      decodeSetting(row?.value) ?? attendanceConfigDefaults.limits,
     ).leaveSecondLevelDays;
   }
 
@@ -229,11 +326,6 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
       .where('id', '=', row.leaveTypeId)
       .executeTakeFirst();
     if (!type || !type.active) throw new HrError('LEAVE_TYPE_NOT_FOUND', 404);
-    // Balances, event limits and approval thresholds are denominated in days.
-    // Do not debit hours as days, or treat every touched day as half a day,
-    // until the app has an explicit conversion and half-day boundary policy.
-    if (type.unit !== 'day')
-      throw new HrError('LEAVE_UNIT_POLICY_REQUIRED', 409);
     const dates = leaveRangeDates(row.startAt, row.endAt, timeZone);
     const schedules =
       type.countBy === 'schedule'
@@ -264,13 +356,18 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
       countBy: String(type.countBy) as 'workdays' | 'schedule' | 'calendar',
       timeZone,
       calendar: await config(connection),
+      units: await leaveUnits(connection),
       schedules: schedules.map((item) => {
         const shift = shiftById.get(str(item.shiftId ?? ''));
         return {
           date: str(item.date),
           shiftId: item.shiftId == null ? null : str(item.shiftId),
           shift: shift
-            ? { startTime: str(shift.startTime), endTime: str(shift.endTime) }
+            ? {
+                startTime: str(shift.startTime),
+                endTime: str(shift.endTime),
+                breakMinutes: Number(shift.breakMinutes ?? 0),
+              }
             : null,
         };
       }),
@@ -375,8 +472,10 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
   }
 
   function serialize(row: Record<string, unknown>) {
+    // Custom values are projected per reader by the caller, never passed raw.
+    const { customFields: _customFields, ...fields } = row;
     return {
-      ...row,
+      ...fields,
       // The Repository's datetime is host-local wall time; send actual
       // instants so browsers in another time zone do not reinterpret it.
       startAt: new Date(str(row.startAt)).toISOString(),
@@ -491,160 +590,221 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
     }
   }
 
+  /**
+   * 请假生效 / 撤销: the covered days are recalculated from the request's
+   * current status (leave while approved), and every scheduled cell on those
+   * days carries — or loses — this request's leaveConflict block. Returns the
+   * published cells newly flagged, for the scheduler notice and the HR
+   * assistant's cover suggestion.
+   */
   async function applyAttendance(
     connection: DatabaseConnection,
     employeeId: string,
     requestId: string,
     dates: readonly string[],
     attach: boolean,
-    previousSnapshots: readonly AttendanceSnapshot[] = [],
-  ) {
-    const records = connection.repository('attendanceRecords');
-    const schedules = connection.repository('shiftSchedules');
-    const snapshots: AttendanceSnapshot[] = [];
-    for (const date of dates) {
-      const schedule = await connection.query
-        .selectFrom('shiftSchedules')
-        .select(['shiftId', 'checkResult'])
-        .where('employeeId', '=', employeeId)
-        .where('date', '=', date)
-        .executeTakeFirst();
-      const existing = await records.findOne({
-        filter: (f) =>
-          f.and([
-            f.string('employeeId').eq(employeeId),
-            f.date('date').on(date),
-          ]),
-      });
-      if (attach) {
-        if (
-          existing?.leaveRequestId &&
-          str(existing.leaveRequestId) !== requestId
-        )
-          throw new HrError('ATTENDANCE_LEAVE_CONFLICT', 409);
-        const now = new Date();
-        const recordId = existing ? str(existing.id) : newId();
-        snapshots.push({
-          date,
-          recordId,
-          appliedUpdatedAt: now.toISOString(),
-          previous: existing
-            ? {
-                status: str(existing.status),
-                leaveRequestId:
-                  existing.leaveRequestId == null
-                    ? null
-                    : str(existing.leaveRequestId),
-                shiftId:
-                  existing.shiftId == null ? null : str(existing.shiftId),
-                computedAt: str(existing.computedAt),
-              }
-            : null,
-        });
-        const values = {
-          status: 'leave',
+  ): Promise<string[]> {
+    if (!dates.length) return [];
+    const sorted = [...dates].sort();
+    await deps.engine().recompute(connection, {
+      employeeIds: [employeeId],
+      from: sorted[0],
+      to: sorted.at(-1)!,
+    });
+    const flagged: string[] = [];
+    const rows = await connection.query
+      .selectFrom('shiftSchedules')
+      .select(['id', 'date', 'shiftId', 'status', 'checkResult'])
+      .where('employeeId', '=', employeeId)
+      .where('date', 'in', [...dates])
+      .execute();
+    for (const schedule of rows) {
+      const checks = json<
+        {
+          rule?: string;
+          level?: string;
+          leaveRequestId?: string;
+          message?: string;
+        }[]
+      >(schedule.checkResult, []);
+      const filtered = checks.filter(
+        (item) =>
+          item.rule !== 'leaveConflict' || item.leaveRequestId !== requestId,
+      );
+      const conflict = attach && Boolean(schedule.shiftId);
+      if (conflict)
+        filtered.push({
+          rule: 'leaveConflict',
+          level: 'block',
+          message: 'LEAVE_CONFLICT',
           leaveRequestId: requestId,
-          shiftId: schedule?.shiftId ?? null,
-          computedAt: now,
-          updatedAt: now,
-        };
-        if (existing) {
-          const saved = await records.updateOne({
-            filter: { id: str(existing.id) },
-            values: values as never,
-          });
-          snapshots[snapshots.length - 1].appliedUpdatedAt = str(
-            saved.record.updatedAt,
-          );
-        } else {
-          const saved = await records.createOne({
-            values: {
-              id: recordId,
-              employeeId,
-              date,
-              punches: null,
-              checkIn: null,
-              checkOut: null,
-              lateMinutes: null,
-              earlyMinutes: null,
-              workedMinutes: null,
-              overtimeMinutes: null,
-              ...values,
-              createdAt: new Date(),
-            },
-          });
-          snapshots[snapshots.length - 1].appliedUpdatedAt = str(
-            saved.record.updatedAt,
-          );
-        }
-      } else {
-        const snapshot = previousSnapshots.find((item) => item.date === date);
-        if (
-          !snapshot ||
-          !existing ||
-          str(existing.id) !== snapshot.recordId ||
-          str(existing.leaveRequestId ?? '') !== requestId ||
-          str(existing.updatedAt) !== snapshot.appliedUpdatedAt
-        )
-          throw new HrError('ATTENDANCE_RECALCULATION_REQUIRED', 409);
-        // No fabricated absent/rest state. Restore the pre-leave record, or
-        // remove a record created only by this request. Changed punch data
-        // requires the upcoming attendance recalculation flow, not a stale restore.
-        if (snapshot.previous) {
-          await records.updateOne({
-            filter: { id: snapshot.recordId, leaveRequestId: requestId },
-            values: {
-              ...snapshot.previous,
-              updatedAt: stampAfter(existing.updatedAt),
-            },
-          });
-        } else {
-          await records.deleteOne({
-            filter: {
-              id: snapshot.recordId,
-              employeeId,
-              leaveRequestId: requestId,
-            },
-          });
-        }
-      }
-      if (schedule) {
-        const checks = json<
-          {
-            rule?: string;
-            level?: string;
-            leaveRequestId?: string;
-            message?: string;
-          }[]
-        >(schedule.checkResult, []);
-        const filtered = checks.filter(
-          (item) =>
-            item.rule !== 'leaveConflict' || item.leaveRequestId !== requestId,
-        );
-        if (attach)
-          filtered.push({
-            rule: 'leaveConflict',
-            level: 'block',
-            message: 'LEAVE_CONFLICT',
-            leaveRequestId: requestId,
-          });
-        await schedules.updateOne({
-          filter: (f) =>
-            f.and([
-              f.string('employeeId').eq(employeeId),
-              f.date('date').on(date),
-            ]),
-          values: {
-            checkResult: filtered.length ? filtered : null,
-            updatedAt: new Date(),
-          },
         });
-      }
+      await connection.query
+        .updateTable('shiftSchedules')
+        .set({
+          checkResult: filtered.length ? filtered : null,
+          // The conflict is gone: so is the cover suggestion made for it.
+          ...(attach ? {} : { replacementSuggestion: null }),
+          updatedAt: new Date(),
+        })
+        .where('id', '=', str(schedule.id))
+        .execute();
+      if (conflict && schedule.status === 'published')
+        flagged.push(str(schedule.id));
     }
-    return snapshots;
+    return flagged;
+  }
+
+  /** A pending leave's preflight flags on cells go when it does. */
+  async function clearConflicts(
+    connection: DatabaseConnection,
+    employeeId: string,
+    requestId: string,
+    dates: readonly string[],
+  ) {
+    if (!dates.length) return;
+    const rows = await connection.query
+      .selectFrom('shiftSchedules')
+      .select(['id', 'checkResult'])
+      .where('employeeId', '=', employeeId)
+      .where('date', 'in', [...dates])
+      .execute();
+    for (const row of rows) {
+      const checks = json<{ rule?: string; leaveRequestId?: string }[]>(
+        row.checkResult,
+        [],
+      );
+      const kept = checks.filter(
+        (c) => c.rule !== 'leaveConflict' || c.leaveRequestId !== requestId,
+      );
+      if (kept.length !== checks.length)
+        await connection.query
+          .updateTable('shiftSchedules')
+          .set({
+            checkResult: kept.length ? kept : null,
+            replacementSuggestion: null,
+          })
+          .where('id', '=', str(row.id))
+          .execute();
+    }
+  }
+
+  /**
+   * After a submit or decision (outside the transaction): the current level's
+   * approvers get the to-do, or the employee the result.
+   */
+  async function notifyStep(id: string) {
+    if (!deps.notify) return;
+    const row = await database
+      .query()
+      .selectFrom('leaveRequests')
+      .innerJoin('employees', 'employees.id', 'leaveRequests.employeeId')
+      .innerJoin('leaveTypes', 'leaveTypes.id', 'leaveRequests.leaveTypeId')
+      .select([
+        'leaveRequests.status as status',
+        'leaveRequests.approvals as approvals',
+        'leaveRequests.startAt as startAt',
+        'leaveRequests.endAt as endAt',
+        'leaveRequests.duration as duration',
+        'employees.name as name',
+        'employees.userId as userId',
+        'leaveTypes.title as typeTitle',
+      ])
+      .where('leaveRequests.id', '=', id)
+      .executeTakeFirst();
+    if (!row) return;
+    const approvals = json<Approval[]>(row.approvals, []);
+    const local = (value: unknown) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone }).format(
+        new Date(str(value)),
+      );
+    const params = {
+      name: str(row.name),
+      leaveType: str(row.typeTitle),
+      from: local(row.startAt),
+      to: local(new Date(new Date(str(row.endAt)).getTime() - 1)),
+      duration: String(Number(row.duration)),
+    };
+    const status = str(row.status);
+    if (status === 'pending') {
+      const index = approvals.findIndex((step) => step.status === 'pending');
+      const current = approvals[index];
+      if (!current) return;
+      const recipients = current.approverUserId
+        ? [current.approverUserId]
+        : ((await deps.hrRecipients?.()) ?? []);
+      await deps.notify({
+        key: `leave:${id}:level:${index + 1}`,
+        userIds: recipients,
+        message: 'leavePending',
+        params,
+        path: `/talent/approvals/leave/${id}?tab=leave`,
+      });
+    } else if ((status === 'approved' || status === 'rejected') && row.userId)
+      await deps.notify({
+        key: `leaveDecided:${id}`,
+        userIds: [str(row.userId)],
+        message: status === 'approved' ? 'leaveApproved' : 'leaveRejected',
+        params,
+        path: '/talent/me#attendance',
+      });
+  }
+
+  /** The employee's published shifts inside a leave's range, for 与已发布排班冲突 hints. */
+  async function publishedConflicts(
+    employeeId: string,
+    startAt: string,
+    endAt: string,
+  ) {
+    const dates = leaveRangeDates(startAt, endAt, timeZone);
+    if (!dates.length) return [];
+    const cells = await database
+      .query()
+      .selectFrom('shiftSchedules')
+      .innerJoin('shifts', 'shifts.id', 'shiftSchedules.shiftId')
+      .select([
+        'shiftSchedules.date as date',
+        'shifts.title as title',
+        'shifts.code as code',
+        'shifts.startTime as startTime',
+        'shifts.endTime as endTime',
+      ])
+      .where('shiftSchedules.employeeId', '=', employeeId)
+      .where('shiftSchedules.status', '=', 'published')
+      .where('shiftSchedules.date', 'in', dates)
+      .orderBy('shiftSchedules.date', 'asc')
+      .execute();
+    return cells.map((cell) => ({
+      date:
+        cell.date instanceof Date
+          ? cell.date.toISOString().slice(0, 10)
+          : str(cell.date).slice(0, 10),
+      shiftTitle: str(cell.title),
+      shiftCode: str(cell.code),
+      startTime: str(cell.startTime).slice(0, 5),
+      endTime: str(cell.endTime).slice(0, 5),
+    }));
+  }
+
+  /** What the balance moves by, in days (hour leave converts at submission). */
+  function debitDays(row: Record<string, unknown>): number {
+    const first = json<Approval[]>(row.approvals, [])[0];
+    return first?.balanceDays ?? Number(row.duration);
   }
 
   return {
+    /** 与本人已发布排班的冲突 of a leave the user may read (their own draft, or one they approve). */
+    async scheduleConflicts(ctx: ActorContext, id: string) {
+      const row = (await this.get(ctx, id)) as unknown as Record<
+        string,
+        unknown
+      >;
+      return publishedConflicts(
+        str(row.employeeId),
+        str(row.startAt),
+        str(row.endAt),
+      );
+    },
     async canReadProof(ctx: ActorContext, fileId: string): Promise<boolean> {
       const file = await database
         .repository('leaveProofFiles')
@@ -841,14 +1001,20 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
                   select: (s) => s.fields('id', 'userId'),
                 })
             : undefined;
+        const isOwnRequest = Boolean(own && row.employeeId === employee?.id);
+        const canEditHr = Boolean(
+          entryEmployee && !entryEmployee.userId && row.status === 'draft',
+        );
         return {
           ...(await present([row], policies))[0],
+          customFields: projectValues(await fieldDefinitions(), row, {
+            sensitive: Boolean(hrPolicies) || isOwnRequest,
+            editor: isOwnRequest || canEditHr,
+          }),
           // Hints for UI visibility only; mutations independently authorize
           // their action, row scope, identity, state and expected version.
-          isOwnRequest: Boolean(own && row.employeeId === employee?.id),
-          canEditHr: Boolean(
-            entryEmployee && !entryEmployee.userId && row.status === 'draft',
-          ),
+          isOwnRequest,
+          canEditHr,
           canCancel: Boolean(
             own &&
             row.employeeId === employee?.id &&
@@ -881,18 +1047,14 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
         ctx,
         approvalsOnly ? 'approve' : 'request',
       );
-      const isHr =
-        approvalsOnly &&
-        Boolean(
-          await tryAuthorizeAction(
-            ctx.authz,
-            'talent.leaveRequest',
-            'manageTypes',
-          ),
-        );
-      const ownEmployee = approvalsOnly
-        ? await employeeForUser(database.connection(), ctx.userId)
-        : undefined;
+      const hasHr = Boolean(
+        await tryAuthorizeAction(ctx.authz, 'talent.leaveRequest', 'manageTypes'),
+      );
+      const isHr = approvalsOnly && hasHr;
+      const ownEmployee = await employeeForUser(
+        database.connection(),
+        ctx.userId,
+      );
       const filter: Record<string, unknown> = {};
       if (query.source !== undefined) {
         filter.source = parseInput(source, query.source);
@@ -926,8 +1088,19 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
         rows.push(row);
         if (rows.length > 500) break;
       }
+      const kept = rows.slice(0, 500);
+      const definitions = kept.length ? await fieldDefinitions() : [];
+      const presented = await present(kept, policies);
       return {
-        data: await present(rows.slice(0, 500), policies),
+        data: presented.map((item, index) => ({
+          ...item,
+          customFields: projectValues(definitions, kept[index], {
+            sensitive:
+              hasHr ||
+              Boolean(ownEmployee && kept[index].employeeId === ownEmployee.id),
+            editor: false,
+          }),
+        })),
         meta: { limit: 500, truncated: rows.length > 500 },
       };
     },
@@ -938,6 +1111,15 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
       // Resolve it before entering the single-connection SQLite transaction.
       if (body.source === 'hr')
         await authorizeAction(ctx.authz, 'talent.leaveRequest', 'manageTypes');
+      // Definitions are read before the transaction (SQLite: one connection).
+      // A draft may be incomplete: required fields are enforced on submit.
+      const definitions = await fieldDefinitions();
+      const values = prepareValues(
+        definitions,
+        body.customFields,
+        {},
+        {},
+      );
       return lock(ctx, async (connection) => {
         const own = await employeeForUser(connection, ctx.userId);
         const employeeId =
@@ -976,10 +1158,17 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
               (existing.reason ?? null) !== (body.reason ?? null) ||
               (existing.attachmentFileId ?? null) !==
                 (body.attachmentFileId ?? null) ||
-              existing.source !== requestedSource
+              existing.source !== requestedSource ||
+              !sameValues(readValues(existing.customFields), values)
             )
               throw new HrError('IDEMPOTENCY_CONFLICT', 409);
-            return serialize(existing);
+            return {
+              ...serialize(existing),
+              customFields: projectValues(definitions, existing, {
+                sensitive: true,
+                editor: true,
+              }),
+            };
           }
           if (
             await connection
@@ -1018,12 +1207,18 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
             status: 'draft',
             approvals: null,
             source: requestedSource,
+            customFields: storedValues(values),
             createdAt: now,
             updatedAt: now,
           },
         });
         return {
           ...serialize(created.record),
+          // The writer is the applicant or HR entering for them.
+          customFields: projectValues(definitions, created.record, {
+            sensitive: true,
+            editor: true,
+          }),
           estimatedAvailable: type.balanceRule === 'none' ? null : undefined,
         };
       });
@@ -1036,6 +1231,7 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
         'talent.leaveRequest',
         'manageTypes',
       );
+      const definitions = await fieldDefinitions();
       return lock(ctx, async (connection) => {
         const repo = scoped(connection, policies, 'leaveRequests');
         const previous = await repo.findOne({ filter: { id } });
@@ -1075,6 +1271,13 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
           ctx.userId,
           id,
         );
+        // Omitted customFields keep the stored values; drafts may be incomplete.
+        const values = prepareValues(
+          definitions,
+          body.customFields,
+          readValues(previous.customFields),
+          {},
+        );
         const updated = await repo.updateOne({
           filter: { id },
           values: {
@@ -1085,24 +1288,43 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
             duration: result.duration,
             reason: body.reason ?? null,
             attachmentFileId: body.attachmentFileId ?? null,
+            customFields: storedValues(values),
             updatedAt: stampAfter(previous.updatedAt),
           },
         });
-        return serialize(updated.record);
+        return {
+          ...serialize(updated.record),
+          customFields: projectValues(definitions, updated.record, {
+            sensitive: true,
+            editor: true,
+          }),
+        };
       });
     },
-    async submit(ctx: ActorContext, id: string, input: unknown) {
+    async submit(
+      ctx: ActorContext,
+      id: string,
+      input: unknown,
+      via?: 'feishuCard',
+    ) {
       const policies = await requestPolicies(ctx, 'request');
       const hrPolicies = await tryAuthorizeAction(
         ctx.authz,
         'talent.leaveRequest',
         'manageTypes',
       );
-      const { expectedUpdatedAt } = parseInput(
-        z.object({ expectedUpdatedAt: dateTime }).strict(),
+      const { expectedUpdatedAt, customFields } = parseInput(
+        z
+          .object({
+            expectedUpdatedAt: dateTime,
+            // Optional last-moment values; the stored ones are re-validated either way.
+            customFields: z.unknown().optional(),
+          })
+          .strict(),
         input,
       );
-      return lock(ctx, async (connection) => {
+      const definitions = await fieldDefinitions();
+      const submitted = await lock(ctx, async (connection) => {
         const repo = scoped(connection, policies, 'leaveRequests');
         const row = await repo.findOne({ filter: { id } });
         if (!row) throw new HrError('NOT_FOUND', 404);
@@ -1126,6 +1348,14 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
         ) {
           throw new HrError('ONLY_EMPLOYEE_MAY_SUBMIT', 403);
         }
+        // Required added fields (e.g. 工作交接人) must be filled to submit.
+        // `{}` rather than undefined: prepare() skips every check for undefined.
+        const values = prepareValues(
+          definitions,
+          customFields ?? {},
+          readValues(row.customFields),
+          { enforceRequired: true },
+        );
         const { type, result } = await compute(connection, {
           employeeId: str(row.employeeId),
           leaveTypeId: str(row.leaveTypeId),
@@ -1143,7 +1373,7 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
         );
         if (
           type.balanceRule === 'fixedPerEvent' &&
-          result.duration > Number(type.fixedDays)
+          result.balanceDays > Number(type.fixedDays)
         )
           throw new HrError('FIXED_LEAVE_LIMIT', 409);
         await assertMonthsOpen(connection, row, result.dates);
@@ -1178,7 +1408,7 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
             connection,
             policies,
             balances,
-            result.duration,
+            result.balanceDays,
             0,
           );
         const departments = await organization.listTree(connection);
@@ -1189,7 +1419,7 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
           submittedBy: ctx.userId,
           departmentId: str(employee.departmentId),
           departments,
-          leaveDays: result.duration,
+          leaveDays: result.balanceDays,
           leaveBalanceRule: str(type.balanceRule) as never,
           leaveSecondLevelDays: await leaveApprovalThreshold(connection),
           monthlyOvertimeAlertHours: 36,
@@ -1201,7 +1431,12 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
           decidedAt: null,
           comment: null,
           ...(index === 0
-            ? { submittedBy: ctx.userId, leaveDates: [...result.dates] }
+            ? {
+                submittedBy: ctx.userId,
+                ...(via ? { submittedVia: via } : {}),
+                leaveDates: [...result.dates],
+                balanceDays: result.balanceDays,
+              }
             : {}),
         }));
         const updated = await repo.updateOne({
@@ -1210,13 +1445,27 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
             duration: result.duration,
             status: 'pending',
             approvals,
+            customFields: storedValues(values),
             updatedAt: stampAfter(row.updatedAt),
           },
         });
-        return serialize(updated.record);
+        return {
+          ...serialize(updated.record),
+          customFields: projectValues(definitions, updated.record, {
+            sensitive: true,
+            editor: true,
+          }),
+        };
       });
+      await notifyStep(id);
+      return submitted;
     },
-    async decide(ctx: ActorContext, id: string, input: unknown) {
+    async decide(
+      ctx: ActorContext,
+      id: string,
+      input: unknown,
+      via?: 'feishuCard',
+    ) {
       const policies = await requestPolicies(ctx, 'approve');
       const hrPolicies = await tryAuthorizeAction(
         ctx.authz,
@@ -1233,7 +1482,8 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
           .strict(),
         input,
       );
-      return lock(ctx, async (connection) => {
+      let flagged: string[] = [];
+      const outcome = await lock(ctx, async (connection) => {
         const repo = scoped(connection, policies, 'leaveRequests');
         const row = await repo.findOne({ filter: { id } });
         if (!row) throw new HrError('NOT_FOUND', 404);
@@ -1267,6 +1517,7 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
           decidedBy: ctx.userId,
           decidedAt: new Date().toISOString(),
           comment: body.comment ?? null,
+          ...(via ? { via } : {}),
         };
         const dates = requestDates(row);
         const type = await connection.query
@@ -1274,8 +1525,6 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
           .select(['balanceRule', 'unit'])
           .where('id', '=', str(row.leaveTypeId))
           .executeTakeFirst();
-        if (body.decision === 'approved' && type?.unit !== 'day')
-          throw new HrError('LEAVE_UNIT_POLICY_REQUIRED', 409);
         const balances = !tracksBalance(type?.balanceRule)
           ? []
           : await loadBalances(
@@ -1291,7 +1540,7 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
               connection,
               policies,
               balances,
-              -Number(row.duration),
+              -debitDays(row),
               0,
             );
           const updated = await repo.updateOne({
@@ -1315,16 +1564,8 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
             connection,
             policies,
             balances,
-            -Number(row.duration),
-            Number(row.duration),
-          );
-        if (final)
-          approvals[index].attendanceSnapshots = await applyAttendance(
-            connection,
-            str(row.employeeId),
-            id,
-            dates,
-            true,
+            -debitDays(row),
+            debitDays(row),
           );
         const updated = await repo.updateOne({
           filter: { id },
@@ -1334,8 +1575,21 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
             updatedAt: stampAfter(row.updatedAt),
           },
         });
+        // After the status: recalculation reads approved leave from the request.
+        if (final)
+          flagged = await applyAttendance(
+            connection,
+            str(row.employeeId),
+            id,
+            dates,
+            true,
+          );
         return serialize(updated.record);
       });
+      if (flagged.length)
+        deps.onLeaveConflict?.()({ requestId: id, scheduleIds: flagged });
+      await notifyStep(id);
+      return outcome;
     },
     async cancel(ctx: ActorContext, id: string, input: unknown) {
       const policies = await requestPolicies(ctx, 'request');
@@ -1372,26 +1626,66 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
             connection,
             policies,
             balances,
-            str(row.status) === 'pending' ? -Number(row.duration) : 0,
-            str(row.status) === 'approved' ? -Number(row.duration) : 0,
+            str(row.status) === 'pending' ? -debitDays(row) : 0,
+            str(row.status) === 'approved' ? -debitDays(row) : 0,
           );
-        if (str(row.status) === 'approved')
+        const wasApproved = str(row.status) === 'approved';
+        const updated = await repo.updateOne({
+          filter: { id },
+          values: { status: 'cancelled', updatedAt: stampAfter(row.updatedAt) },
+        });
+        // 撤销后冲突标记自动清除, and the days are recalculated without the leave.
+        if (wasApproved)
           await applyAttendance(
             connection,
             str(row.employeeId),
             id,
             dates,
             false,
-            json<Approval[]>(row.approvals, []).flatMap(
-              (step) => step.attendanceSnapshots ?? [],
-            ),
           );
-        const updated = await repo.updateOne({
-          filter: { id },
-          values: { status: 'cancelled', updatedAt: stampAfter(row.updatedAt) },
-        });
+        else await clearConflicts(connection, str(row.employeeId), id, dates);
         return serialize(updated.record);
       });
+    },
+
+    /** 离职: requests still open are cancelled and their pending days released (system). */
+    async cancelOpenFor(connection: DatabaseConnection, employeeId: string) {
+      const rows = await connection.query
+        .selectFrom('leaveRequests')
+        .select(['id', 'status', 'leaveTypeId', 'approvals', 'duration'])
+        .where('employeeId', '=', employeeId)
+        .where('status', 'in', ['draft', 'pending'])
+        .execute();
+      for (const row of rows) {
+        if (str(row.status) === 'pending') {
+          const dates = requestDates(row);
+          const balances = await connection.query
+            .selectFrom('leaveBalances')
+            .select(['id', 'pending'])
+            .where('employeeId', '=', employeeId)
+            .where('leaveTypeId', '=', str(row.leaveTypeId))
+            .where('year', 'in', [
+              ...new Set(dates.map((d) => Number(d.slice(0, 4)))),
+            ])
+            .execute();
+          for (const balance of balances)
+            await connection.query
+              .updateTable('leaveBalances')
+              .set({
+                pending: Math.max(0, Number(balance.pending) - debitDays(row)),
+                updatedAt: new Date(),
+              })
+              .where('id', '=', str(balance.id))
+              .execute();
+          await clearConflicts(connection, employeeId, str(row.id), dates);
+        }
+        await connection.query
+          .updateTable('leaveRequests')
+          .set({ status: 'cancelled', updatedAt: new Date() })
+          .where('id', '=', str(row.id))
+          .execute();
+      }
+      return rows.length;
     },
   };
 }

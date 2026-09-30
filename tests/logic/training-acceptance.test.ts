@@ -328,7 +328,9 @@ describe('learning paths', () => {
 describe('offline training', () => {
   it('enrolls from my learning, and refuses a full session', async () => {
     const offerings = await call('emp_njl_4', 'GET', '/learning/offerings');
-    const sessions = offerings.json.data['course-first-article-practical'] as Json[];
+    const sessions = offerings.json.data[
+      'course-first-article-practical'
+    ] as Json[];
     expect(sessions.map((s) => s.id)).toContain('session-gowning-1');
     const enrolled = await call(
       'emp_njl_4',
@@ -518,7 +520,8 @@ describe('the daily run: learning coach and practice coach', () => {
       ),
     ).toBe(true);
     shared.plan = plan!.id;
-    // Only people with an uncovered gap get a plan.
+    // Only people with an uncovered gap in an assessed competency get a plan (V3-09: 未评定的不触发). 陈晨
+    // (emp-chenchen, CNC operator of the V1-02 and V2-05 demos) has gaps but no assessment, so none for him.
     expect((plans.json.data.items as Json[]).map((p) => p.employeeId)).toEqual([
       'emp-limin',
     ]);
@@ -535,7 +538,9 @@ describe('the daily run: learning coach and practice coach', () => {
     const nudge = nudges.json.data[0];
     expect(nudge.status).toBe('succeeded');
     const detail = await call('hr01', 'GET', `/automations/runs/${nudge.id}`);
-    expect(detail.json.data.output.nudged).toContain('王磊《车间安全与 5S 基础》');
+    expect(detail.json.data.output.nudged).toContain(
+      '王磊《车间安全与 5S 基础》',
+    );
     expect(detail.json.data.output.escalated).toBe(1);
   });
 
@@ -573,7 +578,9 @@ describe('the daily run: learning coach and practice coach', () => {
     );
     expect(recommended).toHaveLength(1);
     expect(recommended[0].optional).toBe(true);
-    expect(recommended[0].practiceScenarioId).toBe('scenario-first-article-check');
+    expect(recommended[0].practiceScenarioId).toBe(
+      'scenario-first-article-check',
+    );
     const again = await call(
       'hr01',
       'POST',

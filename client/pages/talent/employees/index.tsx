@@ -1,7 +1,9 @@
 import { useApiClient } from '@nocobase/app-client';
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
+  ClipboardCheckIcon,
   DownloadIcon,
   FileClockIcon,
   PlusIcon,
@@ -17,6 +19,11 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { EmployeeStatusBadge } from '@/components/talent/badges';
+import {
+  displayValue,
+  fieldLabel,
+  useCustomFieldDefinitions,
+} from '@/components/talent/custom-field-model';
 import { downloadFile } from '@/components/talent/download';
 import { errorMessage } from '@/components/talent/errors';
 import {
@@ -38,6 +45,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from '@/components/ui/native-select';
+import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 
@@ -60,11 +68,24 @@ interface ListResponse {
 
 /** 员工 — the employee list. Managers see their departments and below; the server scopes the rows. */
 export default function EmployeesPage(): ReactElement {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const api = useApiClient();
   const location = useLocation();
+  // V3-08 导入能力评定 lives under 能力体系; the endpoint checks the same permission.
+  const importAssessments = useCan({
+    resource: { type: 'composite', id: 'talent.assessment' },
+    action: 'import',
+  });
   const lookups = useLookups();
   const [params, setParams] = useSearchParams();
+  // 界面追加字段: list columns and filters, passed to the server as `cf.<key>`.
+  const { definitions: customDefinitions } =
+    useCustomFieldDefinitions('employees');
+  const customFilters = Object.fromEntries(
+    [...params.entries()].filter(
+      ([key, value]) => key.startsWith('cf.') && value,
+    ),
+  );
   const filters = {
     search: params.get('q') ?? '',
     departmentId: params.get('department') ?? '',
@@ -94,7 +115,18 @@ export default function EmployeesPage(): ReactElement {
     ids: filters.ids || undefined,
     batch: filters.batch || undefined,
     quick: filters.quick || undefined,
+    ...customFilters,
   });
+  // Sensitive added fields are listed for HR administrators only (the server sends no values otherwise).
+  const listedFields = customDefinitions.filter(
+    (d) =>
+      d.placements.includes('list') && (!d.sensitive || list.data?.can.import),
+  );
+  const filterFields = customDefinitions.filter(
+    (d) =>
+      d.placements.includes('filter') &&
+      (!d.sensitive || list.data?.can.import),
+  );
   const latestImport = useRemote<ImportSummary | null>(
     list.data?.can.import ? 'talent/employees/imports/latest' : null,
   );
@@ -112,7 +144,10 @@ export default function EmployeesPage(): ReactElement {
     }),
     [list, changes],
   );
-  const hasFilters = Object.values(filters).some(Boolean) || text !== '';
+  const hasFilters =
+    Object.values(filters).some(Boolean) ||
+    text !== '' ||
+    Object.keys(customFilters).length > 0;
 
   const columns = useMemo<ColumnDef<EmployeeListItem>[]>(
     () => [
@@ -222,8 +257,19 @@ export default function EmployeesPage(): ReactElement {
             <span className='text-muted-foreground'>0</span>
           ),
       },
+      ...listedFields.map((definition): ColumnDef<EmployeeListItem> => ({
+        id: `cf-${definition.key}`,
+        header: fieldLabel(definition, i18n.language),
+        cell: ({ row }) =>
+          displayValue(
+            definition,
+            row.original.customFields?.[definition.key],
+            t('customFields.yes'),
+            t('customFields.no'),
+          ) || <span className='text-muted-foreground'>—</span>,
+      })),
     ],
-    [t, location.search, lookups],
+    [t, i18n.language, location.search, lookups, listedFields],
   );
 
   let content: ReactElement;
@@ -280,6 +326,8 @@ export default function EmployeesPage(): ReactElement {
                     positionId: filters.positionId || undefined,
                     status: filters.status || undefined,
                     employmentType: filters.employmentType || undefined,
+                    quick: filters.quick || undefined,
+                    ...customFilters,
                   })
                     .catch((error: unknown) =>
                       toast.add({
@@ -308,6 +356,16 @@ export default function EmployeesPage(): ReactElement {
               >
                 <UploadIcon data-icon='inline-start' />
                 {t('talent.employees.import')}
+              </Button>
+            ) : null}
+            {importAssessments.can ? (
+              <Button
+                variant='outline'
+                nativeButton={false}
+                render={<Link to='/talent/competencies/assessments-import' />}
+              >
+                <ClipboardCheckIcon data-icon='inline-start' />
+                {t('talent.employees.importAssessments')}
               </Button>
             ) : null}
             {list.data?.can.create ? (
@@ -401,7 +459,49 @@ export default function EmployeesPage(): ReactElement {
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        {(['noPosition', 'noManager'] as const).map((quick) => (
+        {filterFields.map((definition) => {
+          const param = `cf.${definition.key}`;
+          const label = fieldLabel(definition, i18n.language);
+          return definition.type === 'select' ||
+            definition.type === 'multiSelect' ||
+            definition.type === 'boolean' ? (
+            <NativeSelect
+              key={definition.key}
+              aria-label={label}
+              value={params.get(param) ?? ''}
+              onChange={(e) => update(param, e.target.value)}
+            >
+              <NativeSelectOption value=''>
+                {t('customFields.filterAll', { label })}
+              </NativeSelectOption>
+              {definition.type === 'boolean'
+                ? (['true', 'false'] as const).map((v) => (
+                    <NativeSelectOption key={v} value={v}>
+                      {t(v === 'true' ? 'customFields.yes' : 'customFields.no')}
+                    </NativeSelectOption>
+                  ))
+                : definition.options.map((o) => (
+                    <NativeSelectOption key={o.value} value={o.value}>
+                      {o.label}
+                    </NativeSelectOption>
+                  ))}
+            </NativeSelect>
+          ) : (
+            <Input
+              key={definition.key}
+              aria-label={label}
+              placeholder={label}
+              className='w-36'
+              defaultValue={params.get(param) ?? ''}
+              onBlur={(e) => update(param, e.target.value.trim())}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter')
+                  update(param, (e.target as HTMLInputElement).value.trim());
+              }}
+            />
+          );
+        })}
+        {(['noPosition', 'noManager', 'hasGaps'] as const).map((quick) => (
           <Button
             key={quick}
             variant={filters.quick === quick ? 'secondary' : 'outline'}

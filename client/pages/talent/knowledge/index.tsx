@@ -1,4 +1,5 @@
 import { useApiClient } from '@nocobase/app-client';
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useLocale, useTranslation } from '@nocobase/i18n/client';
 import {
   CheckIcon,
@@ -24,6 +25,8 @@ import {
   LoadError,
 } from '@/components/talent/states';
 import { useRemote } from '@/components/talent/use-remote';
+// V4-13
+import { KnowledgePendingPanel } from '@/components/talent/talent-review-kb-pending';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -55,8 +58,10 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/toast';
 
+import { ConflictsPanel } from './conflicts-panel.js';
 import { DocumentDialog } from './document-dialog.js';
-import { DOCUMENT_CATEGORIES } from './types.js';
+import { ReviewDate } from './review-date.js';
+import { DOCUMENT_CATEGORIES, REVIEW_FILTERS, reviewState } from './types.js';
 import type { KnowledgeOutletContext } from './types.js';
 
 interface DocumentList {
@@ -69,7 +74,12 @@ interface DocumentList {
 export default function KnowledgePage(): ReactElement {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'gaps' ? 'gaps' : 'documents';
+  const canViewConflicts = useCan({
+    resource: { type: 'composite', id: 'talent.documentConflict' },
+    action: 'view',
+  });
+  const requestedTab = params.get('tab');
+  const review = params.get('review') ?? '';
   const filters = {
     q: params.get('q') || undefined,
     category: params.get('category') || undefined,
@@ -77,6 +87,23 @@ export default function KnowledgePage(): ReactElement {
     parseStatus: params.get('parseStatus') || undefined,
   };
   const list = useRemote<DocumentList>('talent/kb/documents', filters);
+  const tab =
+    requestedTab === 'gaps' && list.data?.canViewGaps
+      ? 'gaps'
+      : requestedTab === 'conflicts' && canViewConflicts.can
+        ? 'conflicts'
+        : // V4-13 待审核
+          requestedTab === 'pending' && list.data?.canCreate
+          ? 'pending'
+          : 'documents';
+  // 复核状态 is computed from each document's next review date on the page; the endpoint has no such filter.
+  const items = useMemo(
+    () =>
+      (list.data?.items ?? []).filter(
+        (d) => !review || reviewState(d.reviewDate) === review,
+      ),
+    [list.data, review],
+  );
   const [uploadOpen, setUploadOpen] = useState(false);
   const context = useMemo<KnowledgeOutletContext>(
     () => ({ reload: list.reload }),
@@ -120,26 +147,43 @@ export default function KnowledgePage(): ReactElement {
           ) : null
         }
       />
-      {list.data?.canViewGaps ? (
+      {list.data?.canViewGaps || canViewConflicts.can || list.data?.canCreate ? (
         <Tabs
           value={tab}
           onValueChange={(value) =>
-            setFilter('tab', value === 'gaps' ? 'gaps' : '')
+            setFilter('tab', value === 'documents' ? '' : String(value))
           }
         >
           <TabsList>
             <TabsTrigger value='documents'>
               {t('talent.knowledge.tabs.documents')}
             </TabsTrigger>
-            <TabsTrigger value='gaps'>
-              {t('talent.knowledge.tabs.gaps')}
-            </TabsTrigger>
+            {list.data?.canViewGaps ? (
+              <TabsTrigger value='gaps'>
+                {t('talent.knowledge.tabs.gaps')}
+              </TabsTrigger>
+            ) : null}
+            {canViewConflicts.can ? (
+              <TabsTrigger value='conflicts'>
+                {t('knowledgeService.conflicts.tab')}
+              </TabsTrigger>
+            ) : null}
+            {/* V4-13 待审核: AI-drafted FAQ documents (the endpoint checks talent.kbDocument.manage). */}
+            {list.data?.canCreate ? (
+              <TabsTrigger value='pending'>
+                {t('talentReview.kbPending.tab')}
+              </TabsTrigger>
+            ) : null}
           </TabsList>
         </Tabs>
       ) : null}
 
-      {tab === 'gaps' && list.data?.canViewGaps ? (
+      {tab === 'gaps' && list.data ? (
         <GapsPanel documents={list.data.items} />
+      ) : tab === 'conflicts' ? (
+        <ConflictsPanel />
+      ) : tab === 'pending' ? (
+        <KnowledgePendingPanel />
       ) : (
         <>
           <div className='flex flex-wrap items-center gap-2'>
@@ -200,18 +244,48 @@ export default function KnowledgePage(): ReactElement {
                 </NativeSelectOption>
               ))}
             </NativeSelect>
+            <NativeSelect
+              value={review}
+              onChange={(e) => setFilter('review', e.target.value)}
+              aria-label={t('knowledgeService.review.filter')}
+            >
+              <NativeSelectOption value=''>
+                {t('knowledgeService.review.all')}
+              </NativeSelectOption>
+              {REVIEW_FILTERS.map((r) => (
+                <NativeSelectOption key={r} value={r}>
+                  {t(`knowledgeService.review.${r}`)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            {filters.q ||
+            filters.category ||
+            filters.competencyId ||
+            filters.parseStatus ||
+            review ? (
+              <Button
+                variant='ghost'
+                onClick={() => {
+                  const next = new URLSearchParams();
+                  if (requestedTab) next.set('tab', requestedTab);
+                  setParams(next, { replace: true });
+                }}
+              >
+                {t('knowledgeService.clearFilters')}
+              </Button>
+            ) : null}
           </div>
           {list.error ? (
             <LoadError error={list.error} onRetry={list.reload} />
           ) : !list.data ? (
             <BlockSkeleton rows={4} />
-          ) : !list.data.items.length ? (
+          ) : !items.length ? (
             <EmptyState
               title={t('talent.knowledge.empty')}
               description={t('talent.knowledge.emptyDescription')}
             />
           ) : (
-            <DocumentTable items={list.data.items} onChanged={list.reload} />
+            <DocumentTable items={items} onChanged={list.reload} />
           )}
         </>
       )}
@@ -268,6 +342,9 @@ function DocumentTable({
             </TableHead>
             <TableHead>{t('talent.knowledge.fields.parseStatus')}</TableHead>
             <TableHead className='hidden sm:table-cell'>
+              {t('talent.knowledge.fields.reviewDate')}
+            </TableHead>
+            <TableHead className='hidden lg:table-cell'>
               {t('talent.knowledge.fields.updatedAt')}
             </TableHead>
           </TableRow>
@@ -289,6 +366,11 @@ function DocumentTable({
                   <Badge variant='outline' className='ml-2'>
                     {t('talent.common.disabled')}
                   </Badge>
+                ) : null}
+                {doc.docNo || doc.version ? (
+                  <span className='block text-xs font-normal text-muted-foreground'>
+                    {[doc.docNo, doc.version].filter(Boolean).join(' · ')}
+                  </span>
                 ) : null}
               </TableCell>
               <TableCell>{t(`talent.docCategory.${doc.category}`)}</TableCell>
@@ -331,7 +413,10 @@ function DocumentTable({
                   </span>
                 ) : null}
               </TableCell>
-              <TableCell className='hidden text-muted-foreground tabular-nums sm:table-cell'>
+              <TableCell className='hidden sm:table-cell'>
+                <ReviewDate date={doc.reviewDate} />
+              </TableCell>
+              <TableCell className='hidden text-muted-foreground tabular-nums lg:table-cell'>
                 {format.format(new Date(doc.updatedAt))}
               </TableCell>
             </TableRow>
@@ -417,6 +502,9 @@ function GapsPanel({
                 <TableHead className='hidden md:table-cell'>
                   {t('talent.knowledge.gapFields.askedBy')}
                 </TableHead>
+                <TableHead className='hidden md:table-cell'>
+                  {t('knowledgeService.gaps.channel')}
+                </TableHead>
                 <TableHead>{t('talent.fields.status')}</TableHead>
                 <TableHead className='text-right'>
                   {t('talent.common.actions')}
@@ -460,6 +548,9 @@ function GapsPanel({
                     </TableCell>
                     <TableCell className='hidden md:table-cell'>
                       {gap.askedByName ?? '—'}
+                    </TableCell>
+                    <TableCell className='hidden md:table-cell'>
+                      {t(`knowledgeService.channels.${gap.channel ?? 'app'}`)}
                     </TableCell>
                     <TableCell>
                       {t(`talent.gapStatus.${gap.status}`)}

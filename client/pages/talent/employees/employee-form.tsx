@@ -2,7 +2,18 @@ import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useState, type ReactElement } from 'react';
 
-import { errorMessage } from '@/components/talent/errors';
+import { CustomFieldInputs } from '@/components/talent/custom-fields';
+import {
+  compactValues,
+  customFieldErrors,
+  useCustomFieldDefinitions,
+  type CustomValues,
+} from '@/components/talent/custom-field-model';
+import {
+  errorCode,
+  errorDetails,
+  errorMessage,
+} from '@/components/talent/errors';
 import type { Employee } from '@/components/talent/types';
 import { useLookups } from '@/components/talent/use-lookups';
 import { useRemote } from '@/components/talent/use-remote';
@@ -51,6 +62,8 @@ export interface EmployeeFormProps {
   readonly employee?: Employee;
   /** Department, position and status follow personnel actions once one has taken effect. */
   readonly coreLocked?: boolean;
+  /** V1-03: the office suite is the data master; the manager follows it too. */
+  readonly syncManaged?: boolean;
   readonly canEditSensitive: boolean;
   readonly onSubmittingChange: (submitting: boolean) => void;
   readonly onSubmitted: (employee: Employee) => void;
@@ -60,7 +73,8 @@ export interface EmployeeFormProps {
 export function EmployeeForm({
   formId,
   employee,
-  coreLocked = false,
+  coreLocked: coreLockedProp = false,
+  syncManaged = false,
   canEditSensitive,
   onSubmittingChange,
   onSubmitted,
@@ -68,6 +82,10 @@ export function EmployeeForm({
   const { t } = useTranslation();
   const api = useApiClient();
   const lookups = useLookups();
+  const coreLocked = coreLockedProp || syncManaged;
+  const lockedHint = syncManaged
+    ? t('talent.employees.syncManaged')
+    : t('talent.employees.coreLocked');
   const managers = useRemote<{
     items: { id: string; name: string; employeeNo: string }[];
   }>('talent/employees');
@@ -84,6 +102,14 @@ export function EmployeeForm({
     ),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // 界面追加字段: sensitive ones only for those who may edit sensitive data.
+  const customDefinitions = useCustomFieldDefinitions(
+    'employees',
+  ).definitions.filter((d) => canEditSensitive || !d.sensitive);
+  const [custom, setCustom] = useState<CustomValues>(
+    () => employee?.customFields ?? {},
+  );
+  const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string>();
   const set = (key: string, value: string) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -113,6 +139,7 @@ export function EmployeeForm({
       )
         continue;
       if (coreLocked && (f === 'departmentId' || f === 'positionId')) continue;
+      if (syncManaged && f === 'managerEmployeeId') continue;
       values[f] = draft[f].trim() === '' ? null : draft[f].trim();
     }
     onSubmittingChange(true);
@@ -123,7 +150,9 @@ export function EmployeeForm({
           ? `talent/employees/${encodeURIComponent(employee.id)}`
           : 'talent/employees',
         method: employee ? 'PATCH' : 'POST',
-        json: values,
+        json: customDefinitions.length
+          ? { ...values, customFields: compactValues(custom) }
+          : values,
       });
       toast.add({
         type: 'success',
@@ -134,6 +163,8 @@ export function EmployeeForm({
       onSubmittingChange(false);
       onSubmitted(data);
     } catch (cause) {
+      if (errorCode(cause) === 'CUSTOM_FIELD_INVALID')
+        setCustomErrors(customFieldErrors(errorDetails(cause)));
       setFormError(errorMessage(cause, t));
       onSubmittingChange(false);
     }
@@ -201,9 +232,7 @@ export function EmployeeForm({
                 ))}
             </NativeSelect>
             {coreLocked ? (
-              <FieldDescription>
-                {t('talent.employees.coreLocked')}
-              </FieldDescription>
+              <FieldDescription>{lockedHint}</FieldDescription>
             ) : null}
             {errors.departmentId ? (
               <FieldError>{errors.departmentId}</FieldError>
@@ -253,6 +282,7 @@ export function EmployeeForm({
             <NativeSelect
               id='emp-manager'
               value={draft.managerEmployeeId}
+              disabled={syncManaged}
               onChange={(e) => set('managerEmployeeId', e.target.value)}
             >
               <NativeSelectOption value=''>
@@ -418,6 +448,20 @@ export function EmployeeForm({
               />
             </Field>
           </>
+        ) : null}
+        {customDefinitions.length ? (
+          <div className='grid gap-4 sm:grid-cols-2'>
+            <CustomFieldInputs
+              definitions={customDefinitions}
+              values={custom}
+              onChange={(next) => {
+                setCustom(next);
+                setCustomErrors({});
+              }}
+              errors={customErrors}
+              idPrefix='emp-cf'
+            />
+          </div>
         ) : null}
         {formError ? <FieldError>{formError}</FieldError> : null}
       </FieldGroup>

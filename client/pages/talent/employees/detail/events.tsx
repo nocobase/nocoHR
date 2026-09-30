@@ -1,3 +1,4 @@
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
 import type { ReactElement } from 'react';
 import { useOutletContext } from 'react-router';
@@ -14,6 +15,11 @@ import type { DetailOutletContext } from './types.js';
 export default function EmployeeEventsTab(): ReactElement {
   const { t } = useTranslation();
   const { detail } = useOutletContext<DetailOutletContext>();
+  // Link an event to its action only for people who can open the actions page.
+  const actionsPage = useCan({
+    resource: { type: 'page', id: 'talent.actions' },
+    action: 'access',
+  });
   const events = useRemote<JobEvent[]>(
     `talent/employees/${encodeURIComponent(detail.employee.id)}/events`,
   );
@@ -28,7 +34,10 @@ export default function EmployeeEventsTab(): ReactElement {
         ) : !events.data ? (
           <BlockSkeleton rows={2} />
         ) : (
-          <EventTimeline events={events.data} />
+          <EventTimeline
+            events={events.data}
+            linkActions={actionsPage.can === true}
+          />
         )}
       </CardContent>
     </Card>

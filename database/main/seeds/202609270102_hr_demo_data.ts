@@ -220,7 +220,7 @@ const seed: SeedDefinition = defineSeed({
         .values({
           id: wangleiExperience,
           employeeId: 'emp-wanglei',
-          company: '测试汽车配件有限公司',
+          company: '苏州华锐精工配件有限公司',
           title: '普车操作工',
           startDate: '2018-03-01',
           endDate: '2024-08-15',
@@ -580,7 +580,7 @@ const seed: SeedDefinition = defineSeed({
     await assign('hr.admin', 'org.position', 'pos-office-hr');
     await assign('hr.employee', 'org.department', 'qiheng');
 
-    // 《员工导入样例.xlsx》 and its problem-free variant (row 1 only), for the import demo.
+    // 《9月新员工花名册.xlsx》 and its problem-free variant (row 1 only), for the import demo.
     const materials = path.resolve(process.cwd(), 'storage', 'demo-materials');
     mkdirSync(materials, { recursive: true });
     const workbook = (rows: readonly (readonly string[])[]) => {
@@ -596,11 +596,11 @@ const seed: SeedDefinition = defineSeed({
       return XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
     };
     writeFileSync(
-      path.join(materials, '员工导入样例.xlsx'),
+      path.join(materials, '9月新员工花名册.xlsx'),
       workbook(DEMO_IMPORT_SAMPLE),
     );
     writeFileSync(
-      path.join(materials, '员工导入样例-无问题.xlsx'),
+      path.join(materials, '9月新员工花名册-已核对.xlsx'),
       workbook(DEMO_IMPORT_SAMPLE.slice(0, 1)),
     );
 

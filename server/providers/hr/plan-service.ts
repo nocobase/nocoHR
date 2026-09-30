@@ -25,8 +25,21 @@ const PLAN = 'talent.learningPlan';
 const COACH = 'talent.learningCoach';
 const OPEN_ASSIGNMENT = ['notStarted', 'inProgress', 'overdue'] as const;
 const MAX_ITEMS = 5;
-/** A draft nobody decided on within this many days expires. */
+/** A draft nobody decided on within this many days expires; the default of 学习规则's `planExpiryDays` (V3-09). */
 export const PLAN_EXPIRY_DAYS = 14;
+/** Why a plan was drafted (V3-09 adds the job event and the development target). */
+export const PLAN_TRIGGERS = [
+  'gap',
+  'request',
+  'jobEvent',
+  'developmentTarget',
+  // V3-10: the remedial plan after a failed exam.
+  'examFailed',
+  // V4-12: a C or D review result (triggerRef: { resultId, cycleId }).
+  'reviewResult',
+  // V4-13: a confirmed talent-review placement (triggerRef: { placementId, talentReviewId }).
+  'talentReview',
+] as const;
 
 export type PlanItemType = 'course' | 'learningPath' | 'exam' | 'practice';
 
@@ -90,7 +103,12 @@ export interface PlanService {
   createDraft(
     ctx: ActorContext,
     input: unknown,
-    options: { source: 'ai' | 'manual'; fallbackReviewerUserId: string },
+    options: {
+      source: 'ai' | 'manual';
+      fallbackReviewerUserId: string;
+      /** Allows the automation-only triggers `jobEvent`, `developmentTarget` and `examFailed`. */
+      automated?: boolean;
+    },
   ): Promise<PlanView>;
   /** Published courses, paths and exams, and confirmed scenarios, optionally for some competencies. */
   searchContent(filters: {
@@ -103,6 +121,8 @@ export interface PlanService {
 export interface PlanServiceDeps {
   readonly platform: Platform;
   readonly paths: PathService;
+  /** V3-09: the administrator's plan expiry, in days. */
+  readonly expiryDays?: () => Promise<number>;
 }
 
 function iso(value: unknown): string | null {
@@ -117,6 +137,96 @@ const nullable = (value: unknown): string | null =>
 export function createPlanService(deps: PlanServiceDeps): PlanService {
   const { platform, paths } = deps;
   const { database, notify } = platform;
+
+  /** V3-09: the reviewer's workbench to-do for a draft closes once the plan is decided or expires. */
+  async function closeReviewItem(planId: string): Promise<void> {
+    const stamp = new Date();
+    await database
+      .query()
+      .updateTable('workItems')
+      .set({ status: 'done', doneAt: stamp, updatedAt: stamp })
+      .where('refId', '=', `learningPlan:${planId}:drafted`)
+      .where('status', '=', 'open')
+      .execute();
+  }
+
+  /**
+   * V3-10 asks an automation's new items to join the employee's open draft
+   * instead of being refused: items already there (same type and content) are
+   * skipped, the plan keeps at most MAX_ITEMS, the added trigger is recorded
+   * in `triggerRef.merged`, the summary gains the new reason, and the reviewer
+   * — unchanged — is told the draft grew. The workbench keeps its one to-do.
+   */
+  async function mergeIntoDraft(
+    ctx: ActorContext,
+    row: Record<string, unknown>,
+    addition: {
+      trigger: string;
+      triggerRef: unknown;
+      summary: string;
+      items: PlanItem[];
+      employeeName: string;
+    },
+  ): Promise<PlanView> {
+    const id = str(row.id);
+    const current = json<PlanItem[]>(row.items, []);
+    const seen = new Set(current.map((i) => `${i.type}:${i.refId}`));
+    const fresh = addition.items.filter(
+      (i) => !seen.has(`${i.type}:${i.refId}`),
+    );
+    const room = Math.max(0, MAX_ITEMS - current.length);
+    const added = fresh.slice(0, room);
+    const dropped = fresh.slice(room).map((i) => `${i.type}:${i.refId}`);
+    const ref = json<Record<string, unknown>>(row.triggerRef, {});
+    const merged = Array.isArray(ref.merged)
+      ? [...(ref.merged as unknown[])]
+      : [];
+    merged.push({
+      trigger: addition.trigger,
+      triggerRef: addition.triggerRef,
+      added: added.map((i) => `${i.type}:${i.refId}`),
+      ...(dropped.length ? { dropped } : {}),
+      at: new Date().toISOString(),
+    });
+    const summary = added.length
+      ? `${str(row.summary)}\n${addition.summary}`.slice(0, 4000)
+      : str(row.summary);
+    // Only a plan still in draft is changed: a decision made meanwhile wins.
+    const result = await database
+      .query()
+      .updateTable('learningPlans')
+      .set({
+        items: JSON.stringify([...current, ...added]),
+        triggerRef: JSON.stringify({ ...ref, merged }),
+        summary,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', id)
+      .where('status', '=', 'draft')
+      .execute();
+    if (!(result.updatedCount ?? 0))
+      throw new HrError('PLAN_DRAFT_EXISTS', 409);
+    if (added.length)
+      await notify({
+        key: `learningPlan:${id}:merged:${merged.length}`,
+        userIds: [str(row.reviewerUserId)],
+        message: 'learningPlanMerged',
+        params: {
+          name: addition.employeeName,
+          count: String(added.length),
+        },
+        path: `/talent/learning-plans?plan=${encodeURIComponent(id)}`,
+      });
+    return toView(
+      ctx,
+      (await database
+        .query()
+        .selectFrom('learningPlans')
+        .selectAll()
+        .where('id', '=', id)
+        .executeTakeFirst()) as Record<string, unknown>,
+    );
+  }
 
   async function contentIndex(): Promise<Map<string, LearningContent>> {
     const query = database.query();
@@ -547,6 +657,7 @@ export function createPlanService(deps: PlanServiceDeps): PlanService {
         'confirmed',
         ctx.userId,
       );
+      await closeReviewItem(id);
       await paths.syncEmployee(employeeId);
       const employee = await platform.employee(employeeId);
       if (employee?.userId)
@@ -595,6 +706,7 @@ export function createPlanService(deps: PlanServiceDeps): PlanService {
         'discarded',
         ctx.userId,
       );
+      await closeReviewItem(id);
       return service.getPlan(ctx, id);
     },
 
@@ -615,19 +727,40 @@ export function createPlanService(deps: PlanServiceDeps): PlanService {
       const employee = await platform.employee(employeeId);
       if (!employee || employee.status === 'leave')
         throw new HrError('EMPLOYEE_NOT_FOUND', 404);
-      const existing = await database
-        .query()
-        .selectFrom('learningPlans')
-        .select(['id'])
-        .where('employeeId', '=', employeeId)
-        .where('status', '=', 'draft')
-        .executeTakeFirst();
-      if (existing) throw new HrError('PLAN_DRAFT_EXISTS', 409);
-      const trigger = input.trigger === 'request' ? 'request' : 'gap';
+      // A chat request or a gap; the job-event, development-target and failed-exam triggers only from automations.
+      const trigger =
+        input.trigger === 'request'
+          ? 'request'
+          : options.automated &&
+              (input.trigger === 'jobEvent' ||
+                input.trigger === 'developmentTarget' ||
+                input.trigger === 'examFailed' ||
+                // V4-12
+                input.trigger === 'reviewResult' ||
+                // V4-13
+                input.trigger === 'talentReview')
+            ? input.trigger
+            : 'gap';
       const summary = requireString(input.summary, 'PLAN_SUMMARY_REQUIRED', {
         max: 4000,
       })!;
       const items = parseItems(input.items, await contentIndex());
+      const existing = await database
+        .query()
+        .selectFrom('learningPlans')
+        .selectAll()
+        .where('employeeId', '=', employeeId)
+        .where('status', '=', 'draft')
+        .executeTakeFirst();
+      if (existing && input.mergeIntoDraft === true && options.automated)
+        return mergeIntoDraft(ctx, existing, {
+          trigger,
+          triggerRef: input.triggerRef ?? null,
+          summary,
+          items,
+          employeeName: employee.name,
+        });
+      if (existing) throw new HrError('PLAN_DRAFT_EXISTS', 409);
       const reviewerUserId =
         (await platform.headOf(employee)) ?? options.fallbackReviewerUserId;
       const id = newId();
@@ -687,7 +820,8 @@ export function createPlanService(deps: PlanServiceDeps): PlanService {
     },
 
     async expireStale() {
-      const cutoff = new Date(Date.now() - PLAN_EXPIRY_DAYS * 24 * 60 * 60_000);
+      const days = (await deps.expiryDays?.()) ?? PLAN_EXPIRY_DAYS;
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60_000);
       const stale = await database
         .query()
         .selectFrom('learningPlans')
@@ -711,6 +845,7 @@ export function createPlanService(deps: PlanServiceDeps): PlanService {
           'discarded',
           'system',
         );
+        await closeReviewItem(str(row.id));
       }
       return stale.length;
     },

@@ -131,6 +131,8 @@ export interface SessionServiceDeps {
   readonly onCourseCompleted?: () =>
     ((employeeId: string, courseId: string) => Promise<void>) | undefined;
   readonly departmentTitle: (id: string) => Promise<string>;
+  /** V3-09: how many minutes before the start check-in opens, the administrator's setting (default 30). */
+  readonly checkInOpensMinutes?: () => Promise<number>;
 }
 
 function iso(value: unknown): string | null {
@@ -745,7 +747,11 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
       if (session.status !== 'scheduled')
         throw new HrError('SESSION_CLOSED', 409);
       if (
-        now < time(session.startAt) - CHECK_IN_OPENS_BEFORE_MS ||
+        now <
+          time(session.startAt) -
+            ((await deps.checkInOpensMinutes?.()) ??
+              CHECK_IN_OPENS_BEFORE_MS / 60_000) *
+              60_000 ||
         now > time(session.endAt)
       )
         throw new HrError('CHECK_IN_OUTSIDE_WINDOW', 409);

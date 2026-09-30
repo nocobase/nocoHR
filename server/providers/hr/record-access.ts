@@ -29,6 +29,13 @@ import {
   TRAINING_OWNED_COLLECTIONS,
 } from './training-resources.js';
 import { label, str } from './shared.js';
+// V3-11
+import {
+  PROFILE_SCOPED_COLLECTIONS,
+  profileManagedScope,
+  profileSelfScope,
+} from './profile/resources.js';
+// V3-11 end
 
 function anyOf(field: string, values: readonly string[]): DatabaseScope {
   return values.length
@@ -46,6 +53,13 @@ const SCOPED_COLLECTIONS = [
   'leaveBalances',
   'shiftSchedules',
   'attendanceRecords',
+  'attendanceAdjustments',
+  'attendanceMonthlySummaries',
+  // V2-06: an employee's own payslips and enrolment (talent.myPayslip, self scope).
+  'payslips',
+  'employeeSocialInsurances',
+  // V3-11: business data, level suggestions and training recommendations (profile/resources.ts).
+  ...PROFILE_SCOPED_COLLECTIONS,
 ];
 /** Collections with an `ownerUserId` column: content an instructor is responsible for. */
 const OWNED_COLLECTIONS = [
@@ -229,6 +243,35 @@ export function registerRecordAccess(
             }
             return anyScope(scopes.filter((scope) => scope !== false));
           }
+          if (collection === 'developmentTargets') {
+            // V3-08: a head also reaches targets whose position is held in a managed department (目标岗位所在部门).
+            const held = departments.length
+              ? await database
+                  .query()
+                  .selectFrom('employees')
+                  .select(['positionId'])
+                  .where('departmentId', 'in', [...departments])
+                  .where('status', '!=', 'leave')
+                  .where('positionId', 'is not', null)
+                  .execute()
+              : [];
+            const scopes: DatabaseScope[] = [
+              anyOf('employeeId', employees),
+              anyOf('targetPositionId', [
+                ...new Set(held.map((row) => String(row.positionId))),
+              ]),
+            ];
+            const present = scopes.filter((scope) => scope !== false);
+            return present.length ? anyScope(present) : false;
+          }
+          // V3-11: by department or reviewer as well as by employee.
+          const profile = profileManagedScope(collection, {
+            userId,
+            departments,
+            employees,
+          });
+          if (profile !== undefined) return profile;
+          // V3-11 end
           return anyOf('employeeId', employees);
         }),
     ),
@@ -265,6 +308,10 @@ export function registerRecordAccess(
             return employeeId
               ? condition('employeeId', '$eq', employeeId)
               : false;
+          // V3-11
+          const profile = profileSelfScope(collection, employeeId);
+          if (profile !== undefined) return profile;
+          // V3-11 end
           return employeeId
             ? condition('employeeId', '$eq', employeeId)
             : false;

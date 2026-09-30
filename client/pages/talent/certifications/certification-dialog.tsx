@@ -58,6 +58,10 @@ export function CertificationDialog({
       reviewStatus: string;
     }[];
   }>(open ? 'talent/competencies' : null);
+  // V3-10 任职资格: the position a certification qualifies for.
+  const positions = useRemote<{
+    positions: { id: string; title: string; active: boolean }[];
+  }>(open ? 'talent/positions' : null);
   const empty = {
     code: '',
     title: '',
@@ -69,6 +73,9 @@ export function CertificationDialog({
     recertAdvanceDays: '60',
     escalateDays: '7',
     recertMode: 'examOnly',
+    kind: 'internal',
+    issuingAuthority: '',
+    qualifiesPositionId: '',
   };
   const [form, setForm] = useState(empty);
   const [courseIds, setCourseIds] = useState<string[]>([]);
@@ -106,6 +113,9 @@ export function CertificationDialog({
               recertAdvanceDays: String(certification.recertAdvanceDays),
               escalateDays: String(certification.escalateDays),
               recertMode: certification.recertMode,
+              kind: certification.kind ?? 'internal',
+              issuingAuthority: certification.issuingAuthority ?? '',
+              qualifiesPositionId: certification.qualifiesPositionId ?? '',
             }
           : empty,
       );
@@ -130,8 +140,12 @@ export function CertificationDialog({
         competencyLevel: form.competencyId
           ? form.competencyLevel || null
           : null,
-        courseIds,
-        examIds,
+        issuingAuthority: form.issuingAuthority || null,
+        qualifiesPositionId:
+          form.kind === 'internal' ? form.qualifiesPositionId || null : null,
+        // An external certificate type has no courses or exams.
+        courseIds: form.kind === 'external' ? [] : courseIds,
+        examIds: form.kind === 'external' ? [] : examIds,
       };
       const result = certification
         ? await api.request<{ data: { id: string } }>({
@@ -209,6 +223,67 @@ export function CertificationDialog({
                 />
               </Field>
             </div>
+            <div className='grid gap-4 sm:grid-cols-2'>
+              <Field>
+                <FieldLabel htmlFor='cert-kind'>
+                  {t('talent.externalCerts.fields.kind')}
+                </FieldLabel>
+                <NativeSelect
+                  id='cert-kind'
+                  className='w-full'
+                  value={form.kind}
+                  disabled={Boolean(certification)}
+                  onChange={(e) => set('kind', e.target.value)}
+                >
+                  <NativeSelectOption value='internal'>
+                    {t('talent.externalCerts.kinds.internal')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='external'>
+                    {t('talent.externalCerts.kinds.external')}
+                  </NativeSelectOption>
+                </NativeSelect>
+              </Field>
+              {form.kind === 'external' ? (
+                <Field>
+                  <FieldLabel htmlFor='cert-authority'>
+                    {t('talent.externalCerts.fields.issuingAuthority')}
+                  </FieldLabel>
+                  <Input
+                    id='cert-authority'
+                    value={form.issuingAuthority}
+                    onChange={(e) => set('issuingAuthority', e.target.value)}
+                  />
+                </Field>
+              ) : (
+                <Field>
+                  <FieldLabel htmlFor='cert-qualifies'>
+                    {t('talent.qualification.field')}
+                  </FieldLabel>
+                  <NativeSelect
+                    id='cert-qualifies'
+                    className='w-full'
+                    value={form.qualifiesPositionId}
+                    onChange={(e) => set('qualifiesPositionId', e.target.value)}
+                  >
+                    <NativeSelectOption value=''>
+                      {t('talent.common.none')}
+                    </NativeSelectOption>
+                    {(positions.data?.positions ?? [])
+                      .filter(
+                        (p) => p.active || p.id === form.qualifiesPositionId,
+                      )
+                      .map((p) => (
+                        <NativeSelectOption key={p.id} value={p.id}>
+                          {p.title}
+                        </NativeSelectOption>
+                      ))}
+                  </NativeSelect>
+                  <FieldDescription>
+                    {t('talent.qualification.fieldHint')}
+                  </FieldDescription>
+                </Field>
+              )}
+            </div>
             <Field>
               <FieldLabel htmlFor='cert-description'>
                 {t('talent.certifications.fields.description')}
@@ -220,42 +295,46 @@ export function CertificationDialog({
                 onChange={(e) => set('description', e.target.value)}
               />
             </Field>
-            <div className='grid gap-4 md:grid-cols-2'>
-              <Field>
-                <FieldLabel>
-                  {t('talent.certifications.fields.courses')}
-                </FieldLabel>
-                <MultiCheckList
-                  options={courseOptions.map((c) => ({
-                    value: c.id,
-                    label: c.title,
-                  }))}
-                  value={courseIds}
-                  onChange={setCourseIds}
-                  label={t('talent.certifications.fields.courses')}
-                  height='h-28'
-                  searchable={false}
-                />
-              </Field>
-              <Field>
-                <FieldLabel>
-                  {t('talent.certifications.fields.exams')}
-                </FieldLabel>
-                <MultiCheckList
-                  options={examOptions.map((e) => ({
-                    value: e.id,
-                    label: e.title,
-                  }))}
-                  value={examIds}
-                  onChange={setExamIds}
-                  label={t('talent.certifications.fields.exams')}
-                  height='h-28'
-                  searchable={false}
-                />
-              </Field>
-            </div>
+            {form.kind === 'internal' ? (
+              <div className='grid gap-4 md:grid-cols-2'>
+                <Field>
+                  <FieldLabel>
+                    {t('talent.certifications.fields.courses')}
+                  </FieldLabel>
+                  <MultiCheckList
+                    options={courseOptions.map((c) => ({
+                      value: c.id,
+                      label: c.title,
+                    }))}
+                    value={courseIds}
+                    onChange={setCourseIds}
+                    label={t('talent.certifications.fields.courses')}
+                    height='h-28'
+                    searchable={false}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>
+                    {t('talent.certifications.fields.exams')}
+                  </FieldLabel>
+                  <MultiCheckList
+                    options={examOptions.map((e) => ({
+                      value: e.id,
+                      label: e.title,
+                    }))}
+                    value={examIds}
+                    onChange={setExamIds}
+                    label={t('talent.certifications.fields.exams')}
+                    height='h-28'
+                    searchable={false}
+                  />
+                </Field>
+              </div>
+            ) : null}
             <FieldDescription>
-              {t('talent.certifications.requirementsHint')}
+              {form.kind === 'external'
+                ? t('talent.externalCerts.typeHint')
+                : t('talent.certifications.requirementsHint')}
             </FieldDescription>
             <div className='grid gap-4 sm:grid-cols-3'>
               <Field>

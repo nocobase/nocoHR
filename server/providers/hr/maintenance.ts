@@ -5,6 +5,7 @@
 import { loggingToken } from '@nocobase/app-server/logging';
 import type { ServiceContainer } from '@nocobase/service-provider';
 
+import { runAttendanceTask } from './attendance-tasks.js';
 import { scopeForUser } from './authorize.js';
 
 import {
@@ -13,12 +14,18 @@ import {
   examServiceToken,
   hrCoreServiceToken,
   insightServiceToken,
+  jobEventProcessorToken,
+  orgSyncServiceToken,
   knowledgeServiceToken,
+  personnelSettingsToken,
   learningServiceToken,
   planServiceToken,
   platformToken,
   practiceServiceToken,
   sessionServiceToken,
+  checklistServiceToken,
+  // V4-14
+  licensedServicesToken,
 } from './tokens.js';
 
 /**
@@ -31,16 +38,31 @@ export async function runDailyMaintenance(
   options: { asOf?: string } = {},
 ): Promise<Record<string, number>> {
   const core = await container.resolve(hrCoreServiceToken).runDaily(options);
+  // Events whose handler failed when they were written get another try.
+  const jobEvents = await container.resolve(jobEventProcessorToken).process();
+  // V1-02 变动影响清单: checklists past their due date with items left remind their owner.
+  const checklistReminders = await container
+    .resolve(checklistServiceToken)
+    .remindOverdue(
+      (await container.resolve(personnelSettingsToken).read('checklists')).value
+        .reminderIntervalDays,
+    );
   const certificates = await container
     .resolve(certificationServiceToken)
     .runDaily(options.asOf);
   const learning = await container.resolve(learningServiceToken).runDaily();
-  // Learning plans nobody decided on within 14 days expire before the coach looks for new gaps.
+  // V1-04: documents whose review date is near or past remind their owners (overdue: HR too).
+  const reviews = await container
+    .resolve(knowledgeServiceToken)
+    .runReviewReminders();
+  // Learning plans nobody decided on within 学习规则's expiry days (default 14) expire before the coach looks for new gaps.
   const expiredPlans = await container.resolve(planServiceToken).expireStale();
   // Also run minutely; repeated here so a manual daily run settles finished sessions first.
   const sessions = await container
     .resolve(sessionServiceToken)
     .runMaintenance();
+  // V2-05 每天 09:00: the next 14 days' published cells are checked again (cover suggestions for leave conflicts).
+  const attendance = await runAttendanceTask(container, 'daily', options);
   // After the lifecycle rules: renewal escalation, learning plans, progress nudges, practice recommendations.
   const automations = await container
     .resolve(automationTasksToken)
@@ -49,15 +71,112 @@ export async function runDailyMaintenance(
     automations[key]?.status === 'succeeded' ? 1 : 0;
   return {
     ...core,
+    jobEvents,
+    checklistReminders,
+    reviewReminders: reviews.upcoming + reviews.overdue,
     ...certificates,
     ...learning,
     expiredPlans,
+    scheduleConflicts: Number(attendance.notified ?? 0),
     absences: sessions.absent,
     recertEscalation: succeeded('certificationSteward.recertEscalation'),
     learningPlans: succeeded('learningCoach.gapPlans'),
+    // V3-09
+    learningTargetPlans: succeeded('learningCoach.developmentTargetPlans'),
     progressNudges: succeeded('learningCoach.progressNudge'),
     practiceRecommendations: succeeded('practiceCoach.preExamRecommend'),
   };
+}
+
+/**
+ * Whether the scheduled daily run should do the day's work now: the local
+ * time has reached 人事设置's daily time and today's run has not happened.
+ * Claims the day atomically, so overlapping checks run it once.
+ */
+export async function dailyRunDue(
+  container: ServiceContainer,
+  timeZone: string,
+  at: Date = new Date(),
+): Promise<boolean> {
+  const { dailyTime } = (
+    await container.resolve(personnelSettingsToken).read('reminders')
+  ).value;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  const date = `${get('year')}-${get('month')}-${get('day')}`;
+  if (`${get('hour')}:${get('minute')}` < dailyTime) return false;
+  const database = container.resolve(platformToken).database;
+  const key = `hr-daily-run:${date}`;
+  try {
+    const stamp = new Date();
+    await database
+      .query()
+      .insertInto('hrReminderLog')
+      .values({
+        id: `${key}`,
+        reminderKey: key,
+        sentAt: stamp,
+        createdAt: stamp,
+        updatedAt: stamp,
+      })
+      .execute();
+    return true;
+  } catch {
+    // The unique reminder key is already taken: today's run happened.
+    return false;
+  }
+}
+
+/**
+ * V1-03 定时全量: once a day at 组织同步's fullSyncTime, when a directory is
+ * available. Claimed like the daily run, so overlapping checks sync once.
+ */
+export async function runScheduledOrgSync(
+  container: ServiceContainer,
+  timeZone: string,
+  at: Date = new Date(),
+): Promise<boolean> {
+  const sync = container.resolve(orgSyncServiceToken);
+  const { fullSyncTime } = (await sync.readSettings()).value;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  if (`${get('hour')}:${get('minute')}` < fullSyncTime) return false;
+  const key = `org-sync-full:${get('year')}-${get('month')}-${get('day')}`;
+  try {
+    const stamp = new Date();
+    await container
+      .resolve(platformToken)
+      .database.query()
+      .insertInto('hrReminderLog')
+      .values({
+        id: key,
+        reminderKey: key,
+        sentAt: stamp,
+        createdAt: stamp,
+        updatedAt: stamp,
+      })
+      .execute();
+  } catch {
+    return false;
+  }
+  await sync.run({ mode: 'full', triggeredBy: null });
+  return true;
 }
 
 /** Every minute: documents still waiting for text extraction, and exam attempts past their deadline. */
@@ -77,6 +196,11 @@ export async function runMinuteMaintenance(
   const abandonedPractices = await container
     .resolve(practiceServiceToken)
     .abandonIdle();
+  // V1-03: incremental syncs' new pending items, explained together once they waited the merge interval.
+  await container
+    .resolve(automationTasksToken)
+    .explainIncrementalSync()
+    .catch(() => undefined);
   return {
     parsedDocuments,
     submittedAttempts,
@@ -116,13 +240,22 @@ export async function runWeeklyBriefs(
   const headIds = [...new Set(heads.map((h) => String(h.managerId)))];
   for (const userId of headIds) {
     const ctx = { authz: await scopeForUser(platform.authz, userId), userId };
-    const facts = await insights.weeklyFacts(ctx).catch(() => undefined);
-    if (!facts) continue;
+    const found = await insights.weeklyFacts(ctx).catch(() => undefined);
+    if (!found) continue;
+    // V4-14: people who lost permissions through a certificate this week (industry pack on).
+    const facts: WeeklyFacts = {
+      ...found,
+      lostPermissions: await container
+        .resolve(licensedServicesToken)
+        .lostThisWeek(ctx, platform.currentDate())
+        .catch(() => []),
+    };
     if (
       !facts.newThisWeek.length &&
       !facts.expiringSoon.length &&
       !facts.expired.length &&
-      !facts.missing.length
+      !facts.missing.length &&
+      !facts.lostPermissions?.length
     )
       continue;
     const written = await aiBrief(container, userId, facts, timeZone);
@@ -155,6 +288,8 @@ type WeeklyFacts = {
   expiringSoon: string[];
   expired: string[];
   missing: string[];
+  /** V4-14 */
+  lostPermissions?: string[];
 };
 
 function composeBrief(facts: WeeklyFacts): string {
@@ -167,6 +302,8 @@ function composeBrief(facts: WeeklyFacts): string {
     part('30 天内到期 ', facts.expiringSoon),
     part('已过期 ', facts.expired),
     part('缺必备认证 ', facts.missing),
+    // V4-14
+    part('本周因证书变化失去权限 ', facts.lostPermissions ?? []),
   ]
     .filter(Boolean)
     .join('；');

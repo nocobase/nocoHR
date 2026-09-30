@@ -24,7 +24,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Field, FieldError, FieldLabel } from '@/components/ui/field';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
   NativeSelect,
@@ -32,6 +37,7 @@ import {
 } from '@/components/ui/native-select';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
+import { LicensedShiftRequirementField } from '@/components/talent/licensed-shift-certifications';
 import { SettingsError } from '../feedback.js';
 import {
   SETTINGS_API,
@@ -146,6 +152,10 @@ function Editor({ kind, id }: { kind: 'shifts' | 'rules'; id?: string }) {
           }}
         />
       )}
+      {/* V4-14: 要求的认证 of an existing shift, saved on its own (licensed-shift-certifications.tsx). */}
+      {ready && kind === 'shifts' && id ? (
+        <LicensedShiftRequirementField shiftId={id} />
+      ) : null}
       <AlertDialog
         open={Boolean(discard)}
         onOpenChange={(open) => {
@@ -254,6 +264,7 @@ function CatalogForm({
       punchSource: z.enum(['feishu', 'dingtalk', 'wecom', 'device']),
       lateGraceMinutes: integer(240),
       overtimeRequiresApproval: z.enum(['true', 'false']),
+      exceptionExcusable: z.enum(['true', 'false']),
       monthlyOvertimeAlertHours: integer(744),
       minRestHours: integer(72),
       maxConsecutiveNights: integer(31),
@@ -300,6 +311,11 @@ function CatalogForm({
         rule?.overtimeRequiresApproval === false
           ? ('false' as const)
           : ('true' as const),
+      // 允许说明豁免 (V2-05 realigned), on unless the rule turned it off.
+      exceptionExcusable:
+        rule?.exceptionExcusable === false
+          ? ('false' as const)
+          : ('true' as const),
       monthlyOvertimeAlertHours: rule?.monthlyOvertimeAlertHours ?? 36,
       minRestHours: rule?.minRestHours ?? 11,
       maxConsecutiveNights: rule?.maxConsecutiveNights ?? 5,
@@ -337,6 +353,7 @@ function CatalogForm({
             lateGraceMinutes: values.lateGraceMinutes,
             overtimeRequiresApproval:
               values.overtimeRequiresApproval === 'true',
+            exceptionExcusable: values.exceptionExcusable === 'true',
             monthlyOvertimeAlertHours: values.monthlyOvertimeAlertHours,
             minRestHours: values.minRestHours,
             maxConsecutiveNights: values.maxConsecutiveNights,
@@ -424,7 +441,8 @@ function CatalogForm({
       | 'active'
       | 'workHourSystem'
       | 'punchSource'
-      | 'overtimeRequiresApproval',
+      | 'overtimeRequiresApproval'
+      | 'exceptionExcusable',
       string[]
     >
   > = isShift
@@ -433,6 +451,7 @@ function CatalogForm({
         workHourSystem: ['standard', 'comprehensive', 'flexible'],
         punchSource: ['feishu', 'dingtalk', 'wecom', 'device'],
         overtimeRequiresApproval: ['true', 'false'],
+        exceptionExcusable: ['true', 'false'],
         active: ['true', 'false'],
       };
   return (
@@ -483,7 +502,10 @@ function CatalogForm({
               )}
             >
               <FieldLabel htmlFor={`catalog-${key}`}>
-                {t(`attendance.settings.fields.${key}`)} *
+                {key === 'exceptionExcusable'
+                  ? t('attendanceV2.rule.exceptionExcusable')
+                  : t(`attendance.settings.fields.${key}`)}{' '}
+                *
               </FieldLabel>
               <NativeSelect
                 id={`catalog-${key}`}
@@ -497,7 +519,8 @@ function CatalogForm({
                     | 'isNight'
                     | 'workHourSystem'
                     | 'punchSource'
-                    | 'overtimeRequiresApproval',
+                    | 'overtimeRequiresApproval'
+                    | 'exceptionExcusable',
                 )}
               >
                 {values.map((value) => (
@@ -508,6 +531,11 @@ function CatalogForm({
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
+              {key === 'exceptionExcusable' ? (
+                <FieldDescription>
+                  {t('attendanceV2.rule.exceptionExcusableHint')}
+                </FieldDescription>
+              ) : null}
               <FieldError>
                 {
                   form.formState.errors[key as keyof z.infer<typeof schema>]

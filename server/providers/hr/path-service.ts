@@ -144,17 +144,22 @@ export interface PathService {
   ): Promise<{ created: number; preview: PathAssignmentPreview }>;
   /**
    * Assigns a path to one person without an audience check, for a learning
-   * plan a manager approved; the caller has authorized it. Returns the parent
-   * assignment id, or undefined when the person already follows the path.
+   * plan a manager approved or for a job event (V3-09); the caller has
+   * authorized it. Returns the parent assignment id, or undefined when the
+   * person already follows the path.
    */
   assignFor(
     employeeId: string,
     pathId: string,
     options: {
-      assignedByUserId: string;
+      assignedByUserId: string | null;
       source: string;
       learningPlanId?: string;
       dueDate?: string;
+      /** V3-09: the job event that assigned it; a retried event finds it. */
+      jobEventId?: string;
+      /** V3-09: the day step due dates count from (default today), e.g. an onboarding's effective date. */
+      startDate?: string;
     },
   ): Promise<string | undefined>;
   /** Moves every open path of an employee on: completes steps done elsewhere, unlocks, updates progress. */
@@ -776,9 +781,15 @@ export function createPathService(deps: PathServiceDeps): PathService {
       source: string;
       learningPlanId?: string | null;
       dueDate?: string | null;
+      jobEventId?: string | null;
+      startDate?: string | null;
     },
   ): Promise<string> {
-    const today = platform.currentDate();
+    // Step due dates count from the start date: today, or a later effective date (V3-09).
+    const today =
+      options.startDate && options.startDate > platform.currentDate()
+        ? options.startDate
+        : platform.currentDate();
     const steps = await stepsOf(str(path.id));
     const maxOffset = Math.max(...steps.map((s) => Number(s.dueOffsetDays)), 1);
     const parentDue = options.dueDate ?? addDays(today, maxOffset);
@@ -813,6 +824,7 @@ export function createPathService(deps: PathServiceDeps): PathService {
           pathStepId: null,
           practiceScenarioId: null,
           learningPlanId: options.learningPlanId ?? null,
+          jobEventId: options.jobEventId ?? null,
           optional: false,
           reminderCount: 0,
           assignedByUserId: options.assignedByUserId,
@@ -1266,6 +1278,8 @@ export function createPathService(deps: PathServiceDeps): PathService {
         source: options.source,
         learningPlanId: options.learningPlanId ?? null,
         dueDate: options.dueDate ?? null,
+        jobEventId: options.jobEventId ?? null,
+        startDate: options.startDate ?? null,
       });
     },
 
@@ -1314,7 +1328,12 @@ export function createPathService(deps: PathServiceDeps): PathService {
       await database
         .query()
         .updateTable('assignments')
-        .set({ status: 'cancelled', cancelledAt: stamp, updatedAt: stamp })
+        .set({
+          status: 'cancelled',
+          cancelledAt: stamp,
+          cancelReason: 'parentCancelled',
+          updatedAt: stamp,
+        })
         .where('parentAssignmentId', '=', parentAssignmentId)
         .where('status', 'in', [...OPEN, 'locked'])
         .execute();

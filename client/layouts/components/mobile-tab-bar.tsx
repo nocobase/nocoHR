@@ -2,6 +2,7 @@ import { useTranslation } from '@nocobase/i18n/client';
 import {
   BookOpen,
   IdCard,
+  LayoutGrid,
   MessageCircleQuestion,
   NotebookPen,
   type LucideIcon,
@@ -16,7 +17,7 @@ import {
   type RouteNavigationItem,
 } from '../../routing/route-navigation.js';
 
-/** The learner's four everyday pages, by route name. */
+/** The employee's everyday pages, by route name: 学习 · 考试 · 问答 · 自助 · 我的 (V1-04 added 自助). */
 const TABS: readonly { route: string; title: string; icon: LucideIcon }[] = [
   {
     route: 'talent-my-learning',
@@ -33,11 +34,16 @@ const TABS: readonly { route: string; title: string; icon: LucideIcon }[] = [
     title: 'navigation.tabs.ask',
     icon: MessageCircleQuestion,
   },
+  {
+    route: 'talent-self-service',
+    title: 'navigation.tabs.selfService',
+    icon: LayoutGrid,
+  },
   { route: 'talent-me', title: 'navigation.tabs.me', icon: IdCard },
 ];
 
 /**
- * Bottom tab bar on phones (below `md`): 学习 · 考试 · 问答 · 我的. It reads the
+ * Bottom tab bar on phones (below `md`): 学习 · 考试 · 问答 · 自助 · 我的. It reads the
  * same authorized navigation as the sidebar, so a tab appears only when the
  * user may open that page, and the bar disappears when none remain.
  */

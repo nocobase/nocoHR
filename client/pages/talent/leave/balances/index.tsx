@@ -5,6 +5,8 @@ import { useMemo, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useSearchParams } from 'react-router';
 import { DataTable } from '@/components/data-table';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
+import { useAppTimeZone } from '@/components/talent/attendance/app-time';
+import { today } from '@/components/talent/attendance/dates';
 import { BlockSkeleton, EmptyState } from '@/components/talent/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,9 +20,10 @@ import { HrLeaveDrafts } from './hr-drafts.js';
 
 export default function LeaveBalancesPage() {
   const { t, i18n } = useTranslation();
+  const zone = useAppTimeZone();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
-  const [currentYear] = useState(() => new Date().getFullYear());
+  const [currentYear] = useState(() => Number(today(zone).slice(0, 4)));
   const year = Number(params.get('year') || currentYear);
   const validYear =
     Number.isInteger(year) && year >= 1900 && year <= 2200 ? year : currentYear;

@@ -4,7 +4,10 @@ import { databaseManagerToken } from '@nocobase/db';
 import { z } from 'zod';
 
 import { scopeForUser } from '../../providers/hr/authorize.js';
-import { computeCompetencyIssues } from '../../providers/hr/competency-issues.js';
+import {
+  computeCompetencyIssues,
+  computePositionIssues,
+} from '../../providers/hr/competency-issues.js';
 import { HrError } from '../../providers/hr/shared.js';
 import { talentServiceToken } from '../../providers/hr/tokens.js';
 
@@ -43,7 +46,7 @@ export const getPositionContext = defineTools({
   definition: {
     name: 'getPositionContext',
     description:
-      'Read one position by id: title, job family, grade, responsibilities (the job description) and its existing competency requirements with their review status. Call this first.',
+      'Read one position by id: title, job family, grade, responsibilities (the short duty description), jdText (the text extracted from the uploaded 岗位说明书; when present it is the primary source) and its existing competency requirements with their review status. Call this first.',
     schema: z.object({
       positionId: z.string().describe('The id of the position to read.'),
     }),
@@ -168,7 +171,12 @@ export const createCompetencyDrafts = defineTools({
       resource: { type: 'composite', id: 'talent.frameworkAdvisor' },
       action: 'use',
     });
-    if (allowed.effect === 'deny')
+    // V3-08: writing drafts also needs the framework's own manage grant.
+    const manage = await actor.authz.authorize({
+      resource: { type: 'composite', id: 'talent.framework' },
+      action: 'manage',
+    });
+    if (allowed.effect === 'deny' || manage.effect === 'deny')
       return { status: 'error', content: { code: 'FORBIDDEN' } };
     const created: { id: string; code: string; title: string }[] = [];
     const errors: { code: string; error: string }[] = [];
@@ -237,7 +245,11 @@ export const createRequirementDrafts = defineTools({
       resource: { type: 'composite', id: 'talent.frameworkAdvisor' },
       action: 'use',
     });
-    if (allowed.effect === 'deny')
+    const manage = await actor.authz.authorize({
+      resource: { type: 'composite', id: 'talent.framework' },
+      action: 'manage',
+    });
+    if (allowed.effect === 'deny' || manage.effect === 'deny')
       return { status: 'error', content: { code: 'FORBIDDEN' } };
     const created: { id: string; competencyId: string }[] = [];
     const skipped: { competencyId: string; reason: string }[] = [];
@@ -289,6 +301,39 @@ export const listCompetencyIssues = defineTools({
     return {
       status: 'success',
       content: await computeCompetencyIssues(ctx.deps.database),
+    };
+  },
+});
+
+/** V3-08 月检: positions nobody held for half a year, positions without a grade, titles that read alike. */
+export const listPositionIssues = defineTools({
+  scope: 'SPECIFIED',
+  execution: 'backend',
+  defaultPermission: 'ALLOW',
+  i18n: I18N,
+  introduction: {
+    title: 'List position issues',
+    about:
+      'Finds positions without holders, positions without a grade and positions with similar names.',
+  },
+  definition: {
+    name: 'listPositionIssues',
+    description:
+      'Return active positions nobody has held in the last 180 days, active positions without a grade, and pairs of positions whose titles read alike after normalising synonyms (edit distance 1). Use it for the monthly framework review; it changes nothing.',
+    schema: z.object({}),
+  },
+  dependencies: { database: databaseManagerToken, authz: authorizationToken },
+  invoke: async (ctx) => {
+    const actor = await actorContext(ctx.deps, ctx.actor);
+    const allowed = await actor.authz.authorize({
+      resource: { type: 'composite', id: 'talent.frameworkAdvisor' },
+      action: 'use',
+    });
+    if (allowed.effect === 'deny')
+      return { status: 'error', content: { code: 'FORBIDDEN' } };
+    return {
+      status: 'success',
+      content: await computePositionIssues(ctx.deps.database),
     };
   },
 });

@@ -6,6 +6,7 @@ import { Link, useOutletContext, useParams } from 'react-router';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
+import { useAppTimeZone } from '@/components/talent/attendance/app-time';
 import { LeaveRequestSummary } from '@/components/talent/leave-request-summary';
 import type { LeaveRequestDetail } from '@/components/talent/leave-request-types';
 import { BlockSkeleton } from '@/components/talent/states';
@@ -62,9 +63,12 @@ function Detail({ id }: { id: string }) {
     !detail.loading &&
     !detail.error,
   );
+  // After the detail read, so that request goes first.
+  const zone = useAppTimeZone();
   const format = new Intl.DateTimeFormat(i18n.language, {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: zone,
   });
   const reload = () => {
     if (busyRef.current) return;

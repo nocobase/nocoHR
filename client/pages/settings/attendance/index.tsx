@@ -23,6 +23,7 @@ import {
   EmptyDescription,
 } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
+import { AttendanceAutomationCard } from './automation-card.js';
 import { ConfigCard } from './config-card.js';
 import { SettingsError } from './feedback.js';
 import {
@@ -79,12 +80,14 @@ export default function AttendanceSettingsPage() {
             saved={saved?.kind === 'rules' ? saved.record : undefined}
             gone={saved?.kind === 'rules' ? saved.gone : undefined}
           />
+          <ConfigCard section='rotations' />
           <ConfigCard section='calendar' />
           <ConfigCard section='annualLeave' />
+          <ConfigCard section='leaveUnits' />
           <ConfigCard section='limits' />
-          <p className='text-sm text-muted-foreground'>
-            {t('attendance.settings.pendingScope')}
-          </p>
+          <ConfigCard section='overtime' />
+          <ConfigCard section='approval' />
+          <AttendanceAutomationCard />
         </>
       )}
       <Outlet context={context} />

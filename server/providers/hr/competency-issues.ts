@@ -7,6 +7,7 @@
  */
 import type { DatabaseManager } from '@nocobase/db';
 
+import { editDistance, normalizeTitle, parseSynonyms } from './import-check.js';
 import { str } from './shared.js';
 
 export interface CompetencyIssues {
@@ -138,4 +139,101 @@ export async function computeCompetencyIssues(
     .filter((level) => level.words.length);
 
   return { similarPairs, idle, vagueLevels };
+}
+
+/**
+ * V3-08 月检 also looks at the position framework: active positions nobody
+ * has held for `vacantDays` (no current holder and no job event to or from
+ * the position in that window), positions without a grade, and pairs whose
+ * titles read alike after the first step's normalisation (synonym groups and
+ * edit distance, as in the import health check). Suggestions only.
+ */
+export interface PositionIssues {
+  readonly vacant: readonly { id: string; title: string }[];
+  readonly noGrade: readonly { id: string; title: string }[];
+  readonly similarPairs: readonly {
+    a: { id: string; title: string };
+    b: { id: string; title: string };
+  }[];
+}
+
+export const POSITION_ISSUE_DEFAULTS = {
+  vacantDays: 180,
+  editDistance: 1,
+  synonyms: 'CNC/数控; 操作工/操作员; 班组长/组长',
+} as const;
+
+export async function computePositionIssues(
+  database: DatabaseManager,
+  options: {
+    now?: Date;
+    vacantDays?: number;
+    editDistance?: number;
+    synonyms?: string;
+  } = {},
+): Promise<PositionIssues> {
+  const now = options.now ?? new Date();
+  const vacantDays = options.vacantDays ?? POSITION_ISSUE_DEFAULTS.vacantDays;
+  const maxDistance =
+    options.editDistance ?? POSITION_ISSUE_DEFAULTS.editDistance;
+  const groups = parseSynonyms(
+    options.synonyms ?? POSITION_ISSUE_DEFAULTS.synonyms,
+  );
+  const query = database.query();
+  const positions = (
+    await query
+      .selectFrom('positions')
+      .select(['id', 'title', 'grade'])
+      .where('active', '=', true)
+      .execute()
+  ).map((p) => ({
+    id: str(p.id),
+    title: str(p.title),
+    grade: p.grade == null ? '' : str(p.grade).trim(),
+  }));
+  const held = new Set(
+    (
+      await query
+        .selectFrom('employees')
+        .select(['positionId'])
+        .where('status', '!=', 'leave')
+        .where('positionId', 'is not', null)
+        .execute()
+    ).map((r) => str(r.positionId)),
+  );
+  const since = new Date(now.getTime() - vacantDays * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const moved = new Set<string>();
+  for (const row of await query
+    .selectFrom('jobEvents')
+    .select(['fromPositionId', 'toPositionId'])
+    .where('effectiveDate', '>=', since)
+    .execute()) {
+    if (row.fromPositionId) moved.add(str(row.fromPositionId));
+    if (row.toPositionId) moved.add(str(row.toPositionId));
+  }
+  const pick = (p: { id: string; title: string }) => ({
+    id: p.id,
+    title: p.title,
+  });
+  const normalized = positions.map((p) => ({
+    ...p,
+    key: normalizeTitle(p.title, groups),
+  }));
+  const similarPairs: PositionIssues['similarPairs'][number][] = [];
+  for (let i = 0; i < normalized.length; i += 1)
+    for (let j = i + 1; j < normalized.length; j += 1) {
+      const a = normalized[i];
+      const b = normalized[j];
+      if (editDistance(a.key, b.key) <= maxDistance)
+        similarPairs.push({ a: pick(a), b: pick(b) });
+    }
+  return {
+    vacant: positions
+      .filter((p) => !held.has(p.id) && !moved.has(p.id))
+      .map(pick),
+    noGrade: positions.filter((p) => !p.grade).map(pick),
+    similarPairs,
+  };
 }

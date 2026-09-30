@@ -16,6 +16,7 @@ import {
   frameworkResource,
   hrAssistantResource,
   hrReportResource,
+  jobEventResource,
   MANAGED_DEPARTMENTS_SCOPE,
   orgChartResource,
   personnelActionResource,
@@ -191,13 +192,19 @@ export const hrAdmin = definePermissionSet('hr.admin')
       import: { employees: ALL },
       linkUser: { employees: ALL },
       markLeave: { employees: ALL },
+      correctJob: { employees: ALL },
       delete: { employees: ALL },
     }),
     leaveResource.reference().grant({
       request: leaveRequestParts(ALL),
       approve: leaveRequestParts(ALL),
     }),
-    hrAssistantResource.reference().grant({ configure }),
+    hrAssistantResource.reference().grant({
+      configure,
+      use: { employees: SELF },
+      extract: { employees: ALL },
+    }),
+    jobEventResource.reference().grant({ view: { jobEvents: ALL } }),
     assessmentResource.reference().grant({
       view: { employeeCompetencies: ALL },
       create: { employeeCompetencies: ALL },
@@ -405,6 +412,8 @@ export const hrManager = definePermissionSet('hr.manager')
     }),
     rosterResource.reference().grant({ export: { employees: MANAGED } }),
     hrReportResource.reference().grant({ view: { employees: MANAGED } }),
+    jobEventResource.reference().grant({ view: { jobEvents: MANAGED } }),
+    hrAssistantResource.reference().grant({ use: { employees: SELF } }),
     orgChartView,
     ...LEARNER_PAGES.map(page),
     page('talent.assignments'),
@@ -495,6 +504,8 @@ export const hrEmployee = definePermissionSet('hr.employee')
     profileChangeResource
       .reference()
       .grant({ request: { profileChangeRequests: SELF } }),
+    jobEventResource.reference().grant({ view: { jobEvents: SELF } }),
+    hrAssistantResource.reference().grant({ use: { employees: SELF } }),
     orgChartView,
     ...LEARNER_PAGES.map(page),
     documentsVisible,

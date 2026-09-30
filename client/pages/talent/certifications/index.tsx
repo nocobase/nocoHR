@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
+import { MyExternalCertificates } from './my-external.js';
 import { CertificationDialog } from './certification-dialog.js';
 import type { CertificationsOutletContext } from './types.js';
 
@@ -91,6 +92,16 @@ export default function CertificationsPage(): ReactElement {
                       <Badge variant='outline'>
                         {t('talent.common.disabled')}
                       </Badge>
+                    ) : item.kind === 'external' ? (
+                      <Badge variant='outline'>
+                        {t('talent.externalCerts.kinds.external')}
+                      </Badge>
+                    ) : item.qualifiesPositionTitle ? (
+                      <Badge variant='secondary'>
+                        {t('talent.qualification.badge', {
+                          position: item.qualifiesPositionTitle,
+                        })}
+                      </Badge>
                     ) : null}
                   </div>
                   {item.description ? (
@@ -129,6 +140,16 @@ export default function CertificationsPage(): ReactElement {
                         count: item.holderCount,
                       })}
                     </span>
+                    {item.expiringCount ? (
+                      <span>
+                        {t('talent.externalCerts.expiringCount', {
+                          count: item.expiringCount,
+                        })}
+                      </span>
+                    ) : null}
+                    {item.issuingAuthority ? (
+                      <span>{item.issuingAuthority}</span>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -136,6 +157,8 @@ export default function CertificationsPage(): ReactElement {
           ))}
         </div>
       )}
+      {/* V3-10 外部证书登记 */}
+      <MyExternalCertificates />
       <CertificationDialog
         open={creating}
         onOpenChange={setCreating}

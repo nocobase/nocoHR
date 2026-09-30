@@ -94,21 +94,30 @@ export function leaveBalanceAmounts(
   const carriedOver = numeric(input.carriedOver);
   const used = numeric(input.used);
   const pending = numeric(input.pending);
-  // Expiry consumption needs a dated ledger; do not silently discard carryover that may already be used.
-  // Existing nonzero expiring carryover is refused until that policy is supported by the balance lifecycle.
-  if (carriedOver > 0 && input.expiresAt != null)
-    throw new HrError('CARRYOVER_POLICY_REQUIRED', 409);
+  // 结转 (user-agreed default): carried-over days are used first and their
+  // unused rest lapses after expiresAt, whether or not the yearly task ran.
+  let effectiveCarry = carriedOver;
+  if (carriedOver > 0 && input.expiresAt != null) {
+    const expires = (
+      input.expiresAt instanceof Date
+        ? input.expiresAt.toISOString()
+        : typeof input.expiresAt === 'string'
+          ? input.expiresAt
+          : ''
+    ).slice(0, 10);
+    if (asOf > expires) effectiveCarry = Math.min(carriedOver, used + pending);
+  }
   const adjusted = history.data.reduce(
     (sum, entry) => sum + Math.round(entry.delta * 10000),
     0,
   );
   return {
     entitled: entitled / 10000,
-    carriedOver: carriedOver / 10000,
+    carriedOver: effectiveCarry / 10000,
     used: used / 10000,
     pending: pending / 10000,
     adjusted: adjusted / 10000,
-    available: (entitled + carriedOver + adjusted - used - pending) / 10000,
+    available: (entitled + effectiveCarry + adjusted - used - pending) / 10000,
   };
 }
 

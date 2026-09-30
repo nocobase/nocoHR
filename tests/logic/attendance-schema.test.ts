@@ -220,9 +220,10 @@ it('applies V2-05 over V1, enforces constraints, converges and reverses without 
       (await migrator.upTo('202609290006_create_attendance_leave')).executed,
     ).toEqual([]);
     expect(await db.repository('employees').count()).toBe(1);
-    expect((await migrator.latest()).executed).toEqual([
+    // Later steps' migrations follow; the leave proof table comes first.
+    expect((await migrator.latest()).executed[0]).toBe(
       '202609290007_create_leave_proof_files',
-    ]);
+    );
     expect((await db.collections().get('leaveProofFiles'))?.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'uploadedByUserId', nullable: false }),
@@ -231,17 +232,19 @@ it('applies V2-05 over V1, enforces constraints, converges and reverses without 
     );
     expect(await db.collections().getPhysical('leaveProofFiles')).toBeDefined();
     expect((await migrator.latest()).executed).toEqual([]);
-    expect((await migrator.rollback()).rolledBack).toEqual([
-      '202609290007_create_leave_proof_files',
-    ]);
+    // The latest batch holds the later steps' migrations too; 007 is rolled back last.
+    const rolledBack = (await migrator.rollback()).rolledBack;
+    expect(rolledBack.at(-1)).toBe('202609290007_create_leave_proof_files');
+    expect(rolledBack).toContain('202609290011_extend_attendance');
     expect(
       await db.collections().getPhysical('leaveProofFiles'),
     ).toBeUndefined();
     expect(await db.collections().getPhysical('leaveRequests')).toBeDefined();
     expect(await db.repository('employees').count()).toBe(1);
-    expect((await migrator.latest()).executed).toEqual([
+    // Later steps' migrations follow; the leave proof table comes first.
+    expect((await migrator.latest()).executed[0]).toBe(
       '202609290007_create_leave_proof_files',
-    ]);
+    );
     expect((await migrator.latest()).executed).toEqual([]);
     expect((await db.collections().diagnose()).issues).toEqual([]);
   } finally {

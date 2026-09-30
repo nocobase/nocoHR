@@ -480,9 +480,17 @@ describe('employee rules', () => {
       { active: false },
     );
     expect(disabled.status).toBe(200);
-    const choose = await call('hr01', 'PATCH', '/employees/emp-limin', {
+    // V1-02: department, position and status change through 更正任职信息, not an edit.
+    const edit = await call('hr01', 'PATCH', '/employees/emp-limin', {
       positionId: 'pos-office-trainer',
     });
+    expect(edit.json.code).toBe('EMPLOYEE_CORE_FIELDS_LOCKED');
+    const choose = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-limin/correct-job',
+      { positionId: 'pos-office-trainer', note: '录入错误' },
+    );
     expect(choose.json.code).toBe('EMPLOYEE_POSITION_INACTIVE');
   });
 });

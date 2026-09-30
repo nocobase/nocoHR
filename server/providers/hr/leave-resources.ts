@@ -42,6 +42,8 @@ export const LEAVE_REQUEST_FIELDS = [
   'status',
   'approvals',
   'source',
+  // 界面追加字段 values (migration 202609300005); the service projects them per reader.
+  'customFields',
   'createdAt',
   'updatedAt',
 ];

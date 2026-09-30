@@ -35,10 +35,10 @@ import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/toast';
 
-import { DOCUMENT_CATEGORIES } from './types.js';
-
-const ACCEPT =
-  '.pdf,.docx,.md,.markdown,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain';
+import {
+  DOCUMENT_CATEGORIES,
+  DOCUMENT_FILE_ACCEPT as ACCEPT,
+} from './types.js';
 
 interface CompetencyOption {
   readonly id: string;
@@ -76,6 +76,10 @@ export function DocumentDialog({
   const [positionIds, setPositionIds] = useState<string[]>([]);
   const [reviewDate, setReviewDate] = useState<string | null>(null);
   const [autoDraftCourse, setAutoDraftCourse] = useState(true);
+  // V1-04: a new document may carry its number, version and effective date; later versions come from 上传新版本.
+  const [docNo, setDocNo] = useState('');
+  const [version, setVersion] = useState('');
+  const [effectiveDate, setEffectiveDate] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -99,6 +103,9 @@ export function DocumentDialog({
       setPositionIds(document?.positions.map((p) => p.id) ?? []);
       setReviewDate(document?.reviewDate ?? null);
       setAutoDraftCourse(document?.autoDraftCourse ?? true);
+      setDocNo('');
+      setVersion('');
+      setEffectiveDate('');
       setError(undefined);
     }
   }
@@ -135,6 +142,9 @@ export function DocumentDialog({
         reviewDate,
         autoDraftCourse,
         ...(fileId ? { fileId } : {}),
+        ...(!document && docNo.trim() ? { docNo: docNo.trim() } : {}),
+        ...(!document && version.trim() ? { version: version.trim() } : {}),
+        ...(!document && effectiveDate ? { effectiveDate } : {}),
       };
       const result = document
         ? await api.request<{ data: KbDocument }>({
@@ -241,6 +251,46 @@ export function DocumentDialog({
                 </NativeSelect>
               </Field>
             </div>
+            {!document ? (
+              <div className='grid gap-4 sm:grid-cols-3'>
+                <Field>
+                  <FieldLabel htmlFor='kb-docno'>
+                    {t('knowledgeService.fields.docNo')}
+                  </FieldLabel>
+                  <Input
+                    id='kb-docno'
+                    value={docNo}
+                    maxLength={64}
+                    onChange={(e) => setDocNo(e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor='kb-version'>
+                    {t('knowledgeService.fields.version')}
+                  </FieldLabel>
+                  <Input
+                    id='kb-version'
+                    value={version}
+                    maxLength={32}
+                    placeholder={t(
+                      'knowledgeService.version.versionPlaceholder',
+                    )}
+                    onChange={(e) => setVersion(e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor='kb-effective'>
+                    {t('knowledgeService.fields.effectiveDate')}
+                  </FieldLabel>
+                  <Input
+                    id='kb-effective'
+                    type='date'
+                    value={effectiveDate}
+                    onChange={(e) => setEffectiveDate(e.target.value)}
+                  />
+                </Field>
+              </div>
+            ) : null}
             <Field>
               <FieldLabel>
                 {t('talent.knowledge.fields.competencies')}

@@ -1,7 +1,9 @@
 /**
  * Demonstration knowledge documents and courses for "启衡精密" (01-演示案例.md
  * "V1 数据 · 制度文档" and "V3 数据 · 作业文件"; V1-04, V3-09 and V3-11 test
- * data). All content is fictional and marked 演示资料.
+ * data). All content is fictional; the note saying so is a file property
+ * (the Markdown front matter's `subject`, see withFileProperties), never body
+ * text, so recordings show none (V1-04 / V3-09 测试数据).
  *
  * - HR-POL-0002 states the night-shift allowance (50 元 per shift); the
  *   live-uploaded WI-PR-0101 V1.0 says 40 元 and conflicts with it.
@@ -44,7 +46,15 @@ export interface DemoDocument {
 }
 
 const PREAMBLE = (docNo: string, extra = '') =>
-  `> 演示资料：本文档内容为虚构，仅用于 NocoHR 演示。启衡精密科技，文件编号 ${docNo}。${extra}`;
+  `> 启衡精密科技，文件编号 ${docNo}。${extra}`;
+
+/** The fictional-content note, kept in the file's properties only. */
+export const FICTION_NOTE = '虚构资料：本文档内容为虚构，仅用于 NocoHR 演示。';
+
+/** The file as written to storage: the body behind a front matter that carries the note. */
+export function withFileProperties(body: string): string {
+  return `---\nsubject: ${FICTION_NOTE}\n---\n\n${body}`;
+}
 
 const WI_MC_0231_COMMON = {
   intro: `# 1 目的与适用范围
@@ -381,7 +391,7 @@ export const DEMO_UPLOAD_MATERIALS: readonly DemoUploadMaterial[] = [
 宿舍内禁止使用大功率电器和明火；夜班员工白天休息，其他人员 09:00–16:00 保持安静；访客须在门卫登记，不得留宿。`,
   },
   {
-    filename: '损坏的样例文件（演示资料）.pdf',
+    filename: '2019版设备点检表扫描件.pdf',
     // Truncated on purpose: a PDF header with no body or trailer.
     content: '%PDF-1.4\n%âãÏÓ\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R',
   },

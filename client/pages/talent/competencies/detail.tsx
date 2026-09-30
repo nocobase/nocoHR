@@ -111,8 +111,18 @@ function Footer({
   ): Promise<void> {
     setBusy(true);
     try {
-      await api.request({ path, method: 'POST', json });
+      const { data } = await api.request<{
+        data?: { active?: boolean; confirmedRequirements?: number };
+      }>({ path, method: 'POST', json });
       toast.add({ type: 'success', title: success });
+      // V3-08: deactivating keeps history; say how many confirmed requirements still reference it.
+      if (data?.active === false && (data.confirmedRequirements ?? 0) > 0)
+        toast.add({
+          type: 'info',
+          title: t('talent.competencyExt.deactivatedInUse', {
+            count: data.confirmedRequirements,
+          }),
+        });
       if (closeAfter) {
         reload();
         await close();

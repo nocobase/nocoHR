@@ -6,6 +6,11 @@ import {
   type AttendanceDepartment,
   type AttendanceRule,
 } from './attendance-catalog.js';
+// V4-14 排班资质校验 (certificationMissing), fed by the preflight.
+import {
+  qualificationChecks,
+  type QualificationInput,
+} from './licensed/qualification.js';
 
 export interface ScheduleCell {
   employeeId: string;
@@ -26,11 +31,41 @@ export interface ScheduleShift {
   isNight: boolean;
   active: boolean;
   departmentIds: string[] | null;
+  breakMinutes?: number;
+}
+
+/** 预计当月加班 inputs (attendance.overtime and the calendar). */
+export interface OvertimeForecastInput {
+  readonly standardDayHours: number;
+  /** Approved overtime hours by `${employeeId}:${YYYY-MM}`. */
+  readonly approvedHours: ReadonlyMap<string, number>;
+  readonly holidays: readonly string[];
+  readonly adjustedWorkdays: readonly string[];
+}
+
+function workdaysIn(month: string, input: OvertimeForecastInput): number {
+  const [y, m] = month.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  let count = 0;
+  for (let d = 1; d <= last; d++) {
+    const date = `${month}-${String(d).padStart(2, '0')}`;
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    if (
+      input.adjustedWorkdays.includes(date) ||
+      (!input.holidays.includes(date) && weekday !== 0 && weekday !== 6)
+    )
+      count++;
+  }
+  return count;
 }
 export interface ScheduleCheck {
   rule: string;
   level: 'block' | 'warn';
   message: string;
+  leaveRequestId?: string;
+  /** V4-14: the certification a certificationMissing check is about, and the message's parameters. */
+  certificationId?: string;
+  params?: Record<string, string>;
 }
 export const scheduleCellKey = (cell: ScheduleCell) =>
   `${cell.employeeId}:${cell.date}`;
@@ -38,8 +73,10 @@ export const scheduleCellKey = (cell: ScheduleCell) =>
 /**
  * V2-05 §排班校验. Evaluate the merged batch and both saved boundaries,
  * never just the first/previous edited cell. No writes, notifications or AI.
- * Monthly overtime forecasting is explicitly NOT inferred from shift hours:
- * the documented work-hour systems need an agreed calculation policy.
+ * 预计当月加班 follows the user-agreed policy (see OvertimeForecastInput):
+ * approved overtime plus scheduled hours beyond the standard day (standard
+ * hours) or the month's total beyond its workdays (comprehensive); flexible
+ * hours have none.
  */
 export function validateScheduleCells(input: {
   cells: readonly ScheduleCell[];
@@ -49,6 +86,7 @@ export function validateScheduleCells(input: {
   departments: readonly AttendanceDepartment[];
   rules: readonly AttendanceRule[];
   leaves: readonly {
+    id?: string;
     employeeId: string;
     startAt: string;
     endAt: string;
@@ -56,6 +94,9 @@ export function validateScheduleCells(input: {
   }[];
   lockedMonths: readonly { employeeId: string; month: string }[];
   timeZone: string;
+  overtime?: OvertimeForecastInput;
+  /** V4-14: the shifts' required certifications and the employees' certificates; unset, nothing is checked. */
+  qualification?: QualificationInput;
 }) {
   const checks: Record<string, ScheduleCheck[]> = {};
   const add = (cell: ScheduleCell, check: ScheduleCheck) => {
@@ -63,7 +104,11 @@ export function validateScheduleCells(input: {
     checks[key] ??= [];
     if (
       !checks[key].some(
-        (old) => old.rule === check.rule && old.message === check.message,
+        (old) =>
+          old.rule === check.rule &&
+          old.message === check.message &&
+          // V4-14: one certificationMissing check per required certification.
+          old.certificationId === check.certificationId,
       )
     )
       checks[key].push(check);
@@ -161,20 +206,27 @@ export function validateScheduleCells(input: {
         input.rules,
       );
       const window = interval(cell);
-      if (
-        input.leaves.some(
-          (leave) =>
-            leave.employeeId === cell.employeeId &&
-            ['pending', 'approved'].includes(leave.status) &&
-            Date.parse(leave.startAt) < window.end &&
-            Date.parse(leave.endAt) > window.start,
+      // V4-14 排班资质校验: each certification the shift requires, held through the shift's end.
+      for (const check of qualificationChecks(
+        cell,
+        window.end,
+        input.qualification,
+        input.timeZone,
+      ))
+        add(cell, check);
+      for (const leave of input.leaves)
+        if (
+          leave.employeeId === cell.employeeId &&
+          ['pending', 'approved'].includes(leave.status) &&
+          Date.parse(leave.startAt) < window.end &&
+          Date.parse(leave.endAt) > window.start
         )
-      )
-        add(cell, {
-          rule: 'leaveConflict',
-          level: 'block',
-          message: 'LEAVE_CONFLICT',
-        });
+          add(cell, {
+            rule: 'leaveConflict',
+            level: 'block',
+            message: 'LEAVE_CONFLICT',
+            ...(leave.id ? { leaveRequestId: leave.id } : {}),
+          });
       const timeline = [...merged.values()]
         .filter((row) => row.employeeId === cell.employeeId && row.shiftId)
         .sort((a, b) => a.date.localeCompare(b.date));
@@ -215,6 +267,43 @@ export function validateScheduleCells(input: {
             rule: 'consecutiveNights',
             level: 'warn',
             message: 'CONSECUTIVE_NIGHTS',
+          });
+      }
+      if (input.overtime && rule.workHourSystem !== 'flexible') {
+        const month = cell.date.slice(0, 7);
+        const std = input.overtime.standardDayHours;
+        const hoursOf = (row: ScheduleCell) => {
+          const w = interval(row);
+          const s = shifts.get(row.shiftId!);
+          return (w.end - w.start) / 3_600_000 - (s?.breakMinutes ?? 0) / 60;
+        };
+        const monthCells = [...merged.values()].filter(
+          (row) =>
+            row.employeeId === cell.employeeId &&
+            row.shiftId &&
+            row.date.startsWith(month),
+        );
+        // 标准工时: each day's hours beyond the standard day; 综合: the month's total beyond its workdays.
+        const scheduled =
+          rule.workHourSystem === 'standard'
+            ? monthCells.reduce(
+                (total, row) => total + Math.max(0, hoursOf(row) - std),
+                0,
+              )
+            : Math.max(
+                0,
+                monthCells.reduce((total, row) => total + hoursOf(row), 0) -
+                  workdaysIn(month, input.overtime) * std,
+              );
+        const projected =
+          scheduled +
+          (input.overtime.approvedHours.get(`${cell.employeeId}:${month}`) ??
+            0);
+        if (projected > rule.monthlyOvertimeAlertHours)
+          add(cell, {
+            rule: 'monthlyOvertime',
+            level: 'warn',
+            message: 'OVERTIME_FORECAST',
           });
       }
     } catch (error) {

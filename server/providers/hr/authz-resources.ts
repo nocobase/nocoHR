@@ -36,6 +36,9 @@ export const EMPLOYEE_BASE_FIELDS = [
   'leaveDate',
   'leaveReason',
   'lastImportBatchId',
+  'externalProvider',
+  'externalUserId',
+  'syncLocked',
   'createdAt',
   'updatedAt',
 ] as const;
@@ -169,6 +172,24 @@ export const employeeResource = defineCompositeResource(
               'updatedAt',
             ]),
           ),
+      )
+      // 更正任职信息: department, position and status outside the action flow, with a reason (V1-02).
+      .action('correctJob', (a) =>
+        a
+          .title(label('authz.employee.correctJob'))
+          .grant(
+            'employees',
+            employeeData.update([
+              'departmentId',
+              'positionId',
+              'positionSince',
+              'status',
+              'leaveDate',
+              'leaveReason',
+              'regularizedAt',
+              'updatedAt',
+            ]),
+          ),
       ),
 );
 
@@ -208,6 +229,15 @@ export const assessmentResource = defineCompositeResource(
             'employeeCompetencies',
             assessmentData.create([...ASSESSMENT_FIELDS]),
           ),
+      )
+      // V3-08: 导入能力评定 from Excel (hr.admin only).
+      .action('import', (a) =>
+        a
+          .title(label('authz.assessment.import'))
+          .grant(
+            'employeeCompetencies',
+            assessmentData.create([...ASSESSMENT_FIELDS]),
+          ),
       ),
 );
 
@@ -229,6 +259,12 @@ const POSITION_FIELDS = [
   'grade',
   'responsibilities',
   'aiDraftedAt',
+  // V3-08: the 岗位说明书 and its extracted text.
+  'jdFileId',
+  'jdFilename',
+  'jdText',
+  'jdStatus',
+  'jdError',
   'importBatchId',
   'active',
   'sortOrder',
@@ -405,6 +441,49 @@ export const frameworkAdvisorResource = defineCompositeResource(
       ),
 );
 
+// V3-08 发展目标岗位 (拟任人员): view the targets in scope; manage sets and cancels them.
+const DEVELOPMENT_TARGET_FIELDS = [
+  'id',
+  'employeeId',
+  'targetPositionId',
+  'reason',
+  'status',
+  'createdBy',
+  'achievedAt',
+  'cancelledAt',
+  'cancelledBy',
+  'decisionActionId',
+  'createdAt',
+  'updatedAt',
+] as const;
+const developmentTargetData = defineDatabasePermission((p) =>
+  p
+    .collection('developmentTargets')
+    .title(label('collections.developmentTargets'))
+    .read([...DEVELOPMENT_TARGET_FIELDS]),
+);
+export const developmentTargetResource = defineCompositeResource(
+  'talent.developmentTarget',
+  (r) =>
+    r
+      .title(label('authz.developmentTarget.title'))
+      .action('view', (a) =>
+        a
+          .title(label('authz.actions.view'))
+          .grant('developmentTargets', developmentTargetData),
+      )
+      .action('manage', (a) =>
+        a
+          .title(label('authz.actions.manage'))
+          .grant(
+            'developmentTargets',
+            developmentTargetData
+              .create([...DEVELOPMENT_TARGET_FIELDS])
+              .update([...DEVELOPMENT_TARGET_FIELDS]),
+          ),
+      ),
+);
+
 /**
  * The HR assistant (V1 step 1): `configure` switches its proactive work,
  * picks the owner, edits parameters and reads or retries its runs. Step 2
@@ -421,6 +500,18 @@ export const hrAssistantResource = defineCompositeResource(
           .grant('aiAutomationSettings', automationSettingsWrite)
           .grant('aiTaskRuns', automationRunsRead)
           .grant('aiTaskRunItems', automationRunItemsRead),
+      )
+      // Step 2: ask the assistant about one's own record; the tool reads only the caller's own data.
+      .action('use', (a) =>
+        a
+          .title(label('authz.hrAssistant.use'))
+          .grant('employees', employeeData),
+      )
+      // Step 2: read an uploaded ID, diploma or contract scan and propose profile changes for HR to review.
+      .action('extract', (a) =>
+        a
+          .title(label('authz.hrAssistant.extract'))
+          .grant('employees', employeeData),
       ),
 );
 
@@ -590,6 +681,10 @@ const ACTION_FIELDS = [
   'actionType',
   'employeeId',
   'candidate',
+  'fromDepartmentId',
+  'fromPositionId',
+  'approvalDepartmentId',
+  'currentApproverUserIds',
   'toDepartmentId',
   'toPositionId',
   'effectiveDate',
@@ -632,6 +727,7 @@ export const personnelActionResource = defineCompositeResource(
             actionData.update([
               'status',
               'approvals',
+              'currentApproverUserIds',
               'effectiveAt',
               'employeeId',
               'updatedAt',
@@ -643,8 +739,160 @@ export const personnelActionResource = defineCompositeResource(
           .title(label('authz.personnelAction.cancel'))
           .grant(
             'personnelActions',
-            actionData.update(['status', 'approvals', 'updatedAt']),
+            actionData.update([
+              'status',
+              'approvals',
+              'currentApproverUserIds',
+              'updatedAt',
+            ]),
           ),
+      ),
+);
+
+const JOB_EVENT_FIELDS = [
+  'id',
+  'employeeId',
+  'eventType',
+  'fromDepartmentId',
+  'toDepartmentId',
+  'fromPositionId',
+  'toPositionId',
+  'effectiveDate',
+  'source',
+  'actionId',
+  'note',
+  'processedAt',
+  'syncRunId',
+  'processError',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+/** The employee's job history. Read only: events are appended by the services and never edited or deleted. */
+const jobEventData = defineDatabasePermission((p) =>
+  p
+    .collection('jobEvents')
+    .title(label('collections.jobEvents'))
+    .read([...JOB_EVENT_FIELDS]),
+);
+
+export const jobEventResource = defineCompositeResource(
+  'talent.jobEvent',
+  (r) =>
+    r
+      .title(label('authz.jobEvent.title'))
+      .action('view', (a) =>
+        a.title(label('authz.actions.view')).grant('jobEvents', jobEventData),
+      )
+      // V1-03: hand a failed event to its handlers again.
+      .action('retry', (a) =>
+        a.title(label('authz.jobEvent.retry')).grant('jobEvents', jobEventData),
+      ),
+);
+
+const syncRunData = defineDatabasePermission((p) =>
+  p
+    .collection('orgSyncRuns')
+    .title(label('collections.orgSyncRuns'))
+    .read([
+      'id',
+      'provider',
+      'mode',
+      'orgMaster',
+      'triggeredBy',
+      'startedAt',
+      'finishedAt',
+      'status',
+      'stats',
+      'issues',
+      'error',
+      'createdAt',
+      'updatedAt',
+    ]),
+);
+
+/** 组织同步 (V1-03): settings, runs, switching the data master, and working through pending items. */
+export const orgSyncResource = defineCompositeResource('talent.orgSync', (r) =>
+  r
+    .title(label('authz.orgSync.title'))
+    .action('view', (a) =>
+      a.title(label('authz.actions.view')).grant('orgSyncRuns', syncRunData),
+    )
+    .action('configure', (a) =>
+      a
+        .title(label('authz.actions.configure'))
+        .grant('orgSyncRuns', syncRunData),
+    )
+    .action('run', (a) =>
+      a.title(label('authz.orgSync.run')).grant('orgSyncRuns', syncRunData),
+    )
+    .action('switchMaster', (a) =>
+      a
+        .title(label('authz.orgSync.switchMaster'))
+        .grant('orgSyncRuns', syncRunData),
+    )
+    .action('resolveIssues', (a) =>
+      a
+        .title(label('authz.orgSync.resolveIssues'))
+        .grant('orgSyncRuns', syncRunData),
+    ),
+);
+
+const aliasData = defineDatabasePermission((p) =>
+  p
+    .collection('positionAliases')
+    .title(label('collections.positionAliases'))
+    .read([
+      'id',
+      'provider',
+      'externalTitle',
+      'positionId',
+      'source',
+      'reviewStatus',
+      'draftReason',
+      'confirmedBy',
+      'confirmedAt',
+      'createdAt',
+      'updatedAt',
+    ]),
+);
+
+/** 统一 AI 入口 (V1-04): use the entry; configure its routing table, knowledge scopes and bots. */
+export const aiAssistantResource = defineCompositeResource(
+  'talent.aiAssistant',
+  (r) =>
+    r
+      .title(label('authz.aiAssistant.title'))
+      .action('use', (a) =>
+        a.title(label('authz.actions.use')).grant('employees', employeeData),
+      )
+      .action('configure', (a) =>
+        a
+          .title(label('authz.actions.configure'))
+          .grant('employees', employeeData),
+      ),
+);
+
+/** 职务映射 (V1-03): confirm is for the HR assistant's drafts. */
+export const positionAliasResource = defineCompositeResource(
+  'talent.positionAlias',
+  (r) =>
+    r
+      .title(label('authz.positionAlias.title'))
+      .action('view', (a) =>
+        a
+          .title(label('authz.actions.view'))
+          .grant('positionAliases', aliasData),
+      )
+      .action('manage', (a) =>
+        a
+          .title(label('authz.actions.manage'))
+          .grant('positionAliases', aliasData),
+      )
+      .action('confirm', (a) =>
+        a
+          .title(label('authz.actions.confirm'))
+          .grant('positionAliases', aliasData),
       ),
 );
 
@@ -652,6 +900,9 @@ const CHANGE_FIELDS = [
   'id',
   'employeeId',
   'changes',
+  'source',
+  'attachmentFileId',
+  'confidence',
   'status',
   'reviewerUserId',
   'reviewedAt',
@@ -680,18 +931,18 @@ export const profileChangeResource = defineCompositeResource(
           ),
       )
       .action('review', (a) =>
-        a
-          .title(label('authz.profileChange.review'))
-          .grant(
-            'profileChangeRequests',
-            changeData.update([
-              'status',
-              'reviewerUserId',
-              'reviewedAt',
-              'comment',
-              'updatedAt',
-            ]),
-          ),
+        a.title(label('authz.profileChange.review')).grant(
+          'profileChangeRequests',
+          changeData.update([
+            'status',
+            'reviewerUserId',
+            'reviewedAt',
+            'comment',
+            // An assistant suggestion keeps what HR finally wrote.
+            'changes',
+            'updatedAt',
+          ]),
+        ),
       ),
 );
 
@@ -768,7 +1019,11 @@ export const HR_COLLECTIONS: readonly { name: string; title: string }[] = [
   { name: 'employmentContracts', title: 'collections.employmentContracts' },
   { name: 'personnelActions', title: 'collections.personnelActions' },
   { name: 'jobEvents', title: 'collections.jobEvents' },
+  { name: 'orgSyncRuns', title: 'collections.orgSyncRuns' },
+  { name: 'positionAliases', title: 'collections.positionAliases' },
   { name: 'profileChangeRequests', title: 'collections.profileChangeRequests' },
+  // V3-08
+  { name: 'developmentTargets', title: 'collections.developmentTargets' },
 ];
 
 /** Every composite this application registers, in workspace order. */
@@ -786,6 +1041,12 @@ export const HR_COMPOSITES = [
   rosterResource,
   hrReportResource,
   orgChartResource,
+  jobEventResource,
+  orgSyncResource,
+  positionAliasResource,
+  aiAssistantResource,
+  // V3-08
+  developmentTargetResource,
 ] as const;
 
 /** Record access keys the grants above may select. */
@@ -803,4 +1064,6 @@ export const EMPLOYEE_CHILD_COLLECTIONS = [
   'personnelActions',
   'jobEvents',
   'profileChangeRequests',
+  // V3-08: the managed scope also reaches targets whose position is held in a managed department (record-access.ts).
+  'developmentTargets',
 ] as const;

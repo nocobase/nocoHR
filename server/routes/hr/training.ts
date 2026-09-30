@@ -12,6 +12,8 @@ import { authorizeAction } from '../../providers/hr/authorize.js';
 import { bool as isTrue } from '../../providers/hr/platform.js';
 import { HrError, isRecord, str } from '../../providers/hr/shared.js';
 import {
+  learningJobEventsToken,
+  learningSettingsToken,
   pathServiceToken,
   planServiceToken,
   platformToken,
@@ -37,6 +39,8 @@ export const trainingApiRoutes: AppApiRouteContribution<Application> =
     const practice = app.container.resolve(practiceServiceToken);
     const plans = app.container.resolve(planServiceToken);
     const platform = app.container.resolve(platformToken);
+    const learningSettings = app.container.resolve(learningSettingsToken);
+    const learningEvents = app.container.resolve(learningJobEventsToken);
 
     const routes = new Hono<HrEnv>();
     for (const prefix of [
@@ -46,6 +50,9 @@ export const trainingApiRoutes: AppApiRouteContribution<Application> =
       '/practice-scenarios',
       '/practice',
       '/learning-plans',
+      // V3-09: 学习规则 (HR administrators) and a job event's 学习处理 block.
+      '/learning-settings',
+      '/learning-job-events',
     ]) {
       for (const path of [prefix, `${prefix}/*`])
         routes.use(
@@ -376,6 +383,21 @@ export const trainingApiRoutes: AppApiRouteContribution<Application> =
           c.req.param('id'),
           await readJson(c),
         ),
+      }),
+    );
+
+    // ---------- V3-09 学习规则 and 学习处理 ----------
+    routes.get('/learning-settings', async (c) =>
+      c.json({ data: await learningSettings.get(actor(c)) }),
+    );
+    routes.put('/learning-settings', async (c) =>
+      c.json({
+        data: await learningSettings.save(actor(c), await readJson(c)),
+      }),
+    );
+    routes.get('/learning-job-events/:id', async (c) =>
+      c.json({
+        data: await learningEvents.view(actor(c), c.req.param('id')),
       }),
     );
 

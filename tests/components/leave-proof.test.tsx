@@ -389,11 +389,9 @@ describe('private leave proof UI', () => {
     mount('/talent/me/leave/draft-1/edit');
     const reason = await screen.findByLabelText('Reason');
     expect(reason).toHaveValue('Saved reason');
-    expect(
-      new Date(
-        (screen.getByLabelText('Starts at') as HTMLInputElement).value,
-      ).toISOString(),
-    ).toBe(saved.startAt);
+    // The saved instant reads as its wall clock in the application zone
+    // (Asia/Shanghai), whatever zone the browser is in.
+    expect(screen.getByLabelText('Starts at')).toHaveValue('2029-04-02T09:00');
     expect(screen.getByRole('button', { name: 'View proof' })).toBeEnabled();
     await userEvent.type(reason, ' updated');
     await waitFor(() =>

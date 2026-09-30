@@ -16,29 +16,61 @@ import type { ServiceContainer } from '@nocobase/service-provider';
 import { z } from 'zod';
 
 import { AIUnavailableError, type AIRunner } from './ai-runner.js';
-import { authorizeAction } from './authorize.js';
+import { authorizeAction, scopeForUser } from './authorize.js';
 import type {
   AutomationRunContext,
   AutomationService,
   RunOutcome,
 } from './automation.js';
-import { computeCompetencyIssues } from './competency-issues.js';
+import {
+  computeCompetencyIssues,
+  computePositionIssues,
+} from './competency-issues.js';
 import { createTrainingAutomation } from './training-automation.js';
+// V3-09
+import {
+  probationLearning,
+  probationLearningText,
+  type ProbationLearning,
+} from './learning-summary.js';
+import { createExamAutomation } from './exam-automation.js';
 import type { ActorContext } from './framework-service.js';
 import { createHrAssistantAutomation } from './hr-assistant-automation.js';
+import { createHrAssistantChanges } from './hr-assistant-changes.js';
+import { createHrAssistantPrep } from './hr-assistant-prep.js';
+import { createHrAssistantSync } from './hr-assistant-sync.js';
+import { createHrAssistantAttendance } from './hr-assistant-attendance.js';
+import { createConflictCheck } from './knowledge-conflicts.js';
 import type { OrganizationService } from './organization-service.js';
 import { draftHash } from './draft-snapshots.js';
 import { runWeeklyBriefs } from './maintenance.js';
 import type { Platform } from './platform.js';
 import { json } from './platform.js';
 import { addDays, HrError, newId, str } from './shared.js';
+import { driveManagerToken } from '@nocobase/app-server/drive';
 import {
   certificationServiceToken,
+  checklistServiceToken,
+  complianceServiceToken,
   examServiceToken,
+  hrCoreServiceToken,
+  imChannelToken,
   knowledgeServiceToken,
   learningServiceToken,
+  orgSyncServiceToken,
+  personnelSettingsToken,
+  positionAliasServiceToken,
+  scheduleServiceToken,
   talentServiceToken,
+  // V3-11
+  profileServicesToken,
 } from './tokens.js';
+// V2-07
+import { recruitingServicesToken } from './tokens.js';
+// V4-12
+import { performanceServicesToken } from './tokens.js';
+// V4-13
+import { talentReviewServicesToken } from './tokens.js';
 
 export interface AutomationTasks {
   /** A scheduled or manually started task; `periodKey` dedupes scheduled runs. */
@@ -55,12 +87,53 @@ export interface AutomationTasks {
   /** The content writer tops up questions and the practice coach drafts a scenario. */
   onCoursePublished(courseId: string): Promise<Record<string, RunOutcome>>;
   onRecertificationExhausted(attemptId: string): Promise<RunOutcome>;
+  // V3-10
+  /** An attempt with short answers awaits grading: the examiner suggests scores, then the instructor is told. */
+  onAttemptAwaitingGrading(attemptId: string): Promise<RunOutcome>;
+  /** An ordinary attempt failed: the learning coach drafts a remedial plan and tells the candidate. */
+  onExamFailed(attemptId: string): Promise<RunOutcome>;
+  /** A 任职资格认证 certificate was issued: the certification steward prepares the appointment material. */
+  onCertificateQualified(certificateId: string): Promise<RunOutcome>;
   /** After an employee import commits: the HR assistant's health check, once per batch. */
   onEmployeesImported(batchId: string): Promise<RunOutcome>;
+  /** V1-03: after a full sync, explain its new pending items at once; incremental ones wait for the merge window. */
+  onOrgSyncFinished(run: {
+    id: string;
+    mode: 'full' | 'incremental';
+  }): Promise<RunOutcome | undefined>;
+  /** V2-05: a published cell an approved leave blocks gets cover suggestions, once per set of candidates. */
+  onLeaveConflict(scheduleId: string): Promise<RunOutcome>;
+  /** V4-14: a published cell newly blocked by certificationMissing; certified cover, once per conflict (dedupeKey). */
+  onQualificationConflict(
+    scheduleId: string,
+    dedupeKey: string,
+  ): Promise<RunOutcome>;
+  /** V2-05: after the month's summaries are generated, the month-end check for HR, once per month. */
+  onAttendanceMonthGenerated(
+    month: string,
+    trigger: 'schedule' | 'manual',
+  ): Promise<RunOutcome>;
+  /** V1-04: a document or version became ready; check it for conflicts once per version. */
+  onDocumentReadyForConflicts(documentId: string): Promise<RunOutcome>;
+  /** Called every minute: explains incremental syncs' items once the oldest waited the merge interval. */
+  explainIncrementalSync(): Promise<RunOutcome | undefined>;
+  /** V1-02: a change checklist was created or its items changed; the notes are rewritten once per version. */
+  onChecklistChanged(checklistId: string): Promise<RunOutcome>;
+  /** V1-02: a contract was saved or an onboarding took effect; that employee's compliance is checked now. */
+  onComplianceTrigger(employeeId: string): Promise<RunOutcome>;
+  /** After an HR administrator attaches an ID card, diploma or contract scan: recognition, once per attachment. */
+  onAttachmentUploaded(input: {
+    attachmentId: string;
+    uploaderUserId: string;
+  }): Promise<RunOutcome>;
   /** An HR administrator re-runs the health check of one batch; a new run and report. */
   rerunImportCheck(ctx: ActorContext, batchId: string): Promise<RunOutcome>;
   /** Re-runs a failed run of an event-driven task with the same trigger object. */
   retryRun(ctx: ActorContext, runId: string): Promise<RunOutcome>;
+  /** V3-09: after an onboarding, transfer or promotion was processed, the coach's plan for what its path does not cover. */
+  onJobEventProcessed(eventId: string): Promise<RunOutcome>;
+  /** V3-09: after an assessment was recorded, the coach checks that employee's development targets. */
+  onAssessmentRecorded(employeeId: string): Promise<RunOutcome>;
 }
 
 export interface AutomationTasksDeps {
@@ -148,15 +221,26 @@ export function createAutomationTasks(
     const candidates = (
       await query
         .selectFrom('positions')
-        .select(['id', 'title', 'grade', 'responsibilities', 'jobFamilyId'])
+        .select([
+          'id',
+          'title',
+          'grade',
+          'responsibilities',
+          'jdText',
+          'jdStatus',
+          'jobFamilyId',
+        ])
         .where('active', '=', true)
         .where('aiDraftedAt', 'is', null)
         .orderBy('createdAt', 'asc')
         .execute()
     ).filter(
       (p) =>
-        p.responsibilities != null &&
-        str(p.responsibilities).trim() !== '' &&
+        // V3-08: a position with only an uploaded 岗位说明书 qualifies too.
+        ((p.responsibilities != null && str(p.responsibilities).trim() !== '') ||
+          (p.jdStatus === 'ready' &&
+            p.jdText != null &&
+            str(p.jdText).trim() !== '')) &&
         !withRequirements.has(str(p.id)),
     );
     if (!candidates.length)
@@ -205,6 +289,8 @@ export function createAutomationTasks(
               .nullable(),
             requiredLevel: z.number().int().min(1).max(5),
             mandatory: z.boolean(),
+            // V3-08: the clause of the job description or duties this item comes from.
+            basis: z.string().max(200).nullable(),
           }),
         )
         .min(1)
@@ -215,6 +301,7 @@ export function createAutomationTasks(
       title: string;
       competencies: number;
       requirements: number;
+      basis: { competencyId: string; basis: string | null }[];
     }[] = [];
     for (const position of batch) {
       const result = await structured(
@@ -223,12 +310,21 @@ export function createAutomationTasks(
         `新岗位自动起草：${str(position.title)}`,
         [
           `请为岗位「${str(position.title)}」（职级 ${position.grade == null ? '未设' : str(position.grade)}）起草能力模型。`,
-          `岗位职责：\n${str(position.responsibilities)}`,
+          ...(position.responsibilities
+            ? [`职责说明：\n${str(position.responsibilities)}`]
+            : []),
+          // V3-08: the job description is the primary source when both exist.
+          ...(position.jdStatus === 'ready' && position.jdText
+            ? [
+                `岗位说明书（主要依据）：\n${str(position.jdText).slice(0, DOCUMENT_TEXT_LIMIT)}`,
+              ]
+            : []),
           '要求：',
           '1. 6–12 项，覆盖专业技能（skill）与通用素质（quality）；法规或内部要求的持证事项列为资质类（qualification，maxLevel 为 1）。',
           '2. 优先复用下面已有的能力项：复用时 existingCompetencyId 填其 id，其余新建字段填 null；新建时 existingCompetencyId 为 null，并填写 code（小写英文加连字符）、title、category、description、maxLevel 和逐级 levels。',
           '3. 等级描述写成可观察的行为，逐级递进，不用“较好”“优秀”这类形容词。',
           '4. requiredLevel 不超过该能力项的最高等级。',
+          '5. 每项在 basis 中写明来自岗位说明书或职责说明的哪一条（如“职责 2：方案设计与报价”）；新建能力项的 description 末尾也用“依据：”注明；复用的能力项不改其描述。',
           `已有能力项：${JSON.stringify(existing)}`,
         ].join('\n'),
         schema,
@@ -236,6 +332,7 @@ export function createAutomationTasks(
       const byId = new Map(existing.map((c) => [c.id, c]));
       let competencyCount = 0;
       let requirementCount = 0;
+      const basis: { competencyId: string; basis: string | null }[] = [];
       for (const item of result.items) {
         let competencyId: string | undefined;
         let maxLevel = 5;
@@ -322,6 +419,7 @@ export function createAutomationTasks(
             },
           ]);
           requirementCount += 1;
+          basis.push({ competencyId, basis: item.basis ?? null });
         } catch (error) {
           if (!(error instanceof HrError)) throw error;
         }
@@ -337,6 +435,7 @@ export function createAutomationTasks(
         title: str(position.title),
         competencies: competencyCount,
         requirements: requirementCount,
+        basis,
       });
       await platform.notify({
         key: `automation:positionDrafted:${str(position.id)}`,
@@ -361,22 +460,47 @@ export function createAutomationTasks(
   async function dictionaryReview(run: AutomationRunContext) {
     await authorizeAction(run.owner.authz, FRAMEWORK_ADVISOR, 'use');
     const issues = await computeCompetencyIssues(database);
+    // V3-08: the position framework is checked in the same run.
+    const positionIssues = await computePositionIssues(database);
     if (
       !issues.similarPairs.length &&
       !issues.idle.length &&
-      !issues.vagueLevels.length
+      !issues.vagueLevels.length &&
+      !positionIssues.vacant.length &&
+      !positionIssues.noGrade.length &&
+      !positionIssues.similarPairs.length
     )
-      return { status: 'skipped' as const, output: { issues } };
+      return { status: 'skipped' as const, output: { issues, positionIssues } };
     run.summarize(
-      `相似 ${issues.similarPairs.length} 对，闲置 ${issues.idle.length} 项，描述不可观察的等级 ${issues.vagueLevels.length} 条`,
+      `相似 ${issues.similarPairs.length} 对，闲置 ${issues.idle.length} 项，描述不可观察的等级 ${issues.vagueLevels.length} 条；半年无人在岗的岗位 ${positionIssues.vacant.length} 个，缺职级 ${positionIssues.noGrade.length} 个，名称相近 ${positionIssues.similarPairs.length} 对`,
     );
-    run.reference(issues);
+    run.reference({ ...issues, positionIssues });
     type Suggestion = {
-      kind: 'merge' | 'deactivate' | 'rewrite';
+      kind: 'merge' | 'deactivate' | 'rewrite' | 'position';
       competencies: string[];
       suggestion: string;
       reason: string;
     };
+    const positionSuggestions = (): Suggestion[] => [
+      ...positionIssues.vacant.map((p) => ({
+        kind: 'position' as const,
+        competencies: [p.title],
+        suggestion: `确认岗位「${p.title}」是否仍需保留，或考虑停用`,
+        reason: '半年内没有在岗员工',
+      })),
+      ...positionIssues.noGrade.map((p) => ({
+        kind: 'position' as const,
+        competencies: [p.title],
+        suggestion: `为岗位「${p.title}」补充职级`,
+        reason: '职级为空',
+      })),
+      ...positionIssues.similarPairs.map((p) => ({
+        kind: 'position' as const,
+        competencies: [p.a.title, p.b.title],
+        suggestion: `核对岗位「${p.a.title}」与「${p.b.title}」是否重复`,
+        reason: '名称规范化后相近',
+      })),
+    ];
     const ruleBased = (): Suggestion[] => [
       ...issues.similarPairs.map((p) => ({
         kind: 'merge' as const,
@@ -396,6 +520,7 @@ export function createAutomationTasks(
         suggestion: `改写「${l.title}」L${l.level} 的行为描述`,
         reason: `使用了不可观察的词：${l.words.join('、')}`,
       })),
+      ...positionSuggestions(),
     ];
     let suggestions: Suggestion[];
     try {
@@ -408,12 +533,14 @@ export function createAutomationTasks(
             '请根据以下能力词典检查结果，整理成整改建议：建议合并的相似项（merge）、建议停用的闲置项（deactivate）、建议改写的等级描述（rewrite）。',
             '每条写明涉及的能力项名称、具体建议和理由；只给建议，不要假设已经修改。',
             JSON.stringify(issues),
+            '岗位体系的问题（半年无人在岗的启用岗位、缺职级的岗位、名称相近的岗位）另列为 position 类建议，competencies 填岗位名称：',
+            JSON.stringify(positionIssues),
           ].join('\n'),
           z.object({
             suggestions: z
               .array(
                 z.object({
-                  kind: z.enum(['merge', 'deactivate', 'rewrite']),
+                  kind: z.enum(['merge', 'deactivate', 'rewrite', 'position']),
                   competencies: z.array(z.string()).min(1),
                   suggestion: z.string().max(500),
                   reason: z.string().max(500),
@@ -439,6 +566,7 @@ export function createAutomationTasks(
         merge: String(count('merge')),
         deactivate: String(count('deactivate')),
         rewrite: String(count('rewrite')),
+        positions: String(count('position')),
       },
       path: `/settings/ai-automations?run=${encodeURIComponent(run.runId)}`,
     });
@@ -949,7 +1077,7 @@ export function createAutomationTasks(
               run,
               'certificationSteward',
               '复审升级提醒',
-              `以下员工的证书即将到期，复审还没有开始。请写一段给其部门负责人的升级提醒（不超过 200 字）：说明谁的证书几天后到期、到期后会失去哪些权限，并建议主管跟进。只使用给出的数据：${JSON.stringify(facts)}`,
+              `以下员工的证书即将到期，复审还没有开始。请写一段给其部门负责人的升级提醒（不超过 200 字）：说明谁的证书几天后到期、复审尚未开始、到期后不再计入有效持证（岗位要求的资质将显示为缺失）${items.some((i) => i.sets.length) ? '，以及到期后会失去的权限（loses）' : ''}，并建议主管跟进。只使用给出的数据：${JSON.stringify(facts)}`,
               z.object({ message: z.string().min(1).max(400) }),
             )
           ).message,
@@ -957,7 +1085,7 @@ export function createAutomationTasks(
           items
             .map(
               (i) =>
-                `${i.employee}的《${i.certification}》将于 ${i.expiresAt}（${i.daysLeft} 天后）到期，复审尚未开始${i.sets.length ? `，到期后将失去：${i.sets.join('、')}` : ''}`,
+                `${i.employee}的《${i.certification}》将于 ${i.expiresAt}（${i.daysLeft} 天后）到期，复审尚未开始，到期后不再计入有效持证${i.sets.length ? `，并将失去：${i.sets.join('、')}` : ''}`,
             )
             .join('；') + '。请跟进。',
       );
@@ -1157,7 +1285,64 @@ export function createAutomationTasks(
     locale: deps.locale,
   });
 
+  const hrPrep = createHrAssistantPrep({
+    platform,
+    core: () => container.resolve(hrCoreServiceToken),
+    settings: () => container.resolve(personnelSettingsToken),
+    drive: () => container.resolve(driveManagerToken),
+    structured,
+    worded,
+    locale: deps.locale,
+    compliance: () => container.resolve(complianceServiceToken),
+    // V3-09: 转正准备 includes the learning during probation, read as each recipient.
+    learning: async (ctx, employeeId) =>
+      (await probationLearning(platform, ctx, employeeId)) as
+        | Record<string, unknown>
+        | undefined,
+    learningText: (learning) =>
+      probationLearningText(learning as unknown as ProbationLearning),
+  });
+
+  const hrChanges = createHrAssistantChanges({
+    platform,
+    checklists: () => container.resolve(checklistServiceToken),
+    compliance: () => container.resolve(complianceServiceToken),
+    structured,
+    worded,
+  });
+
+  const hrSync = createHrAssistantSync({
+    platform,
+    sync: () => container.resolve(orgSyncServiceToken),
+    aliases: () => container.resolve(positionAliasServiceToken),
+    structured,
+  });
+
+  const hrAttendance = createHrAssistantAttendance({
+    platform,
+    schedules: () => container.resolve(scheduleServiceToken),
+    structured,
+    // V2-05 (realigned): 考勤异常追问 in the bot chat.
+    channel: () => container.resolve(imChannelToken),
+  });
+
+  const conflictCheck = createConflictCheck({
+    platform,
+    knowledge,
+    structured,
+    hrRecipients: () =>
+      container.resolve(hrCoreServiceToken).hrAdministrators(),
+  });
+
   const training = createTrainingAutomation({
+    container,
+    platform,
+    structured,
+    worded,
+  });
+
+  // V3-10
+  const examWork = createExamAutomation({
     container,
     platform,
     structured,
@@ -1176,14 +1361,76 @@ export function createAutomationTasks(
     'knowledgeAssistant.gapWeeklyReport': gapWeeklyReport,
     'certificationSteward.weeklyBrief': weeklyBrief,
     'certificationSteward.recertEscalation': recertEscalation,
+    'hrAssistant.probationPrep': hrPrep.probationPrep,
+    'hrAssistant.renewalPrep': hrPrep.renewalPrep,
+    'hrAssistant.compliance': (run) => hrChanges.complianceCheck(run),
+    'hrAssistant.attendanceAnomaly': hrAttendance.anomalyReminder,
     'learningCoach.gapPlans': training.gapPlans,
     'learningCoach.progressNudge': training.progressNudge,
     'practiceCoach.preExamRecommend': training.preExamRecommend,
+    // V3-09
+    'learningCoach.developmentTargetPlans': (run) =>
+      training.developmentTargetPlans(run),
+    // V3-11: the talent analyst's scheduled work and the question-quality check (profile/analyst.ts).
+    ...Object.fromEntries(
+      [
+        'talentAnalyst.levelSuggestions',
+        'talentAnalyst.monthlyReport',
+        'talentAnalyst.summaryRefresh',
+        'talentAnalyst.ruleDrafting',
+        'contentWriter.questionQuality',
+        'talentAnalyst.trainingCheck',
+      ].map((key) => [
+        key,
+        (run: AutomationRunContext) =>
+          container.resolve(profileServicesToken).analyst.scheduled[key](run),
+      ]),
+    ),
+    // V3-11 end
+    // V2-07: 待入职跟进 and 新员工回访 (09:00), 招聘助理的每日汇总 (18:00) — recruiting/tasks.ts.
+    'hrAssistant.preboarding': (run: AutomationRunContext) =>
+      container
+        .resolve(recruitingServicesToken)
+        .tasks.preboardingWork(run, platform.currentDate()),
+    'hrAssistant.newHireCheckIn': (run: AutomationRunContext) =>
+      container
+        .resolve(recruitingServicesToken)
+        .tasks.checkInWork(run, platform.currentDate()),
+    'recruitingAssistant.dailyDigest': (run: AutomationRunContext) =>
+      container.resolve(recruitingServicesToken).assistant.dailyDigest(run),
+    // V2-07 end
+    // V4-12: 绩效助理的目标草稿 (09:00; performance/assistant.ts).
+    'performanceAssistant.goalDrafts': (run: AutomationRunContext) =>
+      container
+        .resolve(performanceServicesToken)
+        .scheduled['performanceAssistant.goalDrafts'](run),
+    // V4-12 end
+    // V4-13: 季度继任检查、培训效果季报 (monthly, first month of a quarter) and 知识沉淀 (Mondays 09:00) — talent-review/.
+    ...Object.fromEntries(
+      [
+        'talentAnalyst.successorRecommend',
+        'talentAnalyst.successionRisk',
+        'talentAnalyst.trainingEffectReport',
+        'knowledgeAssistant.knowledgeDistill',
+      ].map((key) => [
+        key,
+        (run: AutomationRunContext) =>
+          container.resolve(talentReviewServicesToken).scheduled[key](run),
+      ]),
+    ),
+    // V4-13 end
   };
   /** Run in this order after the daily rules; the same day never runs one twice. */
   const afterDaily = [
+    'hrAssistant.probationPrep',
+    'hrAssistant.attendanceAnomaly',
+    // Before the renewal preparation, so a second fixed-term contract's prompt exists when it is prepared.
+    'hrAssistant.compliance',
+    'hrAssistant.renewalPrep',
     'certificationSteward.recertEscalation',
     'learningCoach.gapPlans',
+    // V3-09: the daily re-check of development targets, before the nudges like the gap plans.
+    'learningCoach.developmentTargetPlans',
     'learningCoach.progressNudge',
     'practiceCoach.preExamRecommend',
   ];
@@ -1259,6 +1506,158 @@ export function createAutomationTasks(
       );
     },
 
+    async onLeaveConflict(scheduleId) {
+      // The dedupe key holds the candidates: a changed set is suggested again.
+      const owner = await database
+        .query()
+        .selectFrom('aiAutomationSettings')
+        .select(['ownerUserId'])
+        .where('id', '=', 'hrAssistant.replacementSuggest')
+        .executeTakeFirst();
+      let key = `schedule:${scheduleId}`;
+      let found:
+        Awaited<ReturnType<typeof hrAttendance.candidatesFor>> | undefined;
+      if (owner?.ownerUserId) {
+        const ctx = {
+          authz: await scopeForUser(platform.authz, str(owner.ownerUserId)),
+          userId: str(owner.ownerUserId),
+        };
+        found = await container
+          .resolve(scheduleServiceToken)
+          .candidates(ctx, scheduleId)
+          .catch(() => undefined);
+        const cell = await database
+          .query()
+          .selectFrom('shiftSchedules')
+          .select(['checkResult'])
+          .where('id', '=', scheduleId)
+          .executeTakeFirst();
+        const leaves = json<{ rule?: string; leaveRequestId?: string }[]>(
+          cell?.checkResult,
+          [],
+        )
+          .filter((c) => c.rule === 'leaveConflict')
+          .map((c) => c.leaveRequestId ?? '')
+          .sort();
+        key = `schedule:${scheduleId}:${leaves.join(',')}:${(found?.candidates ?? []).map((c) => c.employeeId).join(',')}`;
+      }
+      return automation.run(
+        'hrAssistant.replacementSuggest',
+        'event',
+        { triggerRef: { scheduleId }, dedupeKey: key },
+        (run) => hrAttendance.replacementSuggest(run, scheduleId, found),
+      );
+    },
+
+    // V4-14 排班资质冲突的顶班推荐: the same HR assistant work, with candidates holding the shift's certifications.
+    onQualificationConflict(scheduleId, dedupeKey) {
+      return automation.run(
+        'hrAssistant.replacementSuggest',
+        'event',
+        { triggerRef: { scheduleId, reason: 'certificationMissing' }, dedupeKey },
+        (run) => hrAttendance.replacementSuggest(run, scheduleId),
+      );
+    },
+
+    onAttendanceMonthGenerated(month, trigger) {
+      return automation.run(
+        'hrAssistant.monthEndCheck',
+        trigger === 'manual' ? 'manual' : 'event',
+        { triggerRef: { month }, dedupeKey: `month:${month}` },
+        (run) => hrAttendance.monthEndCheck(run, month),
+      );
+    },
+
+    onDocumentReadyForConflicts(documentId) {
+      return automation.run(
+        'knowledgeAssistant.conflictCheck',
+        'event',
+        { triggerRef: { documentId }, dedupeKey: `document:${documentId}` },
+        (run) => conflictCheck(run, documentId),
+      );
+    },
+
+    async onOrgSyncFinished(syncRun) {
+      if (syncRun.mode !== 'full') return undefined;
+      const row = await database
+        .query()
+        .selectFrom('orgSyncRuns')
+        .select(['triggeredBy'])
+        .where('id', '=', syncRun.id)
+        .executeTakeFirst();
+      const starter = row?.triggeredBy ? [str(row.triggeredBy)] : [];
+      return automation.run(
+        'hrAssistant.syncExplain',
+        'event',
+        {
+          triggerRef: { syncRunId: syncRun.id },
+          dedupeKey: `sync:${syncRun.id}`,
+        },
+        (run) => hrSync.syncExplain(run, starter),
+      );
+    },
+
+    async explainIncrementalSync() {
+      const merge = Number(
+        (await automation.paramsOf('hrAssistant.syncExplain')).mergeMinutes ??
+          60,
+      );
+      const { issues } = await container
+        .resolve(orgSyncServiceToken)
+        .currentIssues();
+      const waiting = issues
+        .filter((i) => i.status === 'open' && !i.aiExplainedAt && i.firstSeenAt)
+        .map((i) => Date.parse(i.firstSeenAt!));
+      if (!waiting.length || Date.now() - Math.min(...waiting) < merge * 60_000)
+        return undefined;
+      return automation.run(
+        'hrAssistant.syncExplain',
+        'event',
+        {
+          triggerRef: { merged: true },
+          dedupeKey: `sync-merge:${Math.floor(Date.now() / (merge * 60_000))}`,
+        },
+        (run) => hrSync.syncExplain(run),
+      );
+    },
+
+    onChecklistChanged(checklistId) {
+      return automation.run(
+        'hrAssistant.checklistNotes',
+        'event',
+        {
+          triggerRef: { checklistId },
+          // Each version of the items gets its notes once; the task skips when they are current.
+          dedupeKey: `checklist:${checklistId}:${Date.now()}`,
+        },
+        (run) => hrChanges.checklistNotes(run, checklistId),
+      );
+    },
+
+    onComplianceTrigger(employeeId) {
+      return automation.run(
+        'hrAssistant.compliance',
+        'event',
+        { triggerRef: { employeeId }, dedupeKey: `compliance:${employeeId}:${Date.now()}` },
+        (run) => hrChanges.complianceCheck(run, employeeId),
+      );
+    },
+
+    onAttachmentUploaded(input) {
+      return automation.run(
+        'hrAssistant.extractAttachment',
+        'event',
+        {
+          triggerRef: {
+            attachmentId: input.attachmentId,
+            uploaderUserId: input.uploaderUserId,
+          },
+          dedupeKey: `attachment:${input.attachmentId}`,
+        },
+        (run) => hrPrep.extractAttachment(run, input),
+      );
+    },
+
     async rerunImportCheck(ctx, batchId) {
       await authorizeAction(ctx.authz, 'talent.hrAssistant', 'configure');
       return automation.run(
@@ -1288,6 +1687,18 @@ export function createAutomationTasks(
           const batchId = ref('batchId');
           return (run) => hrAssistant.importCheck(run, batchId);
         },
+        'hrAssistant.syncExplain': () => (run) => hrSync.syncExplain(run),
+        'knowledgeAssistant.conflictCheck': () => {
+          const documentId = ref('documentId');
+          return (run) => conflictCheck(run, documentId);
+        },
+        'hrAssistant.extractAttachment': () => {
+          const input = {
+            attachmentId: ref('attachmentId'),
+            uploaderUserId: ref('uploaderUserId'),
+          };
+          return (run) => hrPrep.extractAttachment(run, input);
+        },
         'contentWriter.draftCourseFromDocument': () => {
           const documentId = ref('documentId');
           return (run) => draftCourseFromDocument(run, documentId);
@@ -1300,14 +1711,59 @@ export function createAutomationTasks(
           const courseId = ref('courseId');
           return (run) => training.draftScenarioOnPublish(run, courseId);
         },
+        // V3-09
+        'learningCoach.jobEventPlans': () => {
+          const eventId = ref('jobEventId');
+          return (run) => training.jobEventPlan(run, eventId);
+        },
         'certificationSteward.remedialLearning': () => {
           const attemptId = ref('attemptId');
           return (run) => remedialLearning(run, attemptId);
         },
+        // V3-10
+        'examiner.gradingSuggestion': () => {
+          const attemptId = ref('attemptId');
+          return (run) => examWork.gradingSuggestion(run, attemptId);
+        },
+        'learningCoach.examFailedPlan': () => {
+          const attemptId = ref('attemptId');
+          return (run) => examWork.examFailedPlan(run, attemptId);
+        },
+        'certificationSteward.qualificationPrep': () => {
+          const certificateId = ref('certificateId');
+          return (run) => examWork.qualificationPrep(run, certificateId);
+        },
       };
-      const work = scheduled[task] ?? events[task]?.();
+      const work =
+        scheduled[task] ??
+        events[task]?.() ??
+        // V3-11: the coach's recommendation content and the writer's version revision.
+        container.resolve(profileServicesToken).analyst.retry(task, triggerRef) ??
+        // V4-12: the performance assistant's event work.
+        container.resolve(performanceServicesToken).retry(task, triggerRef) ??
+        // V4-13: the talent-review step's event work.
+        container.resolve(talentReviewServicesToken).retry(task, triggerRef);
       if (!work) throw new HrError('AUTOMATION_RETRY_UNSUPPORTED', 400);
       return automation.run(task, 'retry', { triggerRef }, work);
+    },
+
+    // V3-09: idempotent through the plan's triggerRef, so a retried event starts a run that skips.
+    onJobEventProcessed(eventId) {
+      return automation.run(
+        'learningCoach.jobEventPlans',
+        'event',
+        { triggerRef: { jobEventId: eventId } },
+        (run) => training.jobEventPlan(run, eventId),
+      );
+    },
+
+    onAssessmentRecorded(employeeId) {
+      return automation.run(
+        'learningCoach.developmentTargetPlans',
+        'event',
+        { triggerRef: { employeeId } },
+        (run) => training.developmentTargetPlans(run, employeeId),
+      );
     },
 
     onRecertificationExhausted(attemptId) {
@@ -1316,6 +1772,71 @@ export function createAutomationTasks(
         'event',
         { triggerRef: { attemptId }, dedupeKey: `attempt:${attemptId}` },
         (run) => remedialLearning(run, attemptId),
+      );
+    },
+
+    // V3-10
+    async onAttemptAwaitingGrading(attemptId) {
+      // One suggestion per attempt: a repeated trigger is a duplicate.
+      const outcome = await automation.run(
+        'examiner.gradingSuggestion',
+        'event',
+        { triggerRef: { attemptId }, dedupeKey: `examiner:${attemptId}` },
+        (run) => examWork.gradingSuggestion(run, attemptId),
+      );
+      if (outcome.status === 'duplicate') return outcome;
+      // Whatever the examiner did, the instructor is told once; the notice says whether suggestions exist.
+      const row = await database
+        .query()
+        .selectFrom('examAttempts')
+        .innerJoin('exams', 'exams.id', 'examAttempts.examId')
+        .select([
+          'exams.id as examId',
+          'exams.title as title',
+          'exams.ownerUserId as ownerUserId',
+          'examAttempts.employeeId as employeeId',
+        ])
+        .where('examAttempts.id', '=', attemptId)
+        .executeTakeFirst();
+      if (row) {
+        const suggested =
+          outcome.status === 'succeeded' &&
+          Number(
+            (outcome.output as { suggested?: number } | undefined)?.suggested ??
+              0,
+          ) > 0;
+        await platform.notify({
+          key: `attempt:${attemptId}:grading`,
+          userIds: [str(row.ownerUserId)],
+          message: suggested ? 'examGradingNeededAi' : 'examGradingNeeded',
+          params: {
+            title: str(row.title),
+            name: (await platform.employee(str(row.employeeId)))?.name ?? '',
+          },
+          path: `/talent/exams/${str(row.examId)}?tab=grading`,
+        });
+      }
+      return outcome;
+    },
+
+    onExamFailed(attemptId) {
+      return automation.run(
+        'learningCoach.examFailedPlan',
+        'event',
+        { triggerRef: { attemptId }, dedupeKey: `examFailed:${attemptId}` },
+        (run) => examWork.examFailedPlan(run, attemptId),
+      );
+    },
+
+    onCertificateQualified(certificateId) {
+      return automation.run(
+        'certificationSteward.qualificationPrep',
+        'event',
+        {
+          triggerRef: { certificateId },
+          dedupeKey: `qualification:${certificateId}`,
+        },
+        (run) => examWork.qualificationPrep(run, certificateId),
       );
     },
   };

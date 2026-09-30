@@ -106,13 +106,15 @@ export default function HrReportsPage(): ReactElement {
   const typeConfig = useMemo(
     () =>
       Object.fromEntries(
-        ['fullTime', 'partTime', 'intern', 'outsourced'].map((type, i) => [
-          type,
-          {
-            label: t(`talent.employmentType.${type}`),
-            color: `var(--chart-${i + 1})`,
-          },
-        ]),
+        ['fullTime', 'partTime', 'intern', 'outsourced', 'dispatched'].map(
+          (type, i) => [
+            type,
+            {
+              label: t(`talent.employmentType.${type}`),
+              color: `var(--chart-${i + 1})`,
+            },
+          ],
+        ),
       ) satisfies ChartConfig,
     [t],
   );

@@ -5,6 +5,16 @@ import * as XLSX from 'xlsx';
 
 import { authorizeAction, policyOf, tryAuthorizeAction } from './authorize.js';
 import {
+  asText,
+  coerceValue,
+  displayValue,
+  fieldLabel,
+  readValues,
+  type CustomFieldDefinition,
+  type CustomFieldPlacement,
+  type CustomFieldService,
+} from './custom-fields.js';
+import {
   createFrameworkService,
   toCompetency,
   toLevel,
@@ -18,7 +28,14 @@ import {
   type Position,
   type PositionRequirement,
 } from './framework-service.js';
+import {
+  classifyJobChange,
+  loadPositionGrades,
+  recordJobEvent,
+  type JobEventProcessor,
+} from './job-events.js';
 import type { OrganizationService } from './organization-service.js';
+import type { PersonnelSettingsService } from './personnel-settings.js';
 import { bool } from './platform.js';
 import {
   HrError,
@@ -71,6 +88,8 @@ const EMPLOYEE_OWN_TABLES = [
   'employeeEducations',
   'employeeExperiences',
   'employeeEmergencyContacts',
+  // V2-05 creates balances on the onboard event; they go with a mistakenly imported employee.
+  'leaveBalances',
 ] as const;
 
 /** Manager-chain walks stop here, so a loop in imported data cannot hang the server. */
@@ -87,6 +106,8 @@ export const EMPLOYMENT_TYPES = [
   'partTime',
   'intern',
   'outsourced',
+  // V2-06: 派遣 workers are paid by their agency and get no payslip here.
+  'dispatched',
 ] as const;
 export const GENDERS = ['male', 'female', 'other'] as const;
 export const ID_TYPES = ['idCard', 'passport', 'other'] as const;
@@ -120,12 +141,18 @@ export interface EmployeeRecord {
   leaveReason: string | null;
   /** The Excel import that last created or updated this employee. */
   lastImportBatchId: string | null;
+  /** V1-03: the office-suite member the employee is bound to, and whether a sync may move them. */
+  externalProvider?: string | null;
+  externalUserId?: string | null;
+  syncLocked?: boolean;
   // Present only when the caller may read them.
   mobile?: string | null;
   idNumber?: string | null;
   birthDate?: string | null;
   address?: string | null;
   note?: string | null;
+  /** 界面追加字段: values the caller may read, keyed by the field's internal key. */
+  customFields?: Record<string, unknown>;
 }
 
 export interface EmployeeListItem extends EmployeeRecord {
@@ -167,12 +194,15 @@ export interface EmployeeDetail {
   positionTitle: string | null;
   managerName: string | null;
   userName: string | null;
-  /** Department, position and status follow personnel actions once the employee has any event. */
+  /** Department, position and status change only through personnel actions or 更正任职信息. */
   coreFieldsLocked: boolean;
+  /** V1-03, external mode: a bound employee's department, position, manager and status come from the sync. */
+  syncManaged: boolean;
   can: {
     update: boolean;
     linkUser: boolean;
     markLeave: boolean;
+    correctJob: boolean;
     /** Only an employee without a login account; the server also checks nothing references them. */
     delete: boolean;
     assess: boolean;
@@ -201,6 +231,12 @@ export interface ImportRow {
   action: 'create' | 'update' | 'skip';
   /** A title that matches no enabled position: the import creates it. */
   newPosition: string | null;
+  /** V1-03, external mode: the employee follows the office suite; department, position and manager are skipped. */
+  syncManaged?: boolean;
+  /** 界面追加字段 with the import placement: the file's cells, keyed by the field's internal key. */
+  customFields?: Record<string, string>;
+  /** Which added fields failed, for the preview. */
+  customFieldErrors?: { key: string; label: string; code: string }[];
 }
 
 export interface ImportPreview {
@@ -235,7 +271,10 @@ export interface TalentService extends FrameworkService {
       /** Links from the health-check report: a set of employees, an import batch, a quick filter. */
       ids?: readonly string[];
       batchId?: string;
-      quick?: 'noPosition' | 'noManager';
+      /** hasGaps: 待补能力数 > 0 (V3-08). */
+      quick?: 'noPosition' | 'noManager' | 'hasGaps';
+      /** 界面追加字段 with the filter placement: key → value (text contains, others equal). */
+      custom?: Readonly<Record<string, string>>;
     },
   ): Promise<{
     items: EmployeeListItem[];
@@ -265,7 +304,13 @@ export interface TalentService extends FrameworkService {
   markLeave(
     ctx: ActorContext,
     id: string,
-    input: { leaveDate?: string; leaveReason?: string },
+    input: { leaveDate?: string; leaveReason?: string; note?: string },
+  ): Promise<EmployeeRecord>;
+  /** 更正任职信息: fixes a data-entry mistake in department, position or status, with a reason, as a manual job event. */
+  correctJob(
+    ctx: ActorContext,
+    id: string,
+    input: unknown,
   ): Promise<EmployeeRecord>;
   gaps(
     ctx: ActorContext,
@@ -277,7 +322,7 @@ export interface TalentService extends FrameworkService {
     employeeId: string,
     input: unknown,
   ): Promise<AssessmentRow>;
-  importTemplate(): Buffer;
+  importTemplate(): Promise<Buffer>;
   importPreview(ctx: ActorContext, file: Buffer): Promise<ImportPreview>;
   importCommit(
     ctx: ActorContext,
@@ -316,10 +361,22 @@ export interface TalentService extends FrameworkService {
       /** Links from the health-check report: a set of employees, an import batch, a quick filter. */
       ids?: readonly string[];
       batchId?: string;
-      quick?: 'noPosition' | 'noManager';
+      /** hasGaps: 待补能力数 > 0 (V3-08). */
+      quick?: 'noPosition' | 'noManager' | 'hasGaps';
+      custom?: Readonly<Record<string, string>>;
     },
     locale: string,
   ): Promise<Buffer>;
+  /**
+   * Writes an employee's added-field values inside the caller's transaction,
+   * for documents that carry them (the onboarding action, a change request).
+   * The caller has already authorized the write.
+   */
+  writeCustomFields(
+    connection: DatabaseConnection,
+    employeeId: string,
+    values: Record<string, unknown>,
+  ): Promise<void>;
   /** The employee record of a user, read without authorization; for internal callers. */
   employeeOfUser(
     userId: string,
@@ -361,6 +418,9 @@ const BASE_FIELDS = [
   'leaveDate',
   'leaveReason',
   'lastImportBatchId',
+  'externalProvider',
+  'externalUserId',
+  'syncLocked',
   'mobile',
   'idNumber',
   'birthDate',
@@ -394,6 +454,11 @@ export function toEmployee(row: Record<string, unknown>): EmployeeRecord {
     leaveReason: opt('leaveReason'),
     lastImportBatchId: opt('lastImportBatchId'),
   };
+  if ('externalUserId' in row) {
+    record.externalProvider = opt('externalProvider');
+    record.externalUserId = opt('externalUserId');
+    record.syncLocked = row.syncLocked === true || row.syncLocked === 1;
+  }
   if ('mobile' in row) record.mobile = opt('mobile');
   if ('idNumber' in row) record.idNumber = opt('idNumber');
   if ('birthDate' in row)
@@ -426,6 +491,15 @@ export interface TalentServiceDeps {
   users: UserAdministrationService;
   /** Called after an import commits, with its batch number: starts the HR assistant's health check. */
   onEmployeesImported?: () => ((batchId: string) => void) | undefined;
+  /** V3-08: an assessment was recorded (after it is stored); runs in the background. */
+  onAssessmentRecorded?: () => ((employeeId: string) => void) | undefined;
+  settings: PersonnelSettingsService;
+  /** Resolved lazily: the processor's handlers are registered at boot. */
+  jobEvents: () => JobEventProcessor;
+  /** V1-03: the data master; in external mode bound employees follow the office suite. */
+  orgMaster?: () => Promise<'nocohr' | 'external'>;
+  /** 界面追加字段 (V1-01). */
+  customFields: CustomFieldService;
 }
 
 export function createTalentService(deps: TalentServiceDeps): TalentService {
@@ -543,12 +617,14 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
     return map;
   }
 
+  /** 待补能力数 (V3-08): confirmed mandatory requirements of the position with a gap, the rule of competency.pendingCounts. */
   function gapCount(
     requirements: readonly PositionRequirement[],
     levels: Map<string, number> | undefined,
   ): number {
     return requirements.filter(
-      (r) => (levels?.get(r.competencyId) ?? 0) < r.requiredLevel,
+      (r) =>
+        r.mandatory && (levels?.get(r.competencyId) ?? 0) < r.requiredLevel,
     ).length;
   }
 
@@ -568,6 +644,7 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       EMPLOYEE,
       'viewSensitive',
     );
+    let sensitiveRecord = false;
     if (sensitive) {
       const extra = await database
         .repository('employees')
@@ -576,12 +653,20 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       if (extra) {
         // The sensitive read returns only its own columns; copy exactly those.
         const row = extra as Record<string, unknown>;
+        sensitiveRecord = true;
         employee.mobile = row.mobile == null ? null : str(row.mobile);
         employee.idNumber = row.idNumber == null ? null : str(row.idNumber);
         employee.birthDate = toDateOnly(row.birthDate as string | null);
         employee.address = row.address == null ? null : str(row.address);
       }
     }
+    // Added fields: the record is readable (the scoped read above found it); sensitive ones need the capability.
+    employee.customFields = deps.customFields.project(
+      await deps.customFields.list('employees'),
+      (await storedCustomFields([employee.id])).get(employee.id),
+      // Sensitive added fields follow the built-in ones: only when this record's sensitive read succeeded.
+      { sensitive: sensitiveRecord, includeInactive: true },
+    );
     const notes = await tryAuthorizeAction(ctx.authz, EMPLOYEE, 'viewNotes');
     if (notes) {
       const extra = await database
@@ -613,17 +698,11 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
           .where('id', '=', employee.managerEmployeeId)
           .executeTakeFirst()
       : undefined;
-    const events = await database
-      .query()
-      .selectFrom('jobEvents')
-      .select(['id'])
-      .where('employeeId', '=', employee.id)
-      .limit(1)
-      .execute();
     const [
       update,
       linkUser,
       markLeave,
+      correctJobAllowed,
       assess,
       viewAssessments,
       viewSensitive,
@@ -637,6 +716,7 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       can(ctx, EMPLOYEE, 'update'),
       can(ctx, EMPLOYEE, 'linkUser'),
       can(ctx, EMPLOYEE, 'markLeave'),
+      can(ctx, EMPLOYEE, 'correctJob'),
       can(ctx, ASSESSMENT, 'create'),
       can(ctx, ASSESSMENT, 'view'),
       can(ctx, EMPLOYEE, 'viewSensitive'),
@@ -656,11 +736,18 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         : null,
       managerName: manager ? String(manager.name) : null,
       userName: await userName(employee.userId),
-      coreFieldsLocked: events.length > 0,
+      coreFieldsLocked: true,
+      syncManaged:
+        Boolean(employee.externalUserId) &&
+        (await deps.orgMaster?.()) === 'external',
       can: {
         update,
         linkUser,
         markLeave,
+        correctJob:
+          correctJobAllowed &&
+          employee.status !== 'leave' &&
+          (await deps.settings.read('jobInfo')).value.allowCorrection,
         assess,
         viewAssessments,
         viewSensitive,
@@ -912,7 +999,11 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         throw new HrError('EMPLOYEE_NO_TAKEN', 409);
     }
     if (typeof values.userId === 'string') {
-      const user = await users.get(values.userId).catch(() => undefined);
+      // Inside the caller's transaction: SQLite has one connection, so read through it.
+      const user = await users
+        .withConnection(connection)
+        .get(values.userId)
+        .catch(() => undefined);
       if (!user) throw new HrError('USER_NOT_FOUND', 404);
       const existing = await connection.query
         .selectFrom('employees')
@@ -960,27 +1051,8 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         .where('id', '=', employee.id)
         .execute();
     }
-    if (nextStatus === 'leave') {
-      // Leaving ends the learning the employee had not finished, locked path steps and session enrollments included.
-      const stamp = new Date();
-      await connection.query
-        .updateTable('assignments')
-        .set({ status: 'cancelled', cancelledAt: stamp, updatedAt: stamp })
-        .where('employeeId', '=', employee.id)
-        .where('status', 'in', [
-          'notStarted',
-          'inProgress',
-          'overdue',
-          'locked',
-        ])
-        .execute();
-      await connection.query
-        .updateTable('trainingEnrollments')
-        .set({ status: 'cancelled', updatedAt: stamp })
-        .where('employeeId', '=', employee.id)
-        .where('status', '=', 'enrolled')
-        .execute();
-    }
+    // Leaving ends the employee's learning: the job-event handler does that
+    // for the offboard event (总纲 rule 2), not this write.
     if (employee.userId) {
       if (nextStatus === 'leave') {
         await organization.deactivateMemberships(employee.userId, connection);
@@ -1005,6 +1077,30 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       await authz.permissionSets.notifyAssignmentsChanged({ type: 'user', id });
   }
 
+  /** Hands committed events to their handlers; an event whose handler fails stays for the daily retry. */
+  async function processEvents(ids: readonly string[]): Promise<void> {
+    if (!ids.length) return;
+    await deps
+      .jobEvents()
+      .process(ids)
+      .catch(() => 0);
+  }
+
+  async function gradesFor(
+    connection: DatabaseConnection,
+    fromPositionId: string | null,
+    toPositionId: string | null,
+  ) {
+    const grades = await loadPositionGrades(connection.query, [
+      fromPositionId,
+      toPositionId,
+    ]);
+    return {
+      from: fromPositionId ? grades.get(fromPositionId) : undefined,
+      to: toPositionId ? grades.get(toPositionId) : undefined,
+    };
+  }
+
   async function listWithPolicy(
     ctx: ActorContext,
     action: string,
@@ -1017,7 +1113,9 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       /** Links from the health-check report: a set of employees, an import batch, a quick filter. */
       ids?: readonly string[];
       batchId?: string;
-      quick?: 'noPosition' | 'noManager';
+      /** hasGaps: 待补能力数 > 0 (V3-08). */
+      quick?: 'noPosition' | 'noManager' | 'hasGaps';
+      custom?: Readonly<Record<string, string>>;
     },
   ) {
     const policies = await authorizeAction(
@@ -1079,11 +1177,119 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
           ]),
         sort: (s) => [s.field('employeeNo').asc()],
       });
-    return rows.map((r) => toEmployee(r as Record<string, unknown>));
+    let employees = rows.map((r) => toEmployee(r as Record<string, unknown>));
+    if (filters.quick === 'hasGaps') {
+      const [requirements, levels] = await Promise.all([
+        confirmedRequirements(employees.map((e) => e.positionId)),
+        currentLevels(employees.map((e) => e.id)),
+      ]);
+      employees = employees.filter(
+        (e) =>
+          e.positionId &&
+          gapCount(requirements.get(e.positionId) ?? [], levels.get(e.id)) > 0,
+      );
+    }
+    const custom = Object.entries(filters.custom ?? {}).filter(
+      ([, value]) => value.trim() !== '',
+    );
+    if (!custom.length) return employees;
+    // Added fields are filtered after the scoped read: the scope decides who is listed, the filter narrows it.
+    const definitions = await customFieldsFor(ctx, 'filter');
+    const stored = await storedCustomFields(employees.map((e) => e.id));
+    return employees.filter((employee) =>
+      custom.every(([key, wanted]) => {
+        const definition = definitions.find((d) => d.key === key);
+        if (!definition) return true;
+        const value = stored.get(employee.id)?.[key];
+        if (value == null) return false;
+        if (definition.type === 'text' || definition.type === 'textarea')
+          return asText(value).toLowerCase().includes(wanted.toLowerCase());
+        if (definition.type === 'multiSelect')
+          return Array.isArray(value) && value.includes(wanted);
+        const expected = coerceValue(definition, wanted);
+        return expected.ok && asText(expected.value) === asText(value);
+      }),
+    );
+  }
+
+  /** The added fields of `employees` the caller may read, optionally for one placement. */
+  async function customFieldsFor(
+    ctx: ActorContext,
+    placement?: CustomFieldPlacement,
+    includeInactive = false,
+  ): Promise<CustomFieldDefinition[]> {
+    // Across many records (lists, filters, exports, edits) sensitive fields are for HR administrators only;
+    // the sensitive capability can be scoped to the person, which a list cannot honour row by row.
+    const sensitive = await ctx.authz.can({
+      resource: { type: 'settings', id: 'talent.hr' },
+      action: 'administer',
+    });
+    return deps.customFields.visible(
+      await deps.customFields.list('employees'),
+      { sensitive, placement, includeInactive },
+    );
+  }
+
+  async function storedCustomFields(
+    ids: readonly string[],
+    connection?: DatabaseConnection,
+  ): Promise<Map<string, Record<string, unknown>>> {
+    if (!ids.length) return new Map();
+    const rows = await (connection ? connection.query : database.query())
+      .selectFrom('employees')
+      .select(['id', 'customFields'])
+      .where('id', 'in', [...ids])
+      .execute();
+    return new Map(rows.map((r) => [str(r.id), readValues(r.customFields)]));
+  }
+
+  /**
+   * Writes submitted added-field values: only fields the caller may write
+   * (sensitive ones need the sensitive capability), merged into the stored
+   * values. `enforceRequired` applies on creation.
+   */
+  async function writeCustom(
+    definitions: readonly CustomFieldDefinition[],
+    connection: DatabaseConnection,
+    employeeId: string,
+    input: unknown,
+    enforceRequired: boolean,
+  ): Promise<void> {
+    if (input === undefined) return;
+    const existing =
+      (await storedCustomFields([employeeId], connection)).get(employeeId) ??
+      {};
+    const withDefaults = enforceRequired
+      ? {
+          ...Object.fromEntries(
+            definitions
+              .filter((d) => d.defaultValue != null)
+              .map((d) => [d.key, d.defaultValue]),
+          ),
+          ...(isRecord(input) ? input : {}),
+        }
+      : input;
+    const next = deps.customFields.prepare(
+      definitions,
+      withDefaults,
+      existing,
+      {
+        enforceRequired,
+      },
+    );
+    await connection.query
+      .updateTable('employees')
+      .set({ customFields: JSON.stringify(next), updatedAt: new Date() })
+      .where('id', '=', employeeId)
+      .execute();
   }
 
   /** Checks rows against the organisation; errors block the import, new position titles only need a job family. */
   async function validateImport(rows: ImportRow[]): Promise<ImportPreview> {
+    const importDefinitions = deps.customFields.visible(
+      await deps.customFields.list('employees'),
+      { sensitive: true, placement: 'import' },
+    );
     const [departments, positions, employees, families] = await Promise.all([
       database
         .query()
@@ -1098,7 +1304,7 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       database
         .query()
         .selectFrom('employees')
-        .select(['id', 'employeeNo'])
+        .select(['id', 'employeeNo', 'departmentId', 'positionId'])
         .execute(),
       database
         .query()
@@ -1128,6 +1334,30 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         .map((p) => titleKey(str(p.title))),
     );
     const existingNos = new Set(employees.map((e) => String(e.employeeNo)));
+    const existingByNo = new Map(
+      employees.map((e) => [String(e.employeeNo), e]),
+    );
+    const activeIdByTitle = new Map(
+      positions
+        .filter((p) => bool(p.active))
+        .map((p) => [titleKey(str(p.title)), String(p.id)]),
+    );
+    // 人事设置 · 任职信息: with the switch off, an import may not move an existing employee.
+    const importMayChangeJob = (await deps.settings.read('jobInfo')).value
+      .importMayChangeJob;
+    // V1-03, external mode: bound employees' department, position and manager columns are skipped.
+    const syncManagedNos = new Set(
+      (await deps.orgMaster?.()) === 'external'
+        ? (
+            await database
+              .query()
+              .selectFrom('employees')
+              .select(['employeeNo'])
+              .where('externalUserId', 'is not', null)
+              .execute()
+          ).map((e) => str(e.employeeNo))
+        : [],
+    );
     const seen = new Set<string>();
     const newPositions: string[] = [];
     for (const row of rows) {
@@ -1173,6 +1403,57 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         if (seen.has(row.employeeNo))
           row.errors.push('IMPORT_EMPLOYEE_NO_DUPLICATE');
         seen.add(row.employeeNo);
+      }
+      const current = existingByNo.get(row.employeeNo);
+      if (current && syncManagedNos.has(row.employeeNo)) row.syncManaged = true;
+      if (
+        !importMayChangeJob &&
+        current &&
+        !row.syncManaged &&
+        !row.errors.length
+      ) {
+        const departmentId = departmentByCode.get(row.departmentCode)?.id;
+        const positionId = !row.position
+          ? null
+          : row.newPosition
+            ? `new:${row.newPosition}`
+            : str(
+                positionByCode.get(row.position)?.id ??
+                  activeIdByTitle.get(titleKey(row.position)) ??
+                  '',
+              );
+        if (
+          str(departmentId) !== current.departmentId ||
+          positionId !== current.positionId
+        )
+          row.errors.push('IMPORT_JOB_CHANGE_DISABLED');
+      }
+      if (row.customFields) {
+        row.customFieldErrors = [];
+        for (const [key, value] of Object.entries(row.customFields)) {
+          const definition = importDefinitions.find((d) => d.key === key);
+          // A column whose field was removed in between is ignored.
+          if (!definition) continue;
+          const result = coerceValue(definition, value);
+          if (!result.ok)
+            row.customFieldErrors.push({
+              key,
+              label: fieldLabel(definition, 'zh-CN'),
+              code: result.code,
+            });
+          else if (
+            result.value === null &&
+            definition.required &&
+            !existingNos.has(row.employeeNo)
+          )
+            row.customFieldErrors.push({
+              key,
+              label: fieldLabel(definition, 'zh-CN'),
+              code: 'CUSTOM_FIELD_REQUIRED',
+            });
+        }
+        if (row.customFieldErrors.length)
+          row.errors.push('CUSTOM_FIELD_INVALID');
       }
       row.action = row.errors.length
         ? 'skip'
@@ -1231,6 +1512,16 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
 
     async listEmployees(ctx, filters) {
       const employees = await listWithPolicy(ctx, 'view', filters);
+      const listed = await customFieldsFor(ctx, 'list');
+      if (listed.length) {
+        const stored = await storedCustomFields(employees.map((e) => e.id));
+        for (const employee of employees)
+          employee.customFields = deps.customFields.project(
+            listed,
+            stored.get(employee.id),
+            { sensitive: true },
+          );
+      }
       const [departments, positions, requirements, levels] = await Promise.all([
         departmentTitles(employees.map((e) => e.departmentId)),
         positionTitles(employees.map((e) => e.positionId)),
@@ -1308,8 +1599,10 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
 
     async createEmployee(ctx, input) {
       const policies = await authorizeAction(ctx.authz, EMPLOYEE, 'create');
+      // Read before the transaction: SQLite has one connection, and the transaction holds it.
+      const customDefinitions = await customFieldsFor(ctx);
       const values = parseEmployeeInput(input, false);
-      const { record, affected } = await database.transaction(
+      const { record, affected, eventId } = await database.transaction(
         async (connection) => {
           await assertReferences(values, connection, null);
           const now = new Date();
@@ -1340,16 +1633,47 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
             );
             affected.push(employee.userId);
           }
-          return { record: employee, affected };
+          await writeCustom(
+            customDefinitions,
+            connection,
+            employee.id,
+            isRecord(input) ? (input.customFields ?? {}) : {},
+            true,
+          );
+          // 补录 an employee already at work: the history starts with a manual onboard event on the hire date.
+          const eventId = await recordJobEvent(connection, {
+            employeeId: employee.id,
+            eventType: 'onboard',
+            fromDepartmentId: null,
+            toDepartmentId: employee.departmentId,
+            fromPositionId: null,
+            toPositionId: employee.positionId,
+            effectiveDate: employee.hireDate ?? today(),
+            source: 'manual',
+            actionId: null,
+            note: null,
+          });
+          return { record: employee, affected, eventId };
         },
       );
       await notifyUsers(affected);
+      await processEvents([eventId]);
       return record;
     },
 
     async updateEmployee(ctx, id, input) {
       const policies = await authorizeAction(ctx.authz, EMPLOYEE, 'update');
+      const customDefinitions = await customFieldsFor(ctx);
       const values = parseEmployeeInput(input, true);
+      const master = await deps.orgMaster?.();
+      const bound = await database
+        .query()
+        .selectFrom('employees')
+        .select(['externalUserId'])
+        .where('id', '=', id)
+        .executeTakeFirst();
+      const syncManaged =
+        master === 'external' && Boolean(bound?.externalUserId);
       const { record, affected } = await database.transaction(
         async (connection) => {
           const currentRow = await connection.query
@@ -1359,23 +1683,18 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
             .executeTakeFirst();
           if (!currentRow) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
           const current = toEmployee(currentRow);
-          const events = await connection.query
-            .selectFrom('jobEvents')
-            .select(['id'])
-            .where('employeeId', '=', id)
-            .limit(1)
-            .execute();
-          if (events.length) {
-            // Once a personnel action has taken effect, department, position and status belong to the action flow.
-            for (const key of [
-              'departmentId',
-              'positionId',
-              'status',
-            ] as const) {
-              if (values[key] !== undefined && values[key] !== current[key])
-                throw new HrError('EMPLOYEE_CORE_FIELDS_LOCKED', 409);
-            }
+          // Department, position and status change through a personnel action, or
+          // through "更正任职信息" for a data-entry mistake — never through an edit.
+          for (const key of ['departmentId', 'positionId', 'status'] as const) {
+            if (values[key] !== undefined && values[key] !== current[key])
+              throw new HrError('EMPLOYEE_CORE_FIELDS_LOCKED', 409);
           }
+          if (
+            syncManaged &&
+            values.managerEmployeeId !== undefined &&
+            values.managerEmployeeId !== current.managerEmployeeId
+          )
+            throw new HrError('EMPLOYEE_SYNC_MANAGED', 409);
           await assertReferences(values, connection, id, current);
           const core = {
             ...(typeof values.departmentId === 'string'
@@ -1402,6 +1721,18 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
               filter: { id },
               values: { ...rest, updatedAt: new Date() },
             });
+          if (isRecord(input) && input.customFields !== undefined) {
+            // The scoped read proves the caller may update this record before the added fields are written.
+            if (!(await repo.findOne({ filter: { id } })))
+              throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+            await writeCustom(
+              customDefinitions,
+              connection,
+              id,
+              input.customFields,
+              false,
+            );
+          }
           const affected = await applyCoreChange(connection, current, core, {
             positionSince:
               typeof values.positionSince === 'string'
@@ -1462,7 +1793,30 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
     },
 
     async markLeave(ctx, id, input) {
-      const policies = await authorizeAction(ctx.authz, EMPLOYEE, 'markLeave');
+      // 第一步的“标记离职”并入“更正任职信息”: the same correction, with status leave.
+      return service.correctJob(ctx, id, {
+        status: 'leave',
+        leaveDate: input.leaveDate,
+        leaveReason: input.leaveReason,
+        note: input.note,
+      });
+    },
+
+    async correctJob(ctx, id, input) {
+      const policies = await authorizeAction(ctx.authz, EMPLOYEE, 'correctJob');
+      if (!(await deps.settings.read('jobInfo')).value.allowCorrection)
+        throw new HrError('EMPLOYEE_CORRECTION_DISABLED', 409);
+      if (!isRecord(input)) throw new HrError('INVALID_INPUT', 400);
+      const note = requireString(
+        input.note,
+        'EMPLOYEE_CORRECTION_NOTE_REQUIRED',
+        { max: 2000 },
+      )!;
+      const status = optionalEnum(
+        input.status,
+        EMPLOYEE_STATUSES,
+        'INVALID_INPUT',
+      );
       const leaveDate =
         optionalDate(input.leaveDate, 'EMPLOYEE_DATE_INVALID') ?? today();
       const leaveReason = optionalEnum(
@@ -1470,42 +1824,85 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         LEAVE_REASONS,
         'INVALID_INPUT',
       );
-      const affected = await database.transaction(async (connection) => {
-        const row = await connection.query
-          .selectFrom('employees')
-          .select([...BASE_FIELDS])
-          .where('id', '=', id)
-          .executeTakeFirst();
-        if (!row) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
-        const current = toEmployee(row);
-        if (current.status === 'leave')
-          throw new HrError('EMPLOYEE_ALREADY_LEFT', 409);
-        await connection
-          .repository('employees')
-          .withPolicy(policyOf(policies, 'employees'))
-          .updateOne({
-            filter: { id },
-            values: {
-              status: 'leave',
-              leaveDate,
-              leaveReason,
-              updatedAt: new Date(),
-            },
+      const gradeOrder = (await deps.settings.read('gradeOrder')).value
+        .families;
+      const { affected, eventId } = await database.transaction(
+        async (connection) => {
+          const row = await connection.query
+            .selectFrom('employees')
+            .select([...BASE_FIELDS])
+            .where('id', '=', id)
+            .executeTakeFirst();
+          if (!row) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+          const current = toEmployee(row);
+          if (current.status === 'leave')
+            throw new HrError('EMPLOYEE_ALREADY_LEFT', 409);
+          const next = {
+            departmentId:
+              typeof input.departmentId === 'string' && input.departmentId
+                ? input.departmentId
+                : current.departmentId,
+            positionId:
+              input.positionId === undefined
+                ? current.positionId
+                : typeof input.positionId === 'string' && input.positionId
+                  ? input.positionId
+                  : null,
+            status: status ?? current.status,
+          };
+          await assertReferences(
+            { departmentId: next.departmentId, positionId: next.positionId },
+            connection,
+            id,
+            current,
+          );
+          const kind = classifyJobChange(current, next, {
+            ...(await gradesFor(
+              connection,
+              current.positionId,
+              next.positionId,
+            )),
+            gradeOrder,
           });
-        // Contracts in force end with the employment.
-        await connection.query
-          .updateTable('employmentContracts')
-          .set({ status: 'terminated', updatedAt: new Date() })
-          .where('employeeId', '=', id)
-          .where('status', '=', 'active')
-          .execute();
-        return applyCoreChange(
-          connection,
-          { ...current, status: 'leave' },
-          { status: 'leave' },
-        );
-      });
+          if (!kind) throw new HrError('EMPLOYEE_CORRECTION_NO_CHANGE', 400);
+          // Checks the caller may write this employee at all, through the record policy.
+          await connection
+            .repository('employees')
+            .withPolicy(policyOf(policies, 'employees'))
+            .updateOne({
+              filter: { id },
+              values: {
+                ...(next.status === 'leave' ? { leaveDate, leaveReason } : {}),
+                ...(kind === 'regularize' ? { regularizedAt: today() } : {}),
+                updatedAt: new Date(),
+              },
+            });
+          if (next.status === 'leave')
+            // Contracts in force end with the employment.
+            await connection.query
+              .updateTable('employmentContracts')
+              .set({ status: 'terminated', updatedAt: new Date() })
+              .where('employeeId', '=', id)
+              .where('status', '=', 'active')
+              .execute();
+          const affected = await applyCoreChange(connection, current, next);
+          const eventId = await recordJobEvent(connection, {
+            employeeId: id,
+            eventType: kind,
+            fromDepartmentId: current.departmentId,
+            toDepartmentId: next.departmentId,
+            fromPositionId: current.positionId,
+            toPositionId: next.positionId,
+            effectiveDate: next.status === 'leave' ? leaveDate : today(),
+            source: 'manual',
+            actionId: null,
+            note,
+          });
+          return { affected, eventId };
+        },
+      );
       await notifyUsers(affected);
+      await processEvents([eventId]);
       return (await readEmployee(ctx, id))!;
     },
 
@@ -1735,6 +2132,7 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
           },
         });
       const row = record as Record<string, unknown>;
+      deps.onAssessmentRecorded?.()?.(employeeId);
       return {
         id: String(row.id),
         competencyId,
@@ -1748,9 +2146,16 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       };
     },
 
-    importTemplate() {
+    async importTemplate() {
+      // Only HR administrators import, so every active field with the import placement is a column.
+      const extra = deps.customFields
+        .visible(await deps.customFields.list('employees'), {
+          sensitive: true,
+          placement: 'import',
+        })
+        .map((d) => fieldLabel(d, 'zh-CN'));
       const sheet = XLSX.utils.aoa_to_sheet([
-        [...IMPORT_COLUMNS],
+        [...IMPORT_COLUMNS, ...extra],
         [
           'QH2999',
           '张三',
@@ -1760,6 +2165,7 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
           '2026-01-15',
           'zhangsan@example.test',
           '13800000000',
+          ...extra.map(() => ''),
         ],
       ]);
       const book = XLSX.utils.book_new();
@@ -1782,9 +2188,27 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         raw: false,
         defval: '',
       });
-      const [, ...body] = rawRows;
+      const [headerRow = [], ...body] = rawRows;
       const cell = (row: unknown[], index: number): string =>
         str(row[index] ?? '').trim();
+      // Added fields are matched by their column title, so a template from before a field existed still imports.
+      const importable = deps.customFields.visible(
+        await deps.customFields.list('employees'),
+        { sensitive: true, placement: 'import' },
+      );
+      const customColumns = importable
+        .map((definition) => ({
+          definition,
+          index: headerRow.findIndex((h) => {
+            const title = str(h ?? '').trim();
+            return (
+              title === definition.label['zh-CN'] ||
+              (definition.label['en-US'] != null &&
+                title === definition.label['en-US'])
+            );
+          }),
+        }))
+        .filter((c) => c.index >= 0);
       const rows: ImportRow[] = body
         .map((row, index) => ({ row, line: index + 2 }))
         .filter(({ row }) =>
@@ -1800,6 +2224,16 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
           hireDate: normalizeDate(cell(row, 5)),
           email: cell(row, 6),
           mobile: cell(row, 7),
+          ...(customColumns.length
+            ? {
+                customFields: Object.fromEntries(
+                  customColumns.map(({ definition, index }) => [
+                    definition.key,
+                    cell(row, index),
+                  ]),
+                ),
+              }
+            : {}),
           errors: [] as string[],
           action: 'create' as const,
           newPosition: null,
@@ -1833,6 +2267,9 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         .replace(/[^a-z0-9]/giu, '')
         .slice(-4)
         .toUpperCase()}`;
+      // Settings are read before the transaction: SQLite has one connection, and the transaction holds it.
+      const gradeOrder = (await deps.settings.read('gradeOrder')).value
+        .families;
       const result = await database.transaction(async (connection) => {
         const [departments, positions] = await Promise.all([
           connection.query
@@ -1891,6 +2328,7 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         const affected: string[] = [];
         const createdIds: string[] = [];
         const updatedIds: string[] = [];
+        const eventIds: string[] = [];
         // Two passes: employees first, managers once every employee number exists.
         for (const row of preview.rows) {
           const existing = await connection.query
@@ -1917,33 +2355,43 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
                 updatedAt: stamp,
               },
             });
+            if (row.syncManaged) {
+              updatedIds.push(current.id);
+              continue;
+            }
             affected.push(
               ...(await applyCoreChange(connection, current, {
                 departmentId,
                 positionId,
               })),
             );
-            if (
-              departmentId !== current.departmentId ||
-              positionId !== current.positionId
-            ) {
-              await connection.query
-                .insertInto('jobEvents')
-                .values({
-                  id: newId(),
+            const kind = classifyJobChange(
+              current,
+              { departmentId, positionId, status: current.status },
+              {
+                ...(await gradesFor(
+                  connection,
+                  current.positionId,
+                  positionId,
+                )),
+                gradeOrder,
+              },
+            );
+            if (kind)
+              eventIds.push(
+                await recordJobEvent(connection, {
                   employeeId: current.id,
-                  eventType: 'transfer',
+                  eventType: kind,
                   fromDepartmentId: current.departmentId,
                   toDepartmentId: departmentId,
                   fromPositionId: current.positionId,
                   toPositionId: positionId,
                   effectiveDate: today(),
+                  source: 'import',
                   actionId: null,
-                  createdAt: stamp,
-                  updatedAt: stamp,
-                })
-                .execute();
-            }
+                  note: null,
+                }),
+              );
             updatedIds.push(current.id);
           } else {
             const id = newId();
@@ -1962,10 +2410,8 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
                 updatedAt: stamp,
               },
             });
-            await connection.query
-              .insertInto('jobEvents')
-              .values({
-                id: newId(),
+            eventIds.push(
+              await recordJobEvent(connection, {
                 employeeId: id,
                 eventType: 'onboard',
                 fromDepartmentId: null,
@@ -1973,16 +2419,44 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
                 fromPositionId: null,
                 toPositionId: values.positionId,
                 effectiveDate: values.hireDate ?? today(),
+                source: 'import',
                 actionId: null,
-                createdAt: stamp,
-                updatedAt: stamp,
-              })
-              .execute();
+                note: null,
+              }),
+            );
             createdIds.push(id);
           }
         }
+        // Added fields: an empty cell leaves a stored value alone, so a partial template does not erase data.
+        const importDefinitions = deps.customFields.visible(
+          await deps.customFields.list('employees', connection),
+          { sensitive: true, placement: 'import' },
+        );
         for (const row of preview.rows) {
-          if (!row.managerEmployeeNo) continue;
+          if (!row.customFields) continue;
+          const filled = Object.fromEntries(
+            Object.entries(row.customFields).filter(([, v]) => v !== ''),
+          );
+          if (!Object.keys(filled).length) continue;
+          const target = await connection.query
+            .selectFrom('employees')
+            .select(['id', 'customFields'])
+            .where('employeeNo', '=', row.employeeNo)
+            .executeTakeFirst();
+          if (!target) continue;
+          const next = deps.customFields.prepare(
+            importDefinitions,
+            filled,
+            readValues(target.customFields),
+          );
+          await connection.query
+            .updateTable('employees')
+            .set({ customFields: JSON.stringify(next), updatedAt: stamp })
+            .where('id', '=', str(target.id))
+            .execute();
+        }
+        for (const row of preview.rows) {
+          if (!row.managerEmployeeNo || row.syncManaged) continue;
           const manager = await connection.query
             .selectFrom('employees')
             .select(['id'])
@@ -2014,12 +2488,14 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
           .execute();
         return {
           affected,
+          eventIds,
           created: createdIds.length,
           updated: updatedIds.length,
           createdPositions: createdPositionIds.length,
         };
       });
       await notifyUsers(result.affected);
+      await processEvents(result.eventIds);
       // After the commit: the HR assistant's health check runs in the background.
       deps.onEmployeesImported?.()?.(batchId);
       return {
@@ -2096,6 +2572,28 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
           .executeTakeFirst();
         if (!row) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
         if (row.userId) throw new HrError('EMPLOYEE_DELETE_HAS_USER', 409);
+        // Only the records an import itself wrote go with the employee.
+        const events = await connection.query
+          .selectFrom('jobEvents')
+          .select(['id', 'actionId'])
+          .where('employeeId', '=', id)
+          .execute();
+        if (events.some((e) => e.actionId))
+          throw new HrError('EMPLOYEE_DELETE_REFERENCED', 409);
+        const eventIds = events.map((e) => String(e.id));
+        if (eventIds.length) {
+          // V3-09: the learning tasks those events assigned go too. Work already started
+          // (records, enrollments, attempts) still blocks the delete below.
+          await connection.query
+            .deleteFrom('assignments')
+            .where('employeeId', '=', id)
+            .where('jobEventId', 'in', eventIds)
+            .execute();
+          await connection.query
+            .deleteFrom('jobChangeChecklists')
+            .where('jobEventId', 'in', eventIds)
+            .execute();
+        }
         for (const [table, column] of EMPLOYEE_REFERENCES) {
           const hit = await connection.query
             .selectFrom(table)
@@ -2105,14 +2603,6 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
             .executeTakeFirst();
           if (hit) throw new HrError('EMPLOYEE_DELETE_REFERENCED', 409);
         }
-        // Only the records an import itself wrote go with the employee.
-        const events = await connection.query
-          .selectFrom('jobEvents')
-          .select(['id', 'actionId'])
-          .where('employeeId', '=', id)
-          .execute();
-        if (events.some((e) => e.actionId))
-          throw new HrError('EMPLOYEE_DELETE_REFERENCED', 409);
         await connection.query
           .deleteFrom('jobEvents')
           .where('employeeId', '=', id)
@@ -2129,9 +2619,26 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
       });
     },
 
+    async writeCustomFields(connection, employeeId, values) {
+      const definitions = await deps.customFields.list('employees', connection);
+      const existing =
+        (await storedCustomFields([employeeId], connection)).get(employeeId) ??
+        {};
+      const next = deps.customFields.prepare(definitions, values, existing);
+      await connection.query
+        .updateTable('employees')
+        .set({ customFields: JSON.stringify(next), updatedAt: new Date() })
+        .where('id', '=', employeeId)
+        .execute();
+    },
+
     async exportRoster(ctx, filters, locale) {
       const employees = await listWithPolicy(ctx, 'export', filters);
       const sensitive = await can(ctx, EMPLOYEE, 'viewSensitive');
+      const exported = await customFieldsFor(ctx, 'export');
+      const exportedValues = exported.length
+        ? await storedCustomFields(employees.map((e) => e.id))
+        : new Map<string, Record<string, unknown>>();
       const [departments, positions] = await Promise.all([
         departmentTitles(
           employees.map((e) => e.departmentId),
@@ -2166,6 +2673,7 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
             '入职日期',
             '邮箱',
             ...(sensitive ? ['手机', '证件号'] : []),
+            ...exported.map((d) => fieldLabel(d, locale)),
           ]
         : [
             'Employee no',
@@ -2177,6 +2685,7 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
             'Hire date',
             'Email',
             ...(sensitive ? ['Mobile', 'ID number'] : []),
+            ...exported.map((d) => fieldLabel(d, locale)),
           ];
       const data = employees.map((e) => [
         e.employeeNo,
@@ -2197,6 +2706,9 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
               ) ?? '',
             ]
           : []),
+        ...exported.map((d) =>
+          displayValue(d, exportedValues.get(e.id)?.[d.key], locale),
+        ),
       ]);
       const sheet = XLSX.utils.aoa_to_sheet([header, ...data]);
       const book = XLSX.utils.book_new();

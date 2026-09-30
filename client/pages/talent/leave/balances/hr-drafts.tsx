@@ -2,6 +2,7 @@ import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { Link, useLocation } from 'react-router';
 import { DataTable } from '@/components/data-table';
+import { useAppTimeZone } from '@/components/talent/attendance/app-time';
 import { BlockSkeleton } from '@/components/talent/states';
 import { useRemote } from '@/components/talent/use-remote';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ export function HrLeaveDrafts() {
     !hr.isPending &&
     !request.error &&
     !hr.error;
+  const zone = useAppTimeZone(allowed);
   const drafts = useRemote<HrDraft[]>(
     allowed ? 'talent/leave/requests' : null,
     { source: 'hr', status: 'draft', refresh: location.key },
@@ -59,6 +61,7 @@ export function HrLeaveDrafts() {
   const format = new Intl.DateTimeFormat(i18n.language, {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: zone,
   });
   return (
     <Card>

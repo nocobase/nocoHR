@@ -23,6 +23,10 @@ vi.mock('../../client/routing/client-route.js', () => ({
   ClientRoute: () => <p>Preferences content</p>,
 }));
 vi.mock('../../client/theme/index.js', () => ({ ThemeSettings: () => null }));
+// The AI assistant button checks a permission, which needs the authorization runtime these shell tests leave out.
+vi.mock('../../client/layouts/components/ai-assistant-button.js', () => ({
+  AiAssistantButton: () => null,
+}));
 vi.mock('../../client/layouts/components/user-menu.js', () => ({
   UserMenu: () => null,
 }));

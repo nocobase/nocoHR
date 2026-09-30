@@ -10,6 +10,7 @@ import {
   useParams,
 } from 'react-router';
 import { z } from 'zod';
+import { useAppTimeZone } from '@/components/talent/attendance/app-time';
 import { BlockSkeleton } from '@/components/talent/states';
 import { useRemote } from '@/components/talent/use-remote';
 import {
@@ -53,6 +54,7 @@ function AdjustView({ id }: { id: string }) {
 }
 function AdjustForm({ record }: { record: LeaveBalance }) {
   const { t, i18n } = useTranslation();
+  const zone = useAppTimeZone();
   const api = useApiClient();
   const overlay = useLeaveForm();
   const navigate = useNavigate();
@@ -185,6 +187,7 @@ function AdjustForm({ record }: { record: LeaveBalance }) {
                   {new Intl.DateTimeFormat(i18n.language, {
                     dateStyle: 'medium',
                     timeStyle: 'short',
+                    timeZone: zone,
                   }).format(new Date(entry.at))}
                 </p>
                 <p className='break-words whitespace-pre-wrap'>

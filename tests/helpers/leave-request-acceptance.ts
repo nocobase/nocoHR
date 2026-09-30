@@ -258,9 +258,13 @@ export function registerLeaveRequestAcceptance(
         filter: { id: fixture.id },
         values: { expiresAt: '2035-06-30' },
       });
-      const unsupported = await call('emp_njl_1', 'GET', path);
-      expect(unsupported.status).toBe(409);
-      expect(unsupported.json.code).toBe('CARRYOVER_POLICY_REQUIRED');
+      // A future expiry: the carried day still counts (used first, lapses after expiry).
+      const expiring = await call('emp_njl_1', 'GET', path);
+      expect(expiring.status).toBe(200);
+      expect(expiring.json.data.items[0]).toMatchObject({
+        carriedOver: 1,
+        available: 9.5,
+      });
       await ledger.updateOne({
         filter: { id: fixture.id },
         values: { expiresAt: null, adjustments: 'malformed ledger' },
@@ -802,7 +806,7 @@ export function registerLeaveRequestAcceptance(
           .count({ filter: { leaveRequestId: row.id } }),
       ).toBe(0);
     });
-    it('restores existing attendance on cancellation and refuses to overwrite newer punch calculations', async () => {
+    it('recalculates the day on cancellation from the punches it keeps', async () => {
       const now = new Date();
       await db()
         .repository('attendanceRecords')
@@ -814,7 +818,7 @@ export function registerLeaveRequestAcceptance(
             status: 'late',
             lateMinutes: 12,
             workedMinutes: 468,
-            punches: [{ at: '2027-11-01T01:12:00Z' }],
+            punches: [{ at: '2027-11-01T01:12:00Z', source: 'device' }],
             computedAt: now,
             createdAt: now,
             updatedAt: now,
@@ -827,36 +831,21 @@ export function registerLeaveRequestAcceptance(
       });
       expect(approved.status).toBe(200);
       const repo = db().repository('attendanceRecords');
-      const applied = (await repo.findOne({
-        filter: { id: 'request-test-prior-attendance' },
-      }))!;
-      await repo.updateOne({
-        filter: { id: applied.id },
-        values: {
-          updatedAt: new Date(
-            new Date(String(applied.updatedAt)).getTime() + 1000,
-          ),
-        },
-      });
       expect(
-        (await change('emp_njl_1', approved.json.data, 'cancel')).json.code,
-      ).toBe('ATTENDANCE_RECALCULATION_REQUIRED');
-      expect(await balance()).toMatchObject({ pending: 0, used: 1 });
-      // Restore only the test-induced revision to exercise the supported restore path.
-      await repo.updateOne({
-        filter: { id: applied.id },
-        values: { updatedAt: applied.updatedAt },
-      });
+        await repo.findOne({ filter: { id: 'request-test-prior-attendance' } }),
+      ).toMatchObject({ status: 'leave', leaveRequestId: row.id });
       expect(
         (await change('emp_njl_1', approved.json.data, 'cancel')).status,
       ).toBe(200);
-      expect(await repo.findOne({ filter: { id: applied.id } })).toMatchObject({
-        status: 'late',
-        lateMinutes: 12,
-        workedMinutes: 468,
-        leaveRequestId: null,
-        punches: [{ at: '2027-11-01T01:12:00Z' }],
+      // No stale restore: the punch stays and the leave is gone.
+      const after = await repo.findOne({
+        filter: { id: 'request-test-prior-attendance' },
       });
+      expect(after).toMatchObject({ leaveRequestId: null });
+      expect(after?.status).not.toBe('leave');
+      expect(after?.punches).toEqual([
+        { at: '2027-11-01T01:12:00Z', source: 'device' },
+      ]);
       expect(await balance()).toMatchObject({ pending: 0, used: 0 });
     });
     it('rejects guessed proof ids and only accepts existing attachments belonging to the applicant', async () => {
@@ -1246,9 +1235,24 @@ export function registerLeaveRequestAcceptance(
       ).toBe(200);
     });
 
-    it('blocks unconfigured half-day/hour rules before creating, submitting or approving', async () => {
-      for (const unit of ['halfDay', 'hour']) {
-        const id = `request-test-${unit}`;
+    it('counts half days at the work window midpoint and hours rounded up to the half hour', async () => {
+      // Defaults (attendance.leaveUnits): day window 08:30–17:30, standard 8 hours, 0.5-hour steps.
+      const cases = [
+        {
+          unit: 'halfDay',
+          startAt: '2028-01-10T08:30:00+08:00',
+          endAt: '2028-01-10T13:00:00+08:00',
+          duration: 0.5,
+        },
+        {
+          unit: 'hour',
+          startAt: '2028-01-11T09:00:00+08:00',
+          endAt: '2028-01-11T10:10:00+08:00',
+          duration: 1.5,
+        },
+      ];
+      for (const item of cases) {
+        const id = `request-test-${item.unit}`;
         await db()
           .repository('leaveTypes')
           .createOne({
@@ -1257,7 +1261,7 @@ export function registerLeaveRequestAcceptance(
               code: id,
               title: id,
               payType: 'unpaid',
-              unit,
+              unit: item.unit,
               countBy: 'calendar',
               balanceRule: 'none',
               requiresAttachment: false,
@@ -1265,60 +1269,27 @@ export function registerLeaveRequestAcceptance(
               updatedAt: new Date(),
             },
           });
-        const input = data('2028-01-10', '2028-01-10', { leaveTypeId: id });
-        const before = await db().repository('leaveRequests').count();
-        const failed = await call(
-          'emp_njl_1',
-          'POST',
-          '/leave/requests',
-          input,
-        );
-        expect(failed.status).toBe(409);
-        expect(failed.json.code).toBe('LEAVE_UNIT_POLICY_REQUIRED');
-        expect(await db().repository('leaveRequests').count()).toBe(before);
-        await db()
-          .repository('leaveTypes')
-          .updateOne({ filter: { id }, values: { unit: 'day' } });
-        const row = await draft(input);
-        await db()
-          .repository('leaveTypes')
-          .updateOne({ filter: { id }, values: { unit } });
-        expect((await change('emp_njl_1', row, 'submit')).json.code).toBe(
-          'LEAVE_UNIT_POLICY_REQUIRED',
-        );
-        await db()
-          .repository('leaveTypes')
-          .updateOne({ filter: { id }, values: { unit: 'day' } });
+        const row = await draft({
+          leaveTypeId: id,
+          startAt: item.startAt,
+          endAt: item.endAt,
+          reason: 'Test partial leave',
+        });
         const submitted = await change('emp_njl_1', row, 'submit');
         expect(submitted.status).toBe(200);
-        await db()
-          .repository('leaveTypes')
-          .updateOne({ filter: { id }, values: { unit } });
+        expect(submitted.json.data.duration).toBe(item.duration);
         const decision = await change(
           'mgr_njl',
           submitted.json.data,
           'decide',
-          { decision: 'approved' },
+          {
+            decision: 'approved',
+          },
         );
-        expect(decision.json.code).toBe('LEAVE_UNIT_POLICY_REQUIRED');
+        expect(decision.status).toBe(200);
+        expect(decision.json.data.status).toBe('approved');
         expect(
-          (
-            await db()
-              .repository('leaveRequests')
-              .findOne({ filter: { id: row.id } })
-          )?.status,
-        ).toBe('pending');
-        expect(
-          await db()
-            .repository('attendanceRecords')
-            .count({ filter: { leaveRequestId: row.id } }),
-        ).toBe(0);
-        expect(
-          (
-            await change('mgr_njl', submitted.json.data, 'decide', {
-              decision: 'rejected',
-            })
-          ).status,
+          (await change('emp_njl_1', decision.json.data, 'cancel')).status,
         ).toBe(200);
       }
     });
@@ -1460,8 +1431,7 @@ export function registerLeaveRequestAcceptance(
       ).toBe(200);
     });
 
-    it('keeps unfinished schedule saves and publishing unavailable to every writer', async () => {
-      const before = await db().repository('shiftSchedules').count();
+    it('saves and publishes schedules for writers only, refusing stale versions', async () => {
       for (const action of ['save', 'publish']) {
         const input = {
           cells: [
@@ -1476,18 +1446,44 @@ export function registerLeaveRequestAcceptance(
           (await call('emp_njl_1', 'POST', `/schedules/${action}`, input))
             .status,
         ).toBe(403);
-        for (const user of ['hr01', 'mgr_njl']) {
-          const result = await call(
-            user,
-            'POST',
-            `/schedules/${action}`,
-            input,
-          );
-          expect(result.status).toBe(409);
-          expect(result.json.code).toBe('SCHEDULE_NOT_READY');
-        }
       }
-      expect(await db().repository('shiftSchedules').count()).toBe(before);
+      const saved = await call('mgr_njl', 'POST', '/schedules/save', {
+        cells: [
+          {
+            employeeId: employee.id,
+            date: '2027-12-20',
+            shiftId: null,
+            expectedUpdatedAt: null,
+          },
+        ],
+      });
+      expect(saved.status).toBe(200);
+      const row = await db()
+        .repository('shiftSchedules')
+        .findOne({
+          filter: (f) =>
+            f.and([
+              f.string('employeeId').eq(String(employee.id)),
+              f.date('date').on('2027-12-20'),
+            ]),
+        });
+      expect(row).toMatchObject({ status: 'draft', shiftId: null });
+      // A second writer still holding "no row" is refused.
+      const stale = await call('hr01', 'POST', '/schedules/publish', {
+        cells: [
+          {
+            employeeId: employee.id,
+            date: '2027-12-20',
+            shiftId: null,
+            expectedUpdatedAt: null,
+          },
+        ],
+      });
+      expect(stale.status).toBe(409);
+      expect(stale.json.code).toBe('SCHEDULE_CONFLICT');
+      await db()
+        .repository('shiftSchedules')
+        .deleteOne({ filter: { id: String(row!.id) } });
     });
   });
 }

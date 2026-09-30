@@ -120,7 +120,7 @@ const seed: SeedDefinition = defineSeed({
           regularizedAt: null,
           leaveDate: null,
           leaveReason: null,
-          address: '测试市测试路 12 号',
+          address: '苏州市吴中区木渎镇金山路 66 号 3 幢 702 室',
           ...stamp,
         })
         .execute();
@@ -215,7 +215,7 @@ const seed: SeedDefinition = defineSeed({
         .set({
           // No longer the V1 draft: reviewed and published, so its description loses the draft note.
           description:
-            '劳保用品与着装、旋转设备安全操作、5S 现场管理与安全事件报告。（演示资料）',
+            '劳保用品与着装、旋转设备安全操作、5S 现场管理与安全事件报告。',
           reviewStatus: 'confirmed',
           published: true,
           publishedAt: now,
@@ -506,7 +506,7 @@ const seed: SeedDefinition = defineSeed({
           competencyId,
           level,
           source: 'assessment',
-          evidence: '演示数据：主管日常评定。',
+          evidence: '主管日常评定。',
           assessedBy: headNjl || hr || 'system',
           assessedAt: daysAgo(ago),
           ...stamp,

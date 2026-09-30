@@ -31,6 +31,7 @@ import type {
   PaperItem,
 } from '@/components/talent/exam-types';
 import { BlockSkeleton, LoadError } from '@/components/talent/states';
+import { deviceHeaders, rememberDevice } from '@/components/talent/exam-device';
 import { useRemote } from '@/components/talent/use-remote';
 import {
   AlertDialog,
@@ -42,6 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -65,9 +67,7 @@ const AUTOSAVE_MS = 30_000;
 /** Route `/talent/my-exams/attempts/:attemptId`: answer an open attempt, or read its result. */
 export default function AttemptPage(): ReactElement {
   const { attemptId = '' } = useParams();
-  const attempt = useRemote<Attempt>(
-    `talent/attempts/${encodeURIComponent(attemptId)}`,
-  );
+  const attempt = useAttempt(attemptId);
   return (
     <RouteChildPage>
       <PageContainer>
@@ -88,6 +88,46 @@ export default function AttemptPage(): ReactElement {
       </PageContainer>
     </RouteChildPage>
   );
+}
+
+/** Loads the attempt with this browser's device token, and keeps a token the server issues (V3-10 单设备作答). */
+function useAttempt(attemptId: string): {
+  data: Attempt | undefined;
+  error: unknown;
+  reload: () => void;
+} {
+  const api = useApiClient();
+  const [count, setCount] = useState(0);
+  const [state, setState] = useState<{
+    key: string;
+    data?: Attempt;
+    error?: unknown;
+  }>();
+  const key = `${attemptId}|${count}`;
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .request<{ data: Attempt }>({
+        path: `talent/attempts/${encodeURIComponent(attemptId)}`,
+        headers: deviceHeaders(attemptId),
+        signal: controller.signal,
+      })
+      .then((result) => {
+        rememberDevice(result.data);
+        setState({ key, data: result.data });
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setState({ key, error });
+      });
+    return () => controller.abort();
+  }, [api, attemptId, key]);
+  const reload = useCallback(() => setCount((n) => n + 1), []);
+  const current = state?.key === key ? state : undefined;
+  return {
+    data: current?.data ?? (current ? undefined : state?.data),
+    error: current?.error,
+    reload,
+  };
 }
 
 function useCountdown(deadlineAt: string, serverNow: string): number {
@@ -132,10 +172,11 @@ function Answering({
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
-  const dirty = useRef(false);
-  const latest = useRef(answers);
+  const [deviceChanged, setDeviceChanged] = useState(false);
+  const dirtyRef = useRef(false);
+  const latestRef = useRef(answers);
   useEffect(() => {
-    latest.current = answers;
+    latestRef.current = answers;
   }, [answers]);
   const left = useCountdown(attempt.deadlineAt, attempt.serverNow);
   const item = attempt.items[index];
@@ -144,17 +185,22 @@ function Answering({
   ).length;
 
   const save = useCallback(async () => {
-    if (!dirty.current) return;
-    dirty.current = false;
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
     try {
       const result = await api.request<{ data: { savedAt: string } }>({
         path: `talent/attempts/${encodeURIComponent(attempt.id)}/answers`,
         method: 'PUT',
-        json: { answers: latest.current },
+        json: { answers: latestRef.current },
+        headers: deviceHeaders(attempt.id),
       });
       setSavedAt(result.data.savedAt);
     } catch (cause) {
-      dirty.current = true;
+      dirtyRef.current = true;
+      if (errorCode(cause) === 'ATTEMPT_DEVICE_CHANGED') {
+        setDeviceChanged(true);
+        return;
+      }
       if (
         errorCode(cause) === 'ATTEMPT_EXPIRED' ||
         errorCode(cause) === 'ATTEMPT_CLOSED'
@@ -175,10 +221,16 @@ function Answering({
       await api.request({
         path: `talent/attempts/${encodeURIComponent(attempt.id)}/submit`,
         method: 'POST',
-        json: { answers: latest.current },
+        json: { answers: latestRef.current },
+        headers: deviceHeaders(attempt.id),
       });
       toast.add({ type: 'success', title: t('talent.myExams.submitted') });
     } catch (cause) {
+      if (errorCode(cause) === 'ATTEMPT_DEVICE_CHANGED') {
+        setDeviceChanged(true);
+        setSubmitting(false);
+        return;
+      }
       toast.add({
         type: errorCode(cause) === 'ATTEMPT_EXPIRED' ? 'warning' : 'error',
         title: errorMessage(cause, t),
@@ -191,17 +243,78 @@ function Answering({
   }, [api, attempt.id, onFinished, outlet, t]);
 
   // Time is up: submit what is on screen; the server scores what arrived in time.
-  const expiredHandled = useRef(false);
+  const expiredHandledRef = useRef(false);
   useEffect(() => {
-    if (left === 0 && !expiredHandled.current) {
-      expiredHandled.current = true;
+    if (left === 0 && !expiredHandledRef.current) {
+      expiredHandledRef.current = true;
       void submit();
     }
   }, [left, submit]);
 
+  // V3-10 防作弊: leaving the page is counted by the server; past the limit it may submit the attempt.
+  const report = useCallback(
+    async (type: 'blur' | 'pasteAttempt') => {
+      try {
+        const result = await api.request<{
+          data: { blurCount: number; maxBlurCount: number; submitted: boolean };
+        }>({
+          path: `talent/attempts/${encodeURIComponent(attempt.id)}/integrity`,
+          method: 'POST',
+          json: { type },
+          headers: deviceHeaders(attempt.id),
+        });
+        if (type === 'blur')
+          toast.add({
+            type: 'warning',
+            title: t('talent.examIntegrity.blurRecorded', {
+              count: result.data.blurCount,
+            }),
+          });
+        if (result.data.submitted) {
+          outlet?.reload();
+          onFinished();
+        }
+      } catch (cause) {
+        if (errorCode(cause) === 'ATTEMPT_DEVICE_CHANGED')
+          setDeviceChanged(true);
+      }
+    },
+    [api, attempt.id, onFinished, outlet, t],
+  );
+  useEffect(() => {
+    let away = false;
+    const leave = () => {
+      if (away) return;
+      away = true;
+      void report('blur');
+    };
+    const back = () => {
+      if (!document.hidden) away = false;
+    };
+    const onVisibility = () => (document.hidden ? leave() : back());
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', leave);
+    window.addEventListener('focus', back);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', leave);
+      window.removeEventListener('focus', back);
+    };
+  }, [report]);
+  const noCopy = attempt.antiCheat?.disableCopy ?? true;
+  const block = (event: { preventDefault: () => void }) => {
+    if (noCopy) event.preventDefault();
+  };
+  const blockPaste = (event: { preventDefault: () => void }) => {
+    if (!noCopy) return;
+    event.preventDefault();
+    toast.add({ type: 'warning', title: t('talent.examIntegrity.noPaste') });
+    void report('pasteAttempt');
+  };
+
   const setAnswer = (value: unknown) => {
     setAnswers((a) => ({ ...a, [item.questionId]: value }));
-    dirty.current = true;
+    dirtyRef.current = true;
   };
   const go = (next: number) => {
     void save();
@@ -231,7 +344,26 @@ function Answering({
           </span>
         }
       />
-      <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]'>
+      {deviceChanged ? (
+        <Alert variant='destructive'>
+          <AlertTitle>
+            {t('talent.examIntegrity.deviceChangedTitle')}
+          </AlertTitle>
+          <AlertDescription>
+            {t('talent.examIntegrity.deviceChanged')}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <div
+        className={cn(
+          'grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]',
+          noCopy && 'select-none',
+        )}
+        onCopy={block}
+        onCut={block}
+        onContextMenu={block}
+        onPasteCapture={blockPaste}
+      >
         <Card>
           <CardHeader>
             <CardDescription>
@@ -516,6 +648,35 @@ function Result({ attemptId }: { attemptId: string }): ReactElement {
           )}
         </CardContent>
       </Card>
+      {data.lossByCompetency.some((l) => l.lost > 0) ? (
+        // V3-10 失分分析: points lost per competency.
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('talent.examiner.lossTitle')}</CardTitle>
+            <CardDescription>{t('talent.examiner.askHint')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className='space-y-1 text-sm'>
+              {data.lossByCompetency
+                .filter((l) => l.lost > 0)
+                .map((l) => (
+                  <li
+                    key={l.competencyId}
+                    className='flex justify-between gap-2'
+                  >
+                    <span>{l.title}</span>
+                    <span className='text-muted-foreground tabular-nums'>
+                      {t('talent.examiner.lost', {
+                        lost: l.lost,
+                        total: l.total,
+                      })}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
       {data.wrongByCompetency.length ? (
         <Card>
           <CardHeader>

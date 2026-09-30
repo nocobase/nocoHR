@@ -22,7 +22,11 @@ import { draftHash } from './draft-snapshots.js';
 import type { LearningContent, PlanItemType } from './plan-service.js';
 import { bool, json, type Platform } from './platform.js';
 import { addDays, daysBetween, newId, str } from './shared.js';
-import { planServiceToken, practiceServiceToken } from './tokens.js';
+import {
+  learningSettingsToken,
+  planServiceToken,
+  practiceServiceToken,
+} from './tokens.js';
 
 const LEARNING_COACH = 'talent.learningCoach';
 const PRACTICE_COACH = 'talent.practiceCoach';
@@ -217,6 +221,8 @@ export function createTrainingAutomation(deps: TrainingAutomationDeps) {
           .competencyIds ?? [])
           recent.add(c);
       const gaps = requirements
+        // V3-09: only a competency someone assessed; an unassessed one would draft for everyone at once.
+        .filter((r) => latest.has(str(r.competencyId)))
         .map((r) => ({
           competencyId: str(r.competencyId),
           title: str(r.title),
@@ -573,7 +579,8 @@ export function createTrainingAutomation(deps: TrainingAutomationDeps) {
     // Still behind after two nudges and close to the due date: the head hears once, one message per head.
     const byHead = new Map<string, { names: string[]; ids: string[] }>();
     for (const row of lagging) {
-      if (row.escalatedAt) continue;
+      // V3-09: the coach's own once-per-task stamp; the certification steward keeps `escalatedAt`.
+      if (row.lagEscalatedAt) continue;
       if ((Number(row.reminderCount) || 0) < ESCALATE_AFTER_NUDGES) continue;
       if (daysBetween(today, dateOnly(row.dueDate)) > ESCALATE_WITHIN_DAYS)
         continue;
@@ -606,7 +613,7 @@ export function createTrainingAutomation(deps: TrainingAutomationDeps) {
       });
       await query
         .updateTable('assignments')
-        .set({ escalatedAt: new Date(), updatedAt: new Date() })
+        .set({ lagEscalatedAt: new Date(), updatedAt: new Date() })
         .where('id', 'in', entry.ids)
         .execute();
     }
@@ -873,5 +880,572 @@ export function createTrainingAutomation(deps: TrainingAutomationDeps) {
       : { status: 'skipped', output: { recommended: [] } };
   }
 
-  return { gapPlans, progressNudge, draftScenarioOnPublish, preExamRecommend };
+  // ---------- V3-09 学习教练：岗位变动后与目标岗位的学习计划 ----------
+
+  interface Gap {
+    competencyId: string;
+    title: string;
+    required: number;
+    current: number;
+    assessed: boolean;
+  }
+
+  /** A position's confirmed mandatory requirements that are not qualifications (step 9 plans no qualification). */
+  async function requirementGaps(
+    employeeId: string,
+    positionId: string,
+  ): Promise<Gap[]> {
+    const query = database.query();
+    const requirements = await query
+      .selectFrom('positionRequirements')
+      .innerJoin(
+        'competencies',
+        'competencies.id',
+        'positionRequirements.competencyId',
+      )
+      .select([
+        'positionRequirements.competencyId as competencyId',
+        'positionRequirements.requiredLevel as requiredLevel',
+        'competencies.title as title',
+        'competencies.category as category',
+      ])
+      .where('positionRequirements.positionId', '=', positionId)
+      .where('positionRequirements.reviewStatus', '=', 'confirmed')
+      .where('positionRequirements.mandatory', '=', true)
+      .execute();
+    const latest = new Map<string, number>();
+    for (const a of await query
+      .selectFrom('employeeCompetencies')
+      .select(['competencyId', 'level', 'assessedAt'])
+      .where('employeeId', '=', employeeId)
+      .orderBy('assessedAt', 'desc')
+      .execute())
+      if (!latest.has(str(a.competencyId)))
+        latest.set(str(a.competencyId), Number(a.level));
+    return requirements
+      .filter((r) => str(r.category) !== 'qualification')
+      .map((r) => ({
+        competencyId: str(r.competencyId),
+        title: str(r.title),
+        required: Number(r.requiredLevel),
+        current: latest.get(str(r.competencyId)) ?? 0,
+        assessed: latest.has(str(r.competencyId)),
+      }));
+  }
+
+  type PlanDraft = {
+    summary: string;
+    items: {
+      type: PlanItemType;
+      refId: string;
+      competencyId: string;
+      reason: string;
+      dueInDays: number;
+    }[];
+  };
+
+  /**
+   * Items for gaps from published courses first, then confirmed scenarios as a
+   * supplement; the AI may word and trim them, never add content outside the
+   * candidates. Without a model the rule-based draft is used.
+   */
+  async function draftForGaps(
+    run: AutomationRunContext,
+    input: {
+      name: string;
+      title: string;
+      context: string;
+      gaps: readonly Gap[];
+      candidates: readonly LearningContent[];
+      missing: readonly string[];
+    },
+  ): Promise<PlanDraft> {
+    const { gaps, candidates } = input;
+    const ruleBased = (): PlanDraft => {
+      const items: PlanDraft['items'] = [];
+      for (const gap of gaps) {
+        for (const type of ['course', 'practice'] as const) {
+          const pick = candidates.find(
+            (c) =>
+              c.type === type &&
+              c.competencyIds.includes(gap.competencyId) &&
+              !items.some((i) => i.type === c.type && i.refId === c.id),
+          );
+          if (pick)
+            items.push({
+              type,
+              refId: pick.id,
+              competencyId: gap.competencyId,
+              reason:
+                type === 'course'
+                  ? `岗位要求「${gap.title}」${gap.required} 级，当前 ${gap.current} 级`
+                  : `学完后用陪练检验「${gap.title}」的掌握情况`,
+              dueInDays: type === 'course' ? 14 : 21,
+            });
+        }
+      }
+      items.splice(5);
+      const summary = `${input.name}${input.context}：${list(gaps.map((g) => `「${g.title}」`))}未达到要求，建议按以下内容补齐。${
+        input.missing.length
+          ? `需要补充课程：${input.missing.join('、')}（暂无可指派的内容）。`
+          : ''
+      }`;
+      return { summary, items };
+    };
+    try {
+      const draft = await structured(
+        run,
+        'learningCoach',
+        input.title,
+        [
+          `请为员工 ${input.name} 起草一份学习计划，交其主管确认。背景：${input.context}。`,
+          '只根据下面的能力差距和可选内容给建议，不要猜测员工能力；每项写明对应能力项和理由；优先已发布的课程，陪练作为补充；最多 5 项，总时长尽量不超过 8 小时。差距小的项少、差距大的项多。',
+          input.missing.length
+            ? `以下能力项没有可指派的内容，在 summary 中写明“需要补充课程：${input.missing.join('、')}”。`
+            : '',
+          'summary 和 reason 写给主管看：用能力项名称和内容标题，不要出现 id、英文代码或字段名。',
+          `能力差距：${JSON.stringify(gaps.map((g) => ({ competencyId: g.competencyId, title: g.title, required: g.required, current: g.current })))}`,
+          `可选内容（只能从中选择，refId 用其 id）：${JSON.stringify(
+            candidates.map((c) => ({
+              type: c.type,
+              id: c.id,
+              title: c.title,
+              minutes: c.estimatedMinutes,
+              competencyIds: c.competencyIds,
+            })),
+          )}`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        z.object({
+          summary: z.string().min(1),
+          items: z
+            .array(
+              z.object({
+                type: z.enum(['course', 'practice']),
+                refId: z.string(),
+                competencyId: z.string(),
+                reason: z.string().min(1),
+                dueInDays: z.number(),
+              }),
+            )
+            .min(1),
+        }),
+      );
+      const items = draft.items
+        .filter(
+          (item) =>
+            candidates.some(
+              (c) => c.type === item.type && c.id === item.refId,
+            ) && gaps.some((g) => g.competencyId === item.competencyId),
+        )
+        .slice(0, 5)
+        .map((item) => ({
+          ...item,
+          reason: item.reason.slice(0, 300),
+          dueInDays: Math.min(
+            60,
+            Math.max(3, Math.round(item.dueInDays) || 14),
+          ),
+        }));
+      if (!items.length) return ruleBased();
+      let summary = draft.summary.slice(0, 1000);
+      // The missing content is a fact the reviewer must see, whatever the model wrote.
+      if (input.missing.length && !summary.includes('需要补充课程'))
+        summary = `${summary}需要补充课程：${input.missing.join('、')}。`;
+      return { summary, items };
+    } catch (error) {
+      if (!(error instanceof AIUnavailableError)) throw error;
+      run.markFallback();
+      return ruleBased();
+    }
+  }
+
+  /** Users holding the hr.instructor permission set, directly or through their position. */
+  async function instructors(): Promise<string[]> {
+    const result = new Set<string>();
+    const assignments = await platform.authz.permissionSets
+      .listAssignments('hr.instructor')
+      .catch(() => []);
+    for (const assignment of assignments) {
+      const { type, id } = assignment.subject;
+      if (type === 'user') result.add(id);
+      else if (type === 'org.position')
+        for (const row of await database
+          .query()
+          .selectFrom('employees')
+          .select(['userId'])
+          .where('positionId', '=', id)
+          .where('status', '!=', 'leave')
+          .execute())
+          if (row.userId) result.add(str(row.userId));
+    }
+    return [...result];
+  }
+
+  /**
+   * After an onboarding, transfer or promotion was processed: a plan for the
+   * new position's mandatory competencies below the requirement (unassessed
+   * counts as 0) that the automatically assigned path does not cover. Once
+   * per event, found by `triggerRef.jobEventId`.
+   */
+  async function jobEventPlan(
+    run: AutomationRunContext,
+    eventId: string,
+  ): TaskResult {
+    await authorizeAction(run.owner.authz, LEARNING_COACH, 'use');
+    const query = database.query();
+    const event = await query
+      .selectFrom('jobEvents')
+      .selectAll()
+      .where('id', '=', eventId)
+      .executeTakeFirst();
+    if (
+      !event ||
+      !['onboard', 'transfer', 'promote'].includes(str(event.eventType))
+    )
+      return { status: 'skipped', output: { reason: 'notAPositionChange' } };
+    const drafted = (
+      await query
+        .selectFrom('learningPlans')
+        .select(['triggerRef'])
+        .where('employeeId', '=', str(event.employeeId))
+        .where('trigger', '=', 'jobEvent')
+        .execute()
+    ).some(
+      (p) =>
+        json<{ jobEventId?: string }>(p.triggerRef, {}).jobEventId === eventId,
+    );
+    if (drafted)
+      return { status: 'skipped', output: { reason: 'alreadyDrafted' } };
+    // Recording someone already at work is not a start in the position (学习规则 onboardingBackfillDays).
+    if (str(event.eventType) === 'onboard') {
+      const { onboardingBackfillDays } = await container
+        .resolve(learningSettingsToken)
+        .read();
+      if (
+        daysBetween(dateOnly(event.effectiveDate), platform.currentDate()) >
+        onboardingBackfillDays
+      )
+        return { status: 'skipped', output: { reason: 'backfill' } };
+    }
+    const employee = await platform.employee(str(event.employeeId));
+    if (!employee || employee.status === 'leave')
+      return { status: 'skipped', output: { reason: 'employeeLeft' } };
+    const positionId = event.toPositionId
+      ? str(event.toPositionId)
+      : employee.positionId;
+    if (!positionId)
+      return { status: 'skipped', output: { reason: 'noPosition' } };
+    const contents = await plans().searchContent({});
+    const index = new Map(contents.map((c) => [`${c.type}:${c.id}`, c]));
+    // What the path the event assigned covers.
+    const covered = new Set<string>();
+    for (const row of await query
+      .selectFrom('assignments')
+      .select(['learningPathId'])
+      .where('jobEventId', '=', eventId)
+      .execute())
+      for (const c of index.get(`learningPath:${str(row.learningPathId)}`)
+        ?.competencyIds ?? [])
+        covered.add(c);
+    const gaps = (await requirementGaps(employee.id, positionId)).filter(
+      (g) => g.required > g.current && !covered.has(g.competencyId),
+    );
+    if (!gaps.length) {
+      run.summarize(
+        `${employee.name}：新岗位的必备能力项已被上岗路径覆盖或已达标，不起草计划`,
+      );
+      return { status: 'skipped', output: { reason: 'covered' } };
+    }
+    const candidates = contents.filter(
+      (c) =>
+        (c.type === 'course' || c.type === 'practice') &&
+        c.competencyIds.some((id) => gaps.some((g) => g.competencyId === id)),
+    );
+    const missing = gaps
+      .filter(
+        (g) =>
+          !candidates.some((c) => c.competencyIds.includes(g.competencyId)),
+      )
+      .map((g) => g.title);
+    const position = await query
+      .selectFrom('positions')
+      .select(['title'])
+      .where('id', '=', positionId)
+      .executeTakeFirst();
+    const context = `${str(event.eventType) === 'onboard' ? '入职' : str(event.eventType) === 'promote' ? '晋升' : '调岗'}为「${str(position?.title ?? '')}」`;
+    const draft = await draftForGaps(run, {
+      name: employee.name,
+      title: `学习计划：${employee.name}（岗位变动）`,
+      context,
+      gaps,
+      candidates,
+      missing,
+    });
+    if (!draft.items.length) {
+      run.summarize(
+        `${employee.name}：${list(gaps.map((g) => g.title))} 没有可指派的内容`,
+      );
+      return { status: 'skipped', output: { reason: 'noContent', missing } };
+    }
+    const today = platform.currentDate();
+    try {
+      const plan = await plans().createDraft(
+        run.owner,
+        {
+          employeeId: employee.id,
+          trigger: 'jobEvent',
+          triggerRef: {
+            jobEventId: eventId,
+            positionId,
+            competencyIds: gaps.map((g) => g.competencyId),
+            gaps: gaps.map((g) => ({
+              competencyId: g.competencyId,
+              required: g.required,
+              current: g.current,
+            })),
+          },
+          summary: draft.summary,
+          items: draft.items.map((item) => ({
+            type: item.type,
+            refId: item.refId,
+            competencyId: item.competencyId,
+            reason: item.reason,
+            dueDate: addDays(today, item.dueInDays),
+          })),
+        },
+        {
+          source: 'ai',
+          fallbackReviewerUserId: run.owner.userId,
+          automated: true,
+        },
+      );
+      await run.recordItems('learningPlan', [
+        {
+          id: plan.id,
+          hash: (await draftHash(database, 'learningPlan', plan.id)) ?? '',
+        },
+      ]);
+      run.summarize(
+        `${employee.name}${context}：起草学习计划，${plan.items.length} 项`,
+      );
+      return {
+        output: {
+          planId: plan.id,
+          competencies: gaps.map((g) => g.title),
+          missing,
+        },
+      };
+    } catch (error) {
+      // An open draft of the same person waits for its reviewer first.
+      if ((error as { code?: string }).code === 'PLAN_DRAFT_EXISTS')
+        return { status: 'skipped', output: { reason: 'draftExists' } };
+      throw error;
+    }
+  }
+
+  /**
+   * 目标岗位学习计划: for each active development target (V3-08
+   * `developmentTargets`) whose target position's mandatory competencies are
+   * all assessed, a plan for the benchmark gaps — published courses first,
+   * confirmed scenarios second; gaps without content are listed as "需要补充
+   * 课程" and the instructors are told. A target is drafted again only when
+   * its gaps change (`triggerRef.gapKey`). Without the V3-08 table the task
+   * skips.
+   */
+  async function developmentTargetPlans(
+    run: AutomationRunContext,
+    onlyEmployeeId?: string,
+  ): TaskResult {
+    const policies = await authorizeAction(
+      run.owner.authz,
+      LEARNING_COACH,
+      'use',
+    );
+    const query = database.query();
+    let targets: Record<string, unknown>[];
+    try {
+      let select = query
+        .selectFrom('developmentTargets')
+        .select(['id', 'employeeId', 'targetPositionId', 'status'])
+        .where('status', '=', 'active');
+      if (onlyEmployeeId)
+        select = select.where('employeeId', '=', onlyEmployeeId);
+      targets = await select.execute();
+    } catch {
+      run.summarize('尚未启用发展目标岗位（第八步）');
+      return {
+        status: 'skipped',
+        output: { reason: 'developmentTargetsUnavailable' },
+      };
+    }
+    const visible = new Set(
+      (
+        (await database
+          .repository('employees')
+          .withPolicy(policyOf(policies, 'employees'))
+          .findMany({
+            filter: (f) => f.string('status').ne('leave'),
+          })) as Record<string, unknown>[]
+      ).map((e) => str(e.id)),
+    );
+    const contents = await plans().searchContent({});
+    const today = platform.currentDate();
+    const drafted: { employee: string; planId: string; items: number }[] = [];
+    const missingAll = new Set<string>();
+    const notes: string[] = [];
+    for (const target of targets) {
+      if (drafted.length >= PLANS_PER_RUN) break;
+      const employeeId = str(target.employeeId);
+      if (!visible.has(employeeId)) continue;
+      const employee = await platform.employee(employeeId);
+      if (!employee) continue;
+      const all = await requirementGaps(
+        employeeId,
+        str(target.targetPositionId),
+      );
+      // Only once every mandatory competency of the target has an assessment.
+      if (!all.length || all.some((g) => !g.assessed)) continue;
+      const gaps = all.filter((g) => g.required > g.current);
+      if (!gaps.length) continue;
+      const gapKey = gaps
+        .map((g) => `${g.competencyId}:${g.required}:${g.current}`)
+        .sort()
+        .join('|');
+      const previous = (
+        await query
+          .selectFrom('learningPlans')
+          .select(['triggerRef', 'status'])
+          .where('employeeId', '=', employeeId)
+          .where('trigger', '=', 'developmentTarget')
+          .execute()
+      ).map((p) =>
+        json<{ developmentTargetId?: string; gapKey?: string }>(
+          p.triggerRef,
+          {},
+        ),
+      );
+      if (
+        previous.some(
+          (p) =>
+            p.developmentTargetId === str(target.id) && p.gapKey === gapKey,
+        )
+      )
+        continue;
+      const candidates = contents.filter(
+        (c) =>
+          (c.type === 'course' || c.type === 'practice') &&
+          c.competencyIds.some((id) => gaps.some((g) => g.competencyId === id)),
+      );
+      const missing = gaps
+        .filter(
+          (g) =>
+            !candidates.some(
+              (c) =>
+                c.type === 'course' && c.competencyIds.includes(g.competencyId),
+            ),
+        )
+        .map((g) => g.title);
+      for (const m of missing) missingAll.add(m);
+      const position = await query
+        .selectFrom('positions')
+        .select(['title'])
+        .where('id', '=', str(target.targetPositionId))
+        .executeTakeFirst();
+      const draft = await draftForGaps(run, {
+        name: employee.name,
+        title: `学习计划：${employee.name}（目标岗位）`,
+        context: `拟任「${str(position?.title ?? '')}」的对标差距`,
+        gaps,
+        candidates,
+        missing,
+      });
+      if (!draft.items.length) {
+        notes.push(`${employee.name}：没有可指派的内容`);
+        continue;
+      }
+      try {
+        const plan = await plans().createDraft(
+          run.owner,
+          {
+            employeeId,
+            trigger: 'developmentTarget',
+            triggerRef: {
+              developmentTargetId: str(target.id),
+              targetPositionId: str(target.targetPositionId),
+              gapKey,
+              competencyIds: gaps.map((g) => g.competencyId),
+              gaps: gaps.map((g) => ({
+                competencyId: g.competencyId,
+                required: g.required,
+                current: g.current,
+              })),
+              missing,
+            },
+            summary: draft.summary,
+            items: draft.items.map((item) => ({
+              type: item.type,
+              refId: item.refId,
+              competencyId: item.competencyId,
+              reason: item.reason,
+              dueDate: addDays(today, item.dueInDays),
+            })),
+          },
+          {
+            source: 'ai',
+            fallbackReviewerUserId: run.owner.userId,
+            automated: true,
+          },
+        );
+        await run.recordItems('learningPlan', [
+          {
+            id: plan.id,
+            hash: (await draftHash(database, 'learningPlan', plan.id)) ?? '',
+          },
+        ]);
+        drafted.push({
+          employee: employee.name,
+          planId: plan.id,
+          items: plan.items.length,
+        });
+      } catch (error) {
+        if ((error as { code?: string }).code === 'PLAN_DRAFT_EXISTS') {
+          notes.push(`${employee.name}：已有待确认的计划`);
+          continue;
+        }
+        throw error;
+      }
+    }
+    if (missingAll.size) {
+      const recipients = await instructors();
+      const titles = [...missingAll].sort();
+      // The owner hears when nobody holds hr.instructor.
+      await platform.notify({
+        key: `learningContentMissing:${titles.join(',')}`,
+        userIds: recipients.length ? recipients : [run.owner.userId],
+        message: 'learningContentMissing',
+        params: { competencies: titles.join('、') },
+        path: '/talent/courses',
+      });
+    }
+    run.summarize(
+      `目标岗位学习计划 ${drafted.length} 份${missingAll.size ? `；需要补充课程：${[...missingAll].join('、')}` : ''}${notes.length ? `；${notes.join('；')}` : ''}`,
+    );
+    return drafted.length
+      ? { output: { plans: drafted, missing: [...missingAll] } }
+      : {
+          status: 'skipped',
+          output: { plans: [], missing: [...missingAll], notes },
+        };
+  }
+
+  return {
+    gapPlans,
+    progressNudge,
+    draftScenarioOnPublish,
+    preExamRecommend,
+    jobEventPlan,
+    developmentTargetPlans,
+  };
 }

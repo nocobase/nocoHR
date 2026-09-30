@@ -36,6 +36,15 @@ export const KB_DOCUMENT_FIELDS = [
   'changeSummary',
   'changeNote',
   'lastReviewedAt',
+  // V4-13: AI-drafted FAQ documents (source, reviewStatus, controlled, aiNotes) and translations.
+  'source',
+  'reviewStatus',
+  'controlled',
+  'aiNotes',
+  'locale',
+  'translationOfId',
+  'translationStatus',
+  'sourceHash',
   'createdAt',
   'updatedAt',
 ] as const;
@@ -125,6 +134,11 @@ export const ASSIGNMENT_FIELDS = [
   'learningPlanId',
   'optional',
   'reminderCount',
+  // V3-09: the job event that assigned or cancelled it, why it was cancelled, the coach's one escalation.
+  'jobEventId',
+  'cancelReason',
+  'cancelJobEventId',
+  'lagEscalatedAt',
   'createdAt',
   'updatedAt',
 ] as const;
@@ -151,6 +165,7 @@ export const KNOWLEDGE_GAP_FIELDS = [
   'askCount',
   'lastAskedAt',
   'relatedDocumentId',
+  'channel',
   'topic',
   'reportedAt',
   'status',
@@ -405,7 +420,12 @@ export const assignmentResource = defineCompositeResource(
           .title(label('authz.assignment.cancel'))
           .grant(
             'assignments',
-            assignmentRead.update(['status', 'cancelledAt', 'updatedAt']),
+            assignmentRead.update([
+              'status',
+              'cancelledAt',
+              'cancelReason',
+              'updatedAt',
+            ]),
           ),
       ),
 );

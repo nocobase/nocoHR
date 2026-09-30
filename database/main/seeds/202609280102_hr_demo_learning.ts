@@ -8,6 +8,7 @@ import {
   DEMO_COURSES,
   DEMO_DOCUMENTS,
   DEMO_UPLOAD_MATERIALS,
+  withFileProperties,
 } from '../../seed-data/demo-learning.js';
 
 /**
@@ -98,7 +99,7 @@ const seed: SeedDefinition = defineSeed({
           regularizedAt: null,
           leaveDate: null,
           leaveReason: null,
-          address: '测试市测试路 8 号',
+          address: '苏州市姑苏区干将西路 1580 号 4 幢 1502 室',
           ...stamp,
         })
         .execute();
@@ -118,7 +119,7 @@ const seed: SeedDefinition = defineSeed({
         .values({
           id: 'emp-trainer01-edu1',
           employeeId: 'emp-trainer01',
-          school: '测试理工大学',
+          school: '苏南师范学院',
           degree: 'bachelor',
           major: '机械设计制造及其自动化',
           startDate: '2006-09-01',
@@ -131,7 +132,7 @@ const seed: SeedDefinition = defineSeed({
         .values({
           id: 'emp-trainer01-contact1',
           employeeId: 'emp-trainer01',
-          name: '郑测试',
+          name: '黄立新',
           relation: '配偶',
           phone: '13900001008',
           ...stamp,
@@ -160,7 +161,8 @@ const seed: SeedDefinition = defineSeed({
     for (const document of DEMO_DOCUMENTS) {
       if (await exists('kbDocuments', document.id)) continue;
       const key = `hr-files/demo/${document.id}.md`;
-      const bytes = Buffer.from(document.content, 'utf8');
+      // The note that the content is fictional is a file property; contentText stays the body.
+      const bytes = Buffer.from(withFileProperties(document.content), 'utf8');
       const file = path.resolve(process.cwd(), 'storage', key);
       mkdirSync(path.dirname(file), { recursive: true });
       writeFileSync(file, bytes);
@@ -232,7 +234,7 @@ const seed: SeedDefinition = defineSeed({
         material.filename,
       );
       mkdirSync(path.dirname(target), { recursive: true });
-      writeFileSync(target, material.content, 'utf8');
+      writeFileSync(target, withFileProperties(material.content), 'utf8');
     }
 
     // ---- Courses ----

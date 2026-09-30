@@ -16,15 +16,21 @@
  */
 import type { DatabaseConnection } from '@nocobase/db';
 
-import { authorizeAction, policyOf, tryAuthorizeAction } from './authorize.js';
+import {
+  authorizeAction,
+  policyOf,
+  tryAuthorizeAction,
+  type CollectionPolicies,
+} from './authorize.js';
 import type { ActorContext } from './framework-service.js';
 import type { LearningService } from './learning-service.js';
-import { bool, type EmployeeSummary, type Platform } from './platform.js';
+import { bool, json, type EmployeeSummary, type Platform } from './platform.js';
 import {
   daysBetween,
   HrError,
   isRecord,
   newId,
+  optionalDate,
   requireEnum,
   requireString,
   str,
@@ -32,6 +38,7 @@ import {
 
 const CERTIFICATION = 'talent.certification';
 const CERTIFICATE = 'talent.certificate';
+const EXTERNAL = 'talent.externalCertificate';
 export const CERTIFICATION_SUBJECT = 'hr.certification';
 /** Certificate states that carry the certification's permissions. */
 export const HOLDING_STATUSES = ['valid', 'expiring'] as const;
@@ -54,6 +61,14 @@ export interface CertificateView {
   readonly status: string;
   readonly revokedReason: string | null;
   readonly supersededById: string | null;
+  /** V3-10: internal (issued here) or external (registered with a scan and verified by HR). */
+  readonly source: string;
+  readonly externalNo: string | null;
+  readonly attachmentFileId: string | null;
+  readonly verifyStatus: string | null;
+  readonly verifyNote: string | null;
+  readonly verifiedAt: string | null;
+  readonly issuingAuthority: string | null;
 }
 
 export interface CertificationSummary {
@@ -74,6 +89,14 @@ export interface CertificationSummary {
   readonly courses: readonly { id: string; title: string }[];
   readonly exams: readonly { id: string; title: string }[];
   readonly holderCount: number;
+  /** V3-10 10B: internal certification or external certificate type. */
+  readonly kind: 'internal' | 'external';
+  readonly issuingAuthority: string | null;
+  /** V3-10 任职资格: holding a valid certificate means qualified for this position. */
+  readonly qualifiesPositionId: string | null;
+  readonly qualifiesPositionTitle: string | null;
+  readonly validCount: number;
+  readonly expiringCount: number;
 }
 
 export interface CertificationDetail extends CertificationSummary {
@@ -151,6 +174,37 @@ export interface CertificationService {
   /** Titles of the permission sets a certification grants, for notices. */
   grantedSetTitles(certificationId: string): Promise<string[]>;
   runDaily(asOf?: string): Promise<CertificationDailyReport>;
+
+  // ---------- V3-10 10B: external certificates ----------
+  /** An employee registers their own external certificate, or HR registers one for someone. */
+  registerExternal(ctx: ActorContext, input: unknown): Promise<CertificateView>;
+  /** The holder (or HR) corrects a rejected registration and submits it again. */
+  updateExternal(
+    ctx: ActorContext,
+    id: string,
+    input: unknown,
+  ): Promise<CertificateView>;
+  /** HR verifies (the certificate enters its lifecycle) or rejects (with a reason) a pending one. */
+  verifyExternal(
+    ctx: ActorContext,
+    id: string,
+    input: unknown,
+  ): Promise<CertificateView>;
+  listExternal(
+    ctx: ActorContext,
+    filters: { verifyStatus?: string; mine?: boolean },
+  ): Promise<{ items: CertificateView[]; canVerify: boolean }>;
+  /** The scan's file record, for someone who may see the certificate. */
+  externalScan(
+    ctx: ActorContext,
+    id: string,
+  ): Promise<Record<string, unknown> | null>;
+  canReadScan(ctx: ActorContext, fileId: string): Promise<boolean>;
+  /** V3-10 任职资格: the material the certification steward prepared for a qualification certificate. */
+  qualificationDossier(
+    ctx: ActorContext,
+    certificateId: string,
+  ): Promise<Record<string, unknown> | null>;
 }
 
 export interface CertificationServiceDeps {
@@ -159,6 +213,27 @@ export interface CertificationServiceDeps {
   readonly companyName: () => string;
   /** Resolves a stored permission set title to text. */
   readonly titleText: (title: unknown) => string;
+  /**
+   * V3-10: whether the V4-14 industry pack (持证上岗) is on. Off, certificates
+   * grant nothing: the subject has no members and notices do not mention
+   * permissions. Defaults to on when not wired, the V1 behaviour.
+   */
+  readonly licensed?: () => Promise<boolean>;
+  /** V3-10: a certificate of a certification that qualifies for a position was issued. */
+  readonly onQualified?: () => ((certificateId: string) => void) | undefined;
+  /**
+   * V4-13 实操考核: asked before a certificate is issued or renewed. With the
+   * certification's practical assessments required for this kind of issue
+   * (`recert` when an earlier, unrevoked certificate exists), `ok` is false
+   * until each has a valid, signed, passed record; the ids join the evidence.
+   */
+  readonly practicalGate?: () =>
+    | ((
+        employeeId: string,
+        certificationId: string,
+        mode: 'initial' | 'recert',
+      ) => Promise<{ ok: boolean; recordIds: string[] }>)
+    | undefined;
 }
 
 function dateOnly(value: unknown): string | null {
@@ -208,6 +283,10 @@ export function createCertificationService(
 ): CertificationService {
   const { platform } = deps;
   const { database, notify, authz } = platform;
+  const licensed = async () => (deps.licensed ? deps.licensed() : true);
+  /** The permission sets a certificate loses, for notices; none while the industry pack is off. */
+  const lostSets = (certificationId: string) =>
+    service.grantedSetTitles(certificationId);
 
   async function certificationRow(
     id: string,
@@ -347,15 +426,21 @@ export function createCertificationService(
     const certificationIds = [
       ...new Set(rows.map((r) => String(r.certificationId))),
     ];
+    const certificationRows = await query
+      .selectFrom('certifications')
+      .select(['id', 'title', 'issuingAuthority'])
+      .where('id', 'in', certificationIds)
+      .execute();
     const titles = new Map(
-      (
-        await query
-          .selectFrom('certifications')
-          .select(['id', 'title'])
-          .where('id', 'in', certificationIds)
-          .execute()
-      ).map((c) => [String(c.id), String(c.title)]),
+      certificationRows.map((c) => [String(c.id), String(c.title)]),
     );
+    const authorities = new Map(
+      certificationRows.map((c) => [
+        String(c.id),
+        c.issuingAuthority == null ? null : str(c.issuingAuthority),
+      ]),
+    );
+    const nullable = (value: unknown) => (value == null ? null : str(value));
     return rows.map((row) => {
       const employee = employees.get(String(row.employeeId));
       return {
@@ -373,6 +458,16 @@ export function createCertificationService(
           row.revokedReason == null ? null : str(row.revokedReason),
         supersededById:
           row.supersededById == null ? null : str(row.supersededById),
+        source: str(row.source ?? 'internal'),
+        externalNo: nullable(row.externalNo),
+        attachmentFileId: nullable(row.attachmentFileId),
+        verifyStatus: nullable(row.verifyStatus),
+        verifyNote: nullable(row.verifyNote),
+        verifiedAt:
+          row.verifiedAt == null
+            ? null
+            : new Date(str(row.verifiedAt)).toISOString(),
+        issuingAuthority: authorities.get(String(row.certificationId)) ?? null,
       };
     });
   }
@@ -387,10 +482,17 @@ export function createCertificationService(
       const requirements = await requirementsOf(id);
       const holders = await query
         .selectFrom('employeeCertificates')
-        .select(['id'])
+        .select(['id', 'status'])
         .where('certificationId', '=', id)
         .where('status', 'in', [...HOLDING_STATUSES])
         .execute();
+      const position = row.qualifiesPositionId
+        ? await query
+            .selectFrom('positions')
+            .select(['title'])
+            .where('id', '=', str(row.qualifiesPositionId))
+            .executeTakeFirst()
+        : undefined;
       const competency = row.competencyId
         ? await query
             .selectFrom('competencies')
@@ -417,6 +519,14 @@ export function createCertificationService(
         courses: requirements.courses,
         exams: requirements.exams,
         holderCount: holders.length,
+        kind: row.kind === 'external' ? 'external' : 'internal',
+        issuingAuthority:
+          row.issuingAuthority == null ? null : str(row.issuingAuthority),
+        qualifiesPositionId:
+          row.qualifiesPositionId == null ? null : str(row.qualifiesPositionId),
+        qualifiesPositionTitle: position ? str(position.title) : null,
+        validCount: holders.filter((h) => h.status === 'valid').length,
+        expiringCount: holders.filter((h) => h.status === 'expiring').length,
       });
     }
     return result;
@@ -555,19 +665,30 @@ export function createCertificationService(
     const recipients = [employee.userId, head].filter((v): v is string =>
       Boolean(v),
     );
+    // V4-14: a first certificate names the permission sets it brings (industry pack on).
+    const gained = result.renewed
+      ? []
+      : await lostSets(String(certification.id));
     if (recipients.length)
       await notify({
         key: `certificate:${result.id}:issued`,
         userIds: recipients,
-        message: result.renewed ? 'certificateRenewed' : 'certificateIssued',
+        message: result.renewed
+          ? 'certificateRenewed'
+          : gained.length
+            ? 'certificateIssuedWithSets'
+            : 'certificateIssued',
         params: {
           name: employee.name,
           title: String(certification.title),
           no: result.certificateNo,
           date: result.expiresAt ?? '—',
+          sets: gained.join('、') || '—',
         },
         path: '/talent/me',
       });
+    // V3-10 任职资格: the certification steward prepares the qualification material.
+    if (certification.qualifiesPositionId) deps.onQualified?.()?.(result.id);
     return result.id;
   }
 
@@ -655,7 +776,9 @@ export function createCertificationService(
       // Permission sets assigned to this certification: their titles for managers, and the pages they open for
       // everyone, so a holder can find what the certificate unlocks.
       const assigned: { key: string; title: string; pages: string[] }[] = [];
-      for (const set of await authz.permissionSets.list()) {
+      for (const set of (await licensed())
+        ? await authz.permissionSets.list()
+        : []) {
         const assignments = await authz.permissionSets.listAssignments(set.key);
         if (
           assignments.some(
@@ -749,14 +872,46 @@ export function createCertificationService(
           ['examOnly', 'full'] as const,
           'INVALID_INPUT',
         ),
+        kind: requireEnum(
+          input.kind ?? 'internal',
+          ['internal', 'external'] as const,
+          'INVALID_INPUT',
+        ),
+        issuingAuthority: requireString(
+          input.issuingAuthority,
+          'INVALID_INPUT',
+          {
+            optional: true,
+            max: 200,
+          },
+        ),
+        qualifiesPositionId: requireString(
+          input.qualifiesPositionId,
+          'INVALID_INPUT',
+          { optional: true, max: 64 },
+        ),
       };
       if (!/^[A-Za-z0-9-]+$/u.test(values.code))
         throw new HrError('CERTIFICATION_CODE_INVALID', 400);
       const courseIds = ids(input.courseIds);
       const examIds = ids(input.examIds);
-      if (!courseIds.length && !examIds.length)
+      // An external certificate type has no courses or exams: it is registered with a scan and verified by HR.
+      if (values.kind === 'external') {
+        if (courseIds.length || examIds.length)
+          throw new HrError('CERTIFICATION_EXTERNAL_REQUIREMENTS', 400);
+        if (values.qualifiesPositionId) throw new HrError('INVALID_INPUT', 400);
+      } else if (!courseIds.length && !examIds.length)
         throw new HrError('CERTIFICATION_REQUIREMENTS_REQUIRED', 400);
       const query = database.query();
+      if (
+        values.qualifiesPositionId &&
+        !(await query
+          .selectFrom('positions')
+          .select(['id'])
+          .where('id', '=', values.qualifiesPositionId)
+          .executeTakeFirst())
+      )
+        throw new HrError('POSITION_NOT_FOUND', 404);
       if (
         courseIds.length &&
         (
@@ -937,21 +1092,23 @@ export function createCertificationService(
           `证书《${String(certification.title)}》已吊销：${reason}`,
         );
       await refreshSession(employee?.userId ?? null);
-      if (employee?.userId)
+      if (employee?.userId) {
+        // Permissions are mentioned only with the V4-14 industry pack on.
+        const sets = await lostSets(String(row.certificationId));
         await notify({
           key: `certificate:${id}:revoked`,
           userIds: [employee.userId],
-          message: 'certificateRevoked',
+          message: sets.length
+            ? 'certificateRevoked'
+            : 'certificateRevokedNotice',
           params: {
             title: str(certification?.title ?? ''),
             reason,
-            sets:
-              (
-                await service.grantedSetTitles(String(row.certificationId))
-              ).join('、') || '—',
+            sets: sets.join('、') || '—',
           },
           path: '/talent/me',
         });
+      }
       const [view] = await toCertificateViews([
         (await repo.findOne({ filter: { id } })) as Record<string, unknown>,
       ]);
@@ -1065,6 +1222,8 @@ export function createCertificationService(
         .execute();
       for (const certification of certifications) {
         const id = String(certification.id);
+        // External certificates are never issued here.
+        if (certification.kind === 'external') continue;
         const requirements = await requirementsOf(id);
         if (!requirements.courses.length && !requirements.exams.length)
           continue;
@@ -1100,6 +1259,13 @@ export function createCertificationService(
           ),
         );
         if (![...coursesDone, ...examsDone].every(Boolean)) continue;
+        // V4-13: the practical assessments the certification requires (发证与复审续发).
+        const gate = await deps.practicalGate?.()?.(
+          employee.id,
+          id,
+          latest && latest.status !== 'revoked' ? 'recert' : 'initial',
+        );
+        if (gate && !gate.ok) continue;
         // The evidence names the records that met each requirement: completed course assignments and passed attempts.
         const assignmentIds: string[] = [];
         for (const course of courses) {
@@ -1132,6 +1298,8 @@ export function createCertificationService(
           attemptIds,
           courseIds: courses.map((c) => c.id),
           examIds: requirements.exams.map((e) => e.id),
+          // V4-13
+          ...(gate?.recordIds.length ? { practicalRecordIds: gate.recordIds } : {}),
           at: new Date().toISOString(),
         };
         const certificateId = await issue(employee, certification, evidence);
@@ -1141,6 +1309,8 @@ export function createCertificationService(
     },
 
     async heldCertificationIds(userId) {
+      // V4-14: with the industry pack off, certificates grant nothing.
+      if (!(await licensed())) return [];
       const rows = await database
         .query()
         .selectFrom('employeeCertificates')
@@ -1215,6 +1385,8 @@ export function createCertificationService(
     },
 
     async grantedSetTitles(certificationId) {
+      // V4-14: with the industry pack off a certificate grants nothing, so there is nothing to lose.
+      if (!(await licensed())) return [];
       const titles: string[] = [];
       for (const set of await authz.permissionSets.list()) {
         const assignments = await authz.permissionSets.listAssignments(set.key);
@@ -1255,6 +1427,7 @@ export function createCertificationService(
           'certifications.expiringNoticeDays as expiringNoticeDays',
           'certifications.recertAdvanceDays as recertAdvanceDays',
           'certifications.recertMode as recertMode',
+          'certifications.kind as kind',
         ])
         .where('employeeCertificates.status', 'in', [...HOLDING_STATUSES])
         .where('employeeCertificates.expiresAt', 'is not', null)
@@ -1279,10 +1452,9 @@ export function createCertificationService(
             .execute();
           report.expiredCertificates += 1;
           await refreshSession(employee.userId);
-          const sets =
-            (await service.grantedSetTitles(String(row.certificationId))).join(
-              '、',
-            ) || '—';
+          // "到期后不再计入有效持证"; lost permissions only with the industry pack on.
+          const lost = await lostSets(String(row.certificationId));
+          const sets = lost.join('、') || '—';
           if (recipients.length)
             await platform.reminderOnce(
               `certificate:${String(row.id)}:expired`,
@@ -1290,15 +1462,19 @@ export function createCertificationService(
                 notify({
                   key: `certificate:${String(row.id)}:expired`,
                   userIds: recipients,
-                  message: 'certificateExpired',
+                  message: lost.length
+                    ? 'certificateExpiredWithSets'
+                    : 'certificateExpiredNotice',
                   params: { name: employee.name, title, date: expiresAt, sets },
                   path: '/talent/me',
                 }),
             );
           continue;
         }
+        const external = row.kind === 'external';
         const advance = Number(row.recertAdvanceDays ?? 60);
-        if (advance > 0 && days <= advance) {
+        // External certificates are never renewed here: the holder is only reminded to register the new one.
+        if (!external && advance > 0 && days <= advance) {
           const open = await database
             .query()
             .selectFrom('assignments')
@@ -1372,23 +1548,449 @@ export function createCertificationService(
             .where('status', '=', 'valid')
             .execute();
           report.expiringCertificates += 1;
-          if (recipients.length)
+          if (external) {
+            if (employee.userId)
+              await platform.reminderOnce(
+                `certificate:${String(row.id)}:expiring`,
+                () =>
+                  notify({
+                    key: `certificate:${String(row.id)}:expiring`,
+                    userIds: [employee.userId!],
+                    message: 'externalCertificateExpiring',
+                    params: { title, date: expiresAt },
+                    path: '/talent/certifications',
+                  }),
+              );
+          } else if (recipients.length) {
+            // V4-14: "到期后将不能使用：……" when the certificate brings permissions.
+            const losing = await lostSets(String(row.certificationId));
             await platform.reminderOnce(
               `certificate:${String(row.id)}:expiring`,
               () =>
                 notify({
                   key: `certificate:${String(row.id)}:expiring`,
                   userIds: recipients,
-                  message: 'certificateExpiring',
-                  params: { name: employee.name, title, date: expiresAt },
+                  message: losing.length
+                    ? 'certificateExpiringWithSets'
+                    : 'certificateExpiring',
+                  params: {
+                    name: employee.name,
+                    title,
+                    date: expiresAt,
+                    sets: losing.join('、') || '—',
+                  },
                   path: '/talent/me',
                 }),
             );
+          }
         }
       }
       return report;
     },
+
+    // ---------- V3-10 10B: external certificates ----------
+    async registerExternal(ctx, input) {
+      const policies = await authorizeAction(ctx.authz, EXTERNAL, 'register');
+      const values = await externalInput(ctx, input);
+      const employeeId = await registrant(ctx, policies, input);
+      const certification = await certificationRow(values.certificationId);
+      if (
+        !certification ||
+        certification.kind !== 'external' ||
+        !bool(certification.active)
+      )
+        throw new HrError('CERTIFICATION_NOT_EXTERNAL', 409);
+      // One registration waiting for verification per employee and type.
+      const waiting = await database
+        .query()
+        .selectFrom('employeeCertificates')
+        .select(['id'])
+        .where('employeeId', '=', employeeId)
+        .where('certificationId', '=', values.certificationId)
+        .where('status', '=', 'pending')
+        .executeTakeFirst();
+      if (waiting) throw new HrError('EXTERNAL_CERTIFICATE_PENDING', 409);
+      const id = newId();
+      const stamp = new Date();
+      await database
+        .repository('employeeCertificates')
+        .withPolicy(policyOf(policies, 'employeeCertificates'))
+        .createOne({
+          values: {
+            id,
+            employeeId,
+            certificationId: values.certificationId,
+            // The internal number is ours; the certificate's own number is externalNo.
+            certificateNo: `EXT-${String(certification.code).toUpperCase()}-${id.slice(0, 8).toUpperCase()}`,
+            issuedAt: values.issuedAt,
+            expiresAt: values.expiresAt,
+            status: 'pending',
+            source: 'external',
+            revokedReason: null,
+            evidence: JSON.stringify({ registeredBy: ctx.userId }),
+            supersededById: null,
+            externalNo: values.externalNo,
+            attachmentFileId: values.attachmentFileId,
+            verifyStatus: 'pending',
+            verifiedBy: null,
+            verifiedAt: null,
+            verifyNote: null,
+            createdAt: stamp,
+            updatedAt: stamp,
+          },
+        });
+      return (await toCertificateViews([(await certificateRow(id))!]))[0];
+    },
+
+    async updateExternal(ctx, id, input) {
+      const policies = await authorizeAction(ctx.authz, EXTERNAL, 'register');
+      const row = (await database
+        .repository('employeeCertificates')
+        .withPolicy(policyOf(policies, 'employeeCertificates'))
+        .findOne({ filter: { id } })) as Record<string, unknown> | undefined;
+      if (!row || row.source !== 'external')
+        throw new HrError('CERTIFICATE_NOT_FOUND', 404);
+      // Only a registration still waiting (or rejected) can be corrected.
+      if (row.status !== 'pending')
+        throw new HrError('EXTERNAL_CERTIFICATE_NOT_PENDING', 409);
+      const values = await externalInput(ctx, {
+        ...(isRecord(input) ? input : {}),
+        certificationId: String(row.certificationId),
+      });
+      await database
+        .repository('employeeCertificates')
+        .withPolicy(policyOf(policies, 'employeeCertificates'))
+        .updateOne({
+          filter: { id, status: 'pending' },
+          values: {
+            externalNo: values.externalNo,
+            issuedAt: values.issuedAt,
+            expiresAt: values.expiresAt,
+            attachmentFileId: values.attachmentFileId,
+            verifyStatus: 'pending',
+            updatedAt: new Date(),
+          },
+        });
+      return (await toCertificateViews([(await certificateRow(id))!]))[0];
+    },
+
+    async verifyExternal(ctx, id, input) {
+      const policies = await authorizeAction(ctx.authz, EXTERNAL, 'verify');
+      if (!isRecord(input)) throw new HrError('INVALID_INPUT', 400);
+      const decision = requireEnum(
+        input.decision,
+        ['verified', 'rejected'] as const,
+        'INVALID_INPUT',
+      );
+      const note = requireString(input.note, 'VERIFY_NOTE_REQUIRED', {
+        optional: decision === 'verified',
+        max: 1000,
+      });
+      if (decision === 'rejected' && !note)
+        throw new HrError('VERIFY_NOTE_REQUIRED', 400);
+      const row = (await database
+        .repository('employeeCertificates')
+        .withPolicy(policyOf(policies, 'employeeCertificates'))
+        .findOne({ filter: { id } })) as Record<string, unknown> | undefined;
+      if (!row || row.source !== 'external')
+        throw new HrError('CERTIFICATE_NOT_FOUND', 404);
+      if (row.status !== 'pending' || row.verifyStatus !== 'pending')
+        throw new HrError('EXTERNAL_CERTIFICATE_NOT_PENDING', 409);
+      const employee = await platform.employee(String(row.employeeId));
+      // The holder never verifies their own certificate.
+      if (employee?.userId && employee.userId === ctx.userId)
+        throw new HrError('VERIFY_OWN_CERTIFICATE', 403);
+      const certification = (await certificationRow(
+        String(row.certificationId),
+      ))!;
+      const stamp = new Date();
+      if (decision === 'rejected') {
+        await database
+          .repository('employeeCertificates')
+          .withPolicy(policyOf(policies, 'employeeCertificates'))
+          .updateOne({
+            filter: { id, status: 'pending' },
+            values: {
+              verifyStatus: 'rejected',
+              verifyNote: note,
+              verifiedBy: ctx.userId,
+              verifiedAt: stamp,
+              updatedAt: stamp,
+            },
+          });
+        if (employee?.userId)
+          await notify({
+            key: `certificate:${id}:rejected:${stamp.getTime()}`,
+            userIds: [employee.userId],
+            message: 'externalCertificateRejected',
+            params: { title: String(certification.title), note: note ?? '' },
+            path: '/talent/certifications?external=mine',
+          });
+      } else {
+        // Verified: valid from now, into the lifecycle; a certificate of the same type still held is replaced.
+        await database.transaction(async (connection) => {
+          const current = await connection.query
+            .selectFrom('employeeCertificates')
+            .select(['id'])
+            .where('employeeId', '=', String(row.employeeId))
+            .where('certificationId', '=', String(row.certificationId))
+            .where('status', 'in', [...HOLDING_STATUSES])
+            .executeTakeFirst();
+          await connection.query
+            .updateTable('employeeCertificates')
+            .set({
+              status: 'valid',
+              verifyStatus: 'verified',
+              verifyNote: note,
+              verifiedBy: ctx.userId,
+              verifiedAt: stamp,
+              updatedAt: stamp,
+            })
+            .where('id', '=', id)
+            .where('status', '=', 'pending')
+            .execute();
+          if (current)
+            await connection.query
+              .updateTable('employeeCertificates')
+              .set({
+                status: 'superseded',
+                supersededById: id,
+                updatedAt: stamp,
+              })
+              .where('id', '=', String(current.id))
+              .execute();
+        });
+        if (certification.competencyId && certification.competencyLevel != null)
+          await writeCompetency(
+            String(row.employeeId),
+            str(certification.competencyId),
+            Number(certification.competencyLevel),
+            `外部证书《${String(certification.title)}》核验通过（${str(row.externalNo ?? '')}）`,
+          );
+        await refreshSession(employee?.userId ?? null);
+        // V4-14: the permission sets the verified certificate brings (industry pack on).
+        const gained = await lostSets(String(row.certificationId));
+        if (employee?.userId)
+          await notify({
+            key: `certificate:${id}:verified`,
+            userIds: [employee.userId],
+            message: gained.length
+              ? 'externalCertificateVerifiedWithSets'
+              : 'externalCertificateVerified',
+            params: {
+              title: String(certification.title),
+              sets: gained.join('、') || '—',
+            },
+            path: '/talent/me',
+          });
+      }
+      return (await toCertificateViews([(await certificateRow(id))!]))[0];
+    },
+
+    async listExternal(ctx, filters) {
+      const canVerify = await platform.can(ctx, EXTERNAL, 'verify');
+      const mine = filters.mine || !canVerify;
+      let items: Record<string, unknown>[];
+      if (mine) {
+        await authorizeAction(ctx.authz, EXTERNAL, 'register');
+        const employee = await platform.employeeOfUser(ctx.userId);
+        if (!employee) return { items: [], canVerify };
+        items = await database
+          .query()
+          .selectFrom('employeeCertificates')
+          .selectAll()
+          .where('employeeId', '=', employee.id)
+          .where('source', '=', 'external')
+          .orderBy('createdAt', 'desc')
+          .execute();
+      } else {
+        const policies = await authorizeAction(ctx.authz, EXTERNAL, 'verify');
+        items = await database
+          .repository('employeeCertificates')
+          .withPolicy(policyOf(policies, 'employeeCertificates'))
+          .findMany({
+            filter: (f) =>
+              f.and([
+                f.string('source').eq('external'),
+                ...(filters.verifyStatus
+                  ? [f.string('verifyStatus').eq(filters.verifyStatus)]
+                  : []),
+              ]),
+            sort: (s) => [s.field('createdAt').desc()],
+          });
+      }
+      return { items: await toCertificateViews(items), canVerify };
+    },
+
+    async externalScan(ctx, id) {
+      const row = await certificateRow(id);
+      if (!row || row.source !== 'external' || !row.attachmentFileId)
+        return null;
+      if (!(await maySeeExternal(ctx, row)))
+        throw new HrError('CERTIFICATE_NOT_FOUND', 404);
+      return (
+        ((await database.repository('certificateScanFiles').findOne({
+          filter: { id: str(row.attachmentFileId) },
+          select: (s) =>
+            s.fields(
+              'id',
+              'ext',
+              'filename',
+              'mimeType',
+              'size',
+              'createdAt',
+              'updatedAt',
+            ),
+        })) as Record<string, unknown> | undefined) ?? null
+      );
+    },
+
+    async canReadScan(ctx, fileId) {
+      const file = (await database
+        .repository('certificateScanFiles')
+        .findOne({ filter: { id: fileId } })) as
+        Record<string, unknown> | undefined;
+      if (!file) return false;
+      const linked = await database
+        .query()
+        .selectFrom('employeeCertificates')
+        .selectAll()
+        .where('attachmentFileId', '=', fileId)
+        .execute();
+      for (const row of linked) if (await maySeeExternal(ctx, row)) return true;
+      // A scan not yet attached is visible only to whoever uploaded it.
+      return !linked.length && str(file.uploadedByUserId) === ctx.userId;
+    },
+
+    async qualificationDossier(ctx, certificateId) {
+      const row = await certificateRow(certificateId);
+      if (!row) throw new HrError('CERTIFICATE_NOT_FOUND', 404);
+      const employee = await platform.employee(String(row.employeeId));
+      const head = employee ? await platform.headOf(employee) : null;
+      // HR administrators and the head who decides on the appointment.
+      if (
+        head !== ctx.userId &&
+        !(await platform.can(ctx, CERTIFICATION, 'manage'))
+      )
+        throw new HrError('CERTIFICATE_NOT_FOUND', 404);
+      const runs = await database
+        .query()
+        .selectFrom('aiTaskRuns')
+        .select(['id', 'output', 'triggerRef', 'finishedAt', 'fallback'])
+        .where('task', '=', 'certificationSteward.qualificationPrep')
+        .where('status', '=', 'succeeded')
+        .orderBy('startedAt', 'desc')
+        .limit(50)
+        .execute();
+      const run = runs.find(
+        (r) =>
+          json<{ certificateId?: string }>(r.triggerRef, {}).certificateId ===
+          certificateId,
+      );
+      if (!run) return null;
+      return {
+        runId: String(run.id),
+        fallback: bool(run.fallback),
+        ...json<Record<string, unknown>>(run.output, {}),
+      };
+    },
   };
+
+  async function certificateRow(
+    id: string,
+  ): Promise<Record<string, unknown> | undefined> {
+    return await database
+      .query()
+      .selectFrom('employeeCertificates')
+      .selectAll()
+      .where('id', '=', id)
+      .executeTakeFirst();
+  }
+
+  /** The holder, a verifier, or anyone whose certificate view scope covers the holder. */
+  async function maySeeExternal(
+    ctx: ActorContext,
+    row: Record<string, unknown>,
+  ): Promise<boolean> {
+    const own = await platform.employeeOfUser(ctx.userId);
+    if (own && own.id === String(row.employeeId)) return true;
+    for (const [resource, action] of [
+      [EXTERNAL, 'verify'],
+      [CERTIFICATE, 'view'],
+    ] as const) {
+      const policies = await tryAuthorizeAction(ctx.authz, resource, action);
+      if (
+        policies &&
+        (await database
+          .repository('employeeCertificates')
+          .withPolicy(policyOf(policies, 'employeeCertificates'))
+          .findOne({ filter: { id: String(row.id) } }))
+      )
+        return true;
+    }
+    return false;
+  }
+
+  /** The employee a registration is for: oneself, or anyone in scope for HR. */
+  async function registrant(
+    ctx: ActorContext,
+    policies: CollectionPolicies,
+    input: unknown,
+  ): Promise<string> {
+    const requested =
+      isRecord(input) && typeof input.employeeId === 'string'
+        ? input.employeeId
+        : null;
+    const own = await platform.employeeOfUser(ctx.userId);
+    if (!requested || requested === own?.id) {
+      if (!own || own.status === 'leave')
+        throw new HrError('EMPLOYEE_NOT_LINKED', 404);
+      return own.id;
+    }
+    const visible = await database
+      .repository('employees')
+      .withPolicy(policyOf(policies, 'employees'))
+      .findOne({ filter: { id: requested } });
+    if (!visible) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+    return requested;
+  }
+
+  async function externalInput(
+    ctx: ActorContext,
+    input: unknown,
+  ): Promise<{
+    certificationId: string;
+    externalNo: string;
+    issuedAt: string;
+    expiresAt: string | null;
+    attachmentFileId: string;
+  }> {
+    if (!isRecord(input)) throw new HrError('INVALID_INPUT', 400);
+    const issuedAt = optionalDate(input.issuedAt, 'INVALID_INPUT');
+    if (!issuedAt) throw new HrError('EXTERNAL_ISSUED_REQUIRED', 400);
+    const expiresAt = optionalDate(input.expiresAt, 'INVALID_INPUT');
+    if (expiresAt && expiresAt <= issuedAt)
+      throw new HrError('EXTERNAL_DATES_INVALID', 400);
+    const attachmentFileId = requireString(
+      input.attachmentFileId,
+      'EXTERNAL_SCAN_REQUIRED',
+      { max: 64 },
+    )!;
+    // The scan must exist and be readable by the person registering it.
+    if (!(await service.canReadScan(ctx, attachmentFileId)))
+      throw new HrError('EXTERNAL_SCAN_REQUIRED', 400);
+    return {
+      certificationId: requireString(input.certificationId, 'INVALID_INPUT', {
+        max: 64,
+      })!,
+      externalNo: requireString(input.externalNo, 'EXTERNAL_NO_REQUIRED', {
+        max: 128,
+      })!,
+      issuedAt,
+      expiresAt,
+      attachmentFileId,
+    };
+  }
 
   return service;
 }

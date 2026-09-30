@@ -12,6 +12,7 @@ import { HrError, isRecord } from '../../providers/hr/shared.js';
 import {
   certificationServiceToken,
   examServiceToken,
+  examSettingsToken,
 } from '../../providers/hr/tokens.js';
 import {
   actor,
@@ -33,6 +34,10 @@ export const examApiRoutes: AppApiRouteContribution<Application> =
     const authz = app.container.resolve(authorizationToken);
     const exams = app.container.resolve(examServiceToken);
     const certifications = app.container.resolve(certificationServiceToken);
+    const examSettings = app.container.resolve(examSettingsToken);
+    /** V3-10 单设备作答: the token this browser holds for the attempt. */
+    const device = (c: { req: { header(name: string): string | undefined } }) =>
+      c.req.header('x-exam-device')?.slice(0, 64) || null;
 
     const routes = new Hono<HrEnv>();
     for (const prefix of [
@@ -43,6 +48,9 @@ export const examApiRoutes: AppApiRouteContribution<Application> =
       '/grading',
       '/certifications',
       '/certificates',
+      // V3-10
+      '/exam-settings',
+      '/external-certificates',
     ]) {
       routes.use(
         prefix,
@@ -207,11 +215,19 @@ export const examApiRoutes: AppApiRouteContribution<Application> =
     );
     routes.post('/my-exams/:examId/start', async (c) =>
       c.json({
-        data: await exams.startAttempt(actor(c), c.req.param('examId')),
+        data: await exams.startAttempt(
+          actor(c),
+          c.req.param('examId'),
+          device(c),
+          // V4-13: the candidate's language picks the confirmed translations.
+          locale(c),
+        ),
       }),
     );
     routes.get('/attempts/:id', async (c) =>
-      c.json({ data: await exams.getAttempt(actor(c), c.req.param('id')) }),
+      c.json({
+        data: await exams.getAttempt(actor(c), c.req.param('id'), device(c)),
+      }),
     );
     routes.put('/attempts/:id/answers', async (c) => {
       const body = await readJson(c);
@@ -220,6 +236,7 @@ export const examApiRoutes: AppApiRouteContribution<Application> =
           actor(c),
           c.req.param('id'),
           isRecord(body) ? body.answers : undefined,
+          device(c),
         ),
       });
     });
@@ -230,11 +247,102 @@ export const examApiRoutes: AppApiRouteContribution<Application> =
           actor(c),
           c.req.param('id'),
           isRecord(body) ? body.answers : undefined,
+          device(c),
         ),
       });
     });
     routes.get('/attempts/:id/result', async (c) =>
       c.json({ data: await exams.attemptResult(actor(c), c.req.param('id')) }),
+    );
+
+    // ---------- V3-10 10B: anti-cheating ----------
+    routes.post('/attempts/:id/integrity', async (c) =>
+      c.json({
+        data: await exams.recordIntegrity(
+          actor(c),
+          c.req.param('id'),
+          await readJson(c),
+          device(c),
+        ),
+      }),
+    );
+    routes.get('/exams/:id/integrity', async (c) =>
+      c.json({ data: await exams.listIntegrity(actor(c), c.req.param('id')) }),
+    );
+    routes.post('/attempts/:id/integrity-review', async (c) =>
+      c.json({
+        data: await exams.reviewIntegrity(
+          actor(c),
+          c.req.param('id'),
+          await readJson(c),
+        ),
+      }),
+    );
+
+    // ---------- V3-10: exam → competency rule, industry pack switch ----------
+    routes.get('/exam-settings', async (c) =>
+      c.json({ data: await examSettings.get(actor(c)) }),
+    );
+    routes.put('/exam-settings/:section', async (c) =>
+      c.json({
+        data: await examSettings.update(
+          actor(c),
+          c.req.param('section'),
+          await readJson(c),
+        ),
+      }),
+    );
+
+    // ---------- V3-10 10B: external certificates ----------
+    routes.get('/external-certificates', async (c) =>
+      c.json({
+        data: await certifications.listExternal(actor(c), {
+          verifyStatus: c.req.query('verifyStatus') || undefined,
+          mine: c.req.query('mine') === 'true',
+        }),
+      }),
+    );
+    routes.post('/external-certificates', async (c) =>
+      c.json(
+        {
+          data: await certifications.registerExternal(
+            actor(c),
+            await readJson(c),
+          ),
+        },
+        201,
+      ),
+    );
+    routes.patch('/external-certificates/:id', async (c) =>
+      c.json({
+        data: await certifications.updateExternal(
+          actor(c),
+          c.req.param('id'),
+          await readJson(c),
+        ),
+      }),
+    );
+    routes.post('/external-certificates/:id/verify', async (c) =>
+      c.json({
+        data: await certifications.verifyExternal(
+          actor(c),
+          c.req.param('id'),
+          await readJson(c),
+        ),
+      }),
+    );
+    routes.get('/external-certificates/:id/scan', async (c) =>
+      c.json({
+        data: await certifications.externalScan(actor(c), c.req.param('id')),
+      }),
+    );
+    routes.get('/certificates/:id/qualification-dossier', async (c) =>
+      c.json({
+        data: await certifications.qualificationDossier(
+          actor(c),
+          c.req.param('id'),
+        ),
+      }),
     );
 
     // ---------- Certifications and certificates ----------

@@ -11,6 +11,11 @@ import {
 import { useLocation, useNavigate } from 'react-router';
 import { RouteDialog } from '@/components/route-dialog';
 import { useRouteOverlay } from '@/components/use-route-overlay';
+import { useAppTimeZone } from '@/components/talent/attendance/app-time';
+import {
+  instantOfWallClock,
+  wallClockInput,
+} from '@/components/talent/attendance/dates';
 import { LeaveError } from '@/components/talent/leave-error';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -27,6 +32,16 @@ import { Spinner } from '@/components/ui/spinner';
 import { useRemote } from '@/components/talent/use-remote';
 import { BlockSkeleton } from '@/components/talent/states';
 import { LeaveProofButton } from '@/components/talent/leave-proof-button';
+import { CustomFieldInputs } from '@/components/talent/custom-fields';
+import { errorCode, errorDetails } from '@/components/talent/errors';
+import {
+  asText,
+  compactValues,
+  customFieldErrors,
+  useCustomFieldDefinitions,
+  type CustomFieldDefinition,
+  type CustomValues,
+} from '@/components/talent/custom-field-model';
 import { toast } from '@/components/ui/toast';
 import {
   AlertDialog,
@@ -67,6 +82,34 @@ export interface LeaveDraft {
   source: string;
   attachmentFileId: string | null;
   canEdit?: boolean;
+  /** 界面追加字段 values (e.g. 工作交接人), keyed by the definition's key. */
+  customFields?: CustomValues;
+}
+
+/** One added value as comparable text: the server trims text and stores numbers. */
+function comparable(value: unknown): string {
+  if (value == null || (Array.isArray(value) && !value.length)) return '';
+  return asText(value).trim();
+}
+
+/** The form's added values as sent: every form field, empty ones as null. */
+function formValues(
+  definitions: readonly CustomFieldDefinition[],
+  values: CustomValues,
+): CustomValues {
+  return compactValues(
+    Object.fromEntries(definitions.map((d) => [d.key, values[d.key] ?? null])),
+  );
+}
+
+function sameFormValues(
+  definitions: readonly CustomFieldDefinition[],
+  left: CustomValues | undefined,
+  right: CustomValues | undefined,
+): boolean {
+  return definitions.every(
+    (d) => comparable(left?.[d.key]) === comparable(right?.[d.key]),
+  );
 }
 
 export function ExistingLeaveDraft({
@@ -131,11 +174,9 @@ export function ExistingLeaveDraft({
   );
 }
 
-function localInput(value: string): string {
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 19);
+/** A stored instant as the `datetime-local` value in the application time zone. */
+function localInput(value: string, zone: string): string {
+  return wallClockInput(value, zone);
 }
 
 export function LeaveRequestForm({
@@ -148,6 +189,9 @@ export function LeaveRequestForm({
   reload?: () => void;
 }): ReactElement {
   const { t } = useTranslation();
+  // Start and end are typed and shown in the application time zone, the one
+  // the server computes leave in, whatever the browser's zone is.
+  const zone = useAppTimeZone();
   const api = useApiClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -172,12 +216,21 @@ export function LeaveRequestForm({
     initialDraft?.leaveTypeId ?? '',
   );
   const [startAt, setStartAt] = useState(() =>
-    initialDraft ? localInput(initialDraft.startAt) : '',
+    initialDraft ? localInput(initialDraft.startAt, zone) : '',
   );
   const [endAt, setEndAt] = useState(() =>
-    initialDraft ? localInput(initialDraft.endAt) : '',
+    initialDraft ? localInput(initialDraft.endAt, zone) : '',
   );
   const [reason, setReason] = useState(initialDraft?.reason ?? '');
+  // 界面追加字段 placed on the leave form by HR (e.g. 工作交接人).
+  const { definitions: customDefinitions } = useCustomFieldDefinitions(
+    'leaveRequests',
+    'form',
+  );
+  const [custom, setCustom] = useState<CustomValues>(
+    () => initialDraft?.customFields ?? {},
+  );
+  const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
   const [existingAttachment, setExistingAttachment] = useState(
     initialDraft?.attachmentFileId ?? null,
   );
@@ -250,10 +303,11 @@ export function LeaveRequestForm({
   const dirty =
     (mode === 'hr' && employeeId !== (initialDraft?.employeeId ?? '')) ||
     leaveTypeId !== (initialDraft?.leaveTypeId ?? '') ||
-    startAt !== (initialDraft ? localInput(initialDraft.startAt) : '') ||
-    endAt !== (initialDraft ? localInput(initialDraft.endAt) : '') ||
+    startAt !== (initialDraft ? localInput(initialDraft.startAt, zone) : '') ||
+    endAt !== (initialDraft ? localInput(initialDraft.endAt, zone) : '') ||
     reason !== (initialDraft?.reason ?? '') ||
-    attachmentFileId !== (initialDraft?.attachmentFileId ?? null);
+    attachmentFileId !== (initialDraft?.attachmentFileId ?? null) ||
+    !sameFormValues(customDefinitions, custom, initialDraft?.customFields);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
@@ -272,7 +326,7 @@ export function LeaveRequestForm({
       !leaveTypeId ||
       !startAt ||
       !endAt ||
-      selected?.unit !== 'day' ||
+      !selected ||
       (!saveOnly && selected.requiresAttachment && !attachmentFileId)
     )
       return;
@@ -280,15 +334,18 @@ export function LeaveRequestForm({
     setBusy(true);
     setError(null);
     setConflict(false);
+    setCustomErrors({});
     try {
+      const customFields = formValues(customDefinitions, custom);
       const input = {
         leaveTypeId,
-        startAt: new Date(startAt).toISOString(),
-        endAt: new Date(endAt).toISOString(),
+        startAt: instantOfWallClock(startAt, zone),
+        endAt: instantOfWallClock(endAt, zone),
         reason: reason.trim() || null,
         source: mode === 'hr' ? 'hr' : (initialDraft?.source ?? 'self'),
         ...(mode === 'hr' ? { employeeId } : {}),
         attachmentFileId,
+        customFields,
       };
       const matches = (record: LeaveDraft) =>
         (mode !== 'hr' || record.employeeId === employeeId) &&
@@ -297,7 +354,8 @@ export function LeaveRequestForm({
         record.endAt === input.endAt &&
         record.reason === input.reason &&
         record.source === input.source &&
-        (record.attachmentFileId ?? null) === input.attachmentFileId;
+        (record.attachmentFileId ?? null) === input.attachmentFileId &&
+        sameFormValues(customDefinitions, record.customFields, customFields);
       let current: LeaveDraft;
       if (draftRef.current) {
         // A failed response does not prove a failed write. Read the same
@@ -368,6 +426,9 @@ export function LeaveRequestForm({
       await navigate(closeTo, { replace: true });
     } catch (cause) {
       setError(cause);
+      // A missing or invalid added field is marked on its input; the values stay.
+      if (errorCode(cause) === 'CUSTOM_FIELD_INVALID')
+        setCustomErrors(customFieldErrors(errorDetails(cause)));
       if (cause instanceof ApiClientError && cause.status === 409)
         setConflict(true);
       if (cause instanceof ApiClientError && [403, 404].includes(cause.status))
@@ -417,7 +478,6 @@ export function LeaveRequestForm({
             Boolean(types.error) ||
             !employeeReady ||
             !selected ||
-            selected.unit !== 'day' ||
             uploadStatus !== 'idle' ||
             uploadUncertain
           }
@@ -449,16 +509,9 @@ export function LeaveRequestForm({
         ) : null}
         <p className='text-sm text-muted-foreground'>
           {t('attendance.leave.timeZone', {
-            zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            zone,
           })}
         </p>
-        {selected && selected.unit !== 'day' ? (
-          <Alert>
-            <AlertDescription>
-              {t('attendance.leave.errors.LEAVE_UNIT_POLICY_REQUIRED')}
-            </AlertDescription>
-          </Alert>
-        ) : null}
         {mode === 'hr' ? (
           <div className='grid gap-2'>
             <Label htmlFor='leave-employee'>
@@ -582,6 +635,17 @@ export function LeaveRequestForm({
             maxLength={1000}
           />
         </div>
+        <CustomFieldInputs
+          definitions={customDefinitions}
+          values={custom}
+          onChange={(next) => {
+            setCustom(next);
+            setCustomErrors({});
+          }}
+          errors={customErrors}
+          disabled={busy}
+          idPrefix='leave-cf'
+        />
         <fieldset className='grid gap-2' disabled={busy || uploadUncertain}>
           <legend className='mb-2 text-sm font-medium'>
             {t('attendance.leave.proofLabel')}

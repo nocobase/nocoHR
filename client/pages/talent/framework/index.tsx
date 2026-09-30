@@ -66,10 +66,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+// V4-13
+import { ModelVersionsPanel } from '@/components/talent/talent-review-model-versions';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 
 import { AdvisorLauncher } from './advisor-panel.js';
+import { useCandidates } from './candidates-data.js';
+import { CandidatesPanel } from './candidates.js';
+import { JobDescriptionCard } from './jd-card.js';
 import { EntityDialog, type EntityTarget } from './entity-dialog.js';
 import { RequirementDialog } from './requirement-dialog.js';
 import type { Competency, FrameworkData, Requirement } from './types.js';
@@ -98,6 +104,21 @@ export default function FrameworkPage(): ReactElement {
   )[0];
   const positionId = params.get('position') ?? firstPosition?.id ?? null;
   const position = data?.positions.find((p) => p.id === positionId);
+  // V3-08 拟任人员: the tab shows only to callers who may read the position's development targets.
+  const candidates = useCandidates(position ? position.id : null);
+  const tab =
+    params.get('tab') === 'candidates' && candidates.data
+      ? 'candidates'
+      : // V4-13 能力模型版本
+        params.get('tab') === 'versions'
+        ? 'versions'
+        : 'requirements';
+  const setTab = (value: string) => {
+    const next = new URLSearchParams(params);
+    if (value === 'candidates' || value === 'versions') next.set('tab', value);
+    else next.delete('tab');
+    setParams(next, { replace: true });
+  };
   const competencyById = useMemo(
     () => new Map((data?.competencies ?? []).map((c) => [c.id, c])),
     [data],
@@ -135,6 +156,7 @@ export default function FrameworkPage(): ReactElement {
       toast.add({ type: 'success', title: success });
       setSelected([]);
       framework.reload();
+      candidates.reload();
     } catch (cause) {
       toast.add({ type: 'error', title: errorMessage(cause, t) });
     } finally {
@@ -452,255 +474,306 @@ export default function FrameworkPage(): ReactElement {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
-                  <div>
-                    <CardTitle>{t('talent.framework.requirements')}</CardTitle>
-                    <CardDescription>
-                      {drafts.length
-                        ? t('talent.framework.draftsPending', {
-                            count: drafts.length,
-                          })
-                        : t('talent.framework.requirementsDescription')}
-                    </CardDescription>
-                  </div>
-                  <div className='flex flex-wrap gap-2'>
-                    {data.canUseAdvisor ? (
-                      <AdvisorLauncher
-                        position={position}
-                        onClosed={framework.reload}
-                      />
-                    ) : null}
-                    {data.canUseAdvisor ? (
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        aria-label={t('talent.common.refresh')}
-                        onClick={framework.reload}
-                      >
-                        <RefreshCwIcon />
-                      </Button>
-                    ) : null}
-                    {data.canManage ? (
-                      <Button
-                        size='sm'
-                        onClick={() =>
-                          setRequirementEdit({ requirement: null })
-                        }
-                      >
-                        <PlusIcon data-icon='inline-start' />
-                        {t('talent.framework.addRequirement')}
-                      </Button>
-                    ) : null}
-                  </div>
-                </CardHeader>
-                <CardContent className='space-y-3'>
-                  {data.canConfirm && selected.length ? (
-                    <div className='flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm'>
-                      <span>
-                        {t('talent.framework.selected', {
-                          count: selected.length,
-                        })}
-                      </span>
-                      <Button
-                        size='sm'
-                        disabled={busy}
-                        onClick={() => askConfirm(selected)}
-                      >
-                        <CheckIcon data-icon='inline-start' />
-                        {t('talent.framework.confirm')}
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        disabled={busy}
-                        onClick={() =>
-                          void run(
-                            () =>
-                              api.request({
-                                path: 'talent/framework/requirements/discard',
-                                method: 'POST',
-                                json: { ids: selected },
-                              }),
-                            t('talent.framework.discarded'),
-                          )
-                        }
-                      >
-                        <XIcon data-icon='inline-start' />
-                        {t('talent.framework.discard')}
-                      </Button>
-                    </div>
+              <JobDescriptionCard
+                position={position}
+                canManage={data.canManage}
+                onChanged={framework.reload}
+              />
+
+              {/* V4-13: the 版本 tab is always there; 拟任人员 only for callers who may read it. */}
+              <Tabs
+                value={tab}
+                onValueChange={(value) => setTab(String(value))}
+              >
+                <TabsList>
+                  <TabsTrigger value='requirements'>
+                    {t('talent.framework.requirements')}
+                  </TabsTrigger>
+                  {candidates.data ? (
+                    <TabsTrigger value='candidates'>
+                      {t('talent.competencyExt.candidates.tab', {
+                        count: candidates.data.items.length,
+                      })}
+                    </TabsTrigger>
                   ) : null}
-                  {requirements.length ? (
-                    <div className='overflow-x-auto rounded-md border'>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            {data.canConfirm ? (
-                              <TableHead className='w-10'>
-                                <Checkbox
-                                  aria-label={t(
-                                    'talent.framework.selectDrafts',
-                                  )}
-                                  checked={
-                                    drafts.length > 0 &&
-                                    drafts.every((d) => selected.includes(d.id))
-                                  }
-                                  disabled={!drafts.length}
-                                  onCheckedChange={(checked) =>
-                                    setSelected(
-                                      checked === true
-                                        ? drafts.map((d) => d.id)
-                                        : [],
-                                    )
-                                  }
-                                />
+                  <TabsTrigger value='versions'>
+                    {t('talentReview.versions.tab')}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {tab === 'versions' ? (
+                <ModelVersionsPanel positionId={position.id} />
+              ) : tab === 'candidates' && candidates.data ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      {t('talent.competencyExt.candidates.title')}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CandidatesPanel position={position} list={candidates} />
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
+                    <div>
+                      <CardTitle>
+                        {t('talent.framework.requirements')}
+                      </CardTitle>
+                      <CardDescription>
+                        {drafts.length
+                          ? t('talent.framework.draftsPending', {
+                              count: drafts.length,
+                            })
+                          : t('talent.framework.requirementsDescription')}
+                      </CardDescription>
+                    </div>
+                    <div className='flex flex-wrap gap-2'>
+                      {data.canUseAdvisor ? (
+                        <AdvisorLauncher
+                          position={position}
+                          onClosed={framework.reload}
+                        />
+                      ) : null}
+                      {data.canUseAdvisor ? (
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          aria-label={t('talent.common.refresh')}
+                          onClick={framework.reload}
+                        >
+                          <RefreshCwIcon />
+                        </Button>
+                      ) : null}
+                      {data.canManage ? (
+                        <Button
+                          size='sm'
+                          onClick={() =>
+                            setRequirementEdit({ requirement: null })
+                          }
+                        >
+                          <PlusIcon data-icon='inline-start' />
+                          {t('talent.framework.addRequirement')}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </CardHeader>
+                  <CardContent className='space-y-3'>
+                    {data.canConfirm && selected.length ? (
+                      <div className='flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm'>
+                        <span>
+                          {t('talent.framework.selected', {
+                            count: selected.length,
+                          })}
+                        </span>
+                        <Button
+                          size='sm'
+                          disabled={busy}
+                          onClick={() => askConfirm(selected)}
+                        >
+                          <CheckIcon data-icon='inline-start' />
+                          {t('talent.framework.confirm')}
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={busy}
+                          onClick={() =>
+                            void run(
+                              () =>
+                                api.request({
+                                  path: 'talent/framework/requirements/discard',
+                                  method: 'POST',
+                                  json: { ids: selected },
+                                }),
+                              t('talent.framework.discarded'),
+                            )
+                          }
+                        >
+                          <XIcon data-icon='inline-start' />
+                          {t('talent.framework.discard')}
+                        </Button>
+                      </div>
+                    ) : null}
+                    {requirements.length ? (
+                      <div className='overflow-x-auto rounded-md border'>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {data.canConfirm ? (
+                                <TableHead className='w-10'>
+                                  <Checkbox
+                                    aria-label={t(
+                                      'talent.framework.selectDrafts',
+                                    )}
+                                    checked={
+                                      drafts.length > 0 &&
+                                      drafts.every((d) =>
+                                        selected.includes(d.id),
+                                      )
+                                    }
+                                    disabled={!drafts.length}
+                                    onCheckedChange={(checked) =>
+                                      setSelected(
+                                        checked === true
+                                          ? drafts.map((d) => d.id)
+                                          : [],
+                                      )
+                                    }
+                                  />
+                                </TableHead>
+                              ) : null}
+                              <TableHead>
+                                {t('talent.gap.competency')}
                               </TableHead>
-                            ) : null}
-                            <TableHead>{t('talent.gap.competency')}</TableHead>
-                            <TableHead>{t('talent.gap.category')}</TableHead>
-                            <TableHead className='text-right'>
-                              {t('talent.gap.required')}
-                            </TableHead>
-                            <TableHead>{t('talent.gap.mandatory')}</TableHead>
-                            <TableHead>{t('talent.fields.status')}</TableHead>
-                            {data.canManage ? (
+                              <TableHead>{t('talent.gap.category')}</TableHead>
                               <TableHead className='text-right'>
-                                {t('talent.common.actions')}
+                                {t('talent.gap.required')}
                               </TableHead>
-                            ) : null}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {requirements.map((r) => {
-                            const competency = competencyById.get(
-                              r.competencyId,
-                            );
-                            const draft = r.reviewStatus === 'draft';
-                            return (
-                              <TableRow
-                                key={r.id}
-                                className={cn(draft && 'bg-muted/40')}
-                              >
-                                {data.canConfirm ? (
+                              <TableHead>{t('talent.gap.mandatory')}</TableHead>
+                              <TableHead>{t('talent.fields.status')}</TableHead>
+                              {data.canManage ? (
+                                <TableHead className='text-right'>
+                                  {t('talent.common.actions')}
+                                </TableHead>
+                              ) : null}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {requirements.map((r) => {
+                              const competency = competencyById.get(
+                                r.competencyId,
+                              );
+                              const draft = r.reviewStatus === 'draft';
+                              return (
+                                <TableRow
+                                  key={r.id}
+                                  className={cn(draft && 'bg-muted/40')}
+                                >
+                                  {data.canConfirm ? (
+                                    <TableCell>
+                                      {draft ? (
+                                        <Checkbox
+                                          aria-label={t(
+                                            'talent.framework.selectRow',
+                                            { title: competency?.title ?? '' },
+                                          )}
+                                          checked={selected.includes(r.id)}
+                                          onCheckedChange={(checked) =>
+                                            setSelected((s) =>
+                                              checked === true
+                                                ? [...s, r.id]
+                                                : s.filter((id) => id !== r.id),
+                                            )
+                                          }
+                                        />
+                                      ) : null}
+                                    </TableCell>
+                                  ) : null}
+                                  <TableCell className='font-medium'>
+                                    {competency?.title ?? r.competencyId}
+                                    {competency?.reviewStatus === 'draft' ? (
+                                      <span className='ml-2 text-xs text-muted-foreground'>
+                                        ({t('talent.framework.newCompetency')})
+                                      </span>
+                                    ) : null}
+                                  </TableCell>
                                   <TableCell>
-                                    {draft ? (
-                                      <Checkbox
-                                        aria-label={t(
-                                          'talent.framework.selectRow',
-                                          { title: competency?.title ?? '' },
-                                        )}
-                                        checked={selected.includes(r.id)}
-                                        onCheckedChange={(checked) =>
-                                          setSelected((s) =>
-                                            checked === true
-                                              ? [...s, r.id]
-                                              : s.filter((id) => id !== r.id),
-                                          )
-                                        }
+                                    {competency ? (
+                                      <CategoryBadge
+                                        category={competency.category}
                                       />
                                     ) : null}
                                   </TableCell>
-                                ) : null}
-                                <TableCell className='font-medium'>
-                                  {competency?.title ?? r.competencyId}
-                                  {competency?.reviewStatus === 'draft' ? (
-                                    <span className='ml-2 text-xs text-muted-foreground'>
-                                      ({t('talent.framework.newCompetency')})
+                                  <TableCell className='text-right tabular-nums'>
+                                    {r.requiredLevel}
+                                  </TableCell>
+                                  <TableCell>
+                                    {r.mandatory ? (
+                                      <Badge>
+                                        {t('talent.gap.mandatoryYes')}
+                                      </Badge>
+                                    ) : (
+                                      <span className='text-muted-foreground'>
+                                        {t('talent.gap.mandatoryNo')}
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className='flex items-center gap-1'>
+                                      <ReviewStatusBadge
+                                        status={r.reviewStatus}
+                                      />
+                                      {r.source === 'ai' ? (
+                                        <Badge variant='outline'>AI</Badge>
+                                      ) : null}
                                     </span>
-                                  ) : null}
-                                </TableCell>
-                                <TableCell>
-                                  {competency ? (
-                                    <CategoryBadge
-                                      category={competency.category}
-                                    />
-                                  ) : null}
-                                </TableCell>
-                                <TableCell className='text-right tabular-nums'>
-                                  {r.requiredLevel}
-                                </TableCell>
-                                <TableCell>
-                                  {r.mandatory ? (
-                                    <Badge>
-                                      {t('talent.gap.mandatoryYes')}
-                                    </Badge>
-                                  ) : (
-                                    <span className='text-muted-foreground'>
-                                      {t('talent.gap.mandatoryNo')}
-                                    </span>
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  <span className='flex items-center gap-1'>
-                                    <ReviewStatusBadge
-                                      status={r.reviewStatus}
-                                    />
-                                    {r.source === 'ai' ? (
-                                      <Badge variant='outline'>AI</Badge>
-                                    ) : null}
-                                  </span>
-                                </TableCell>
-                                {data.canManage ? (
-                                  <TableCell className='text-right'>
-                                    <div className='flex justify-end gap-1'>
-                                      {draft && data.canConfirm ? (
+                                  </TableCell>
+                                  {data.canManage ? (
+                                    <TableCell className='text-right'>
+                                      <div className='flex justify-end gap-1'>
+                                        {draft && data.canConfirm ? (
+                                          <Button
+                                            variant='ghost'
+                                            size='icon-sm'
+                                            aria-label={t(
+                                              'talent.framework.confirm',
+                                            )}
+                                            onClick={() => askConfirm([r.id])}
+                                          >
+                                            <CheckIcon />
+                                          </Button>
+                                        ) : null}
                                         <Button
                                           variant='ghost'
                                           size='icon-sm'
-                                          aria-label={t(
-                                            'talent.framework.confirm',
-                                          )}
-                                          onClick={() => askConfirm([r.id])}
+                                          aria-label={t('talent.common.edit')}
+                                          onClick={() =>
+                                            setRequirementEdit({
+                                              requirement: r,
+                                            })
+                                          }
                                         >
-                                          <CheckIcon />
+                                          <PencilIcon />
                                         </Button>
-                                      ) : null}
-                                      <Button
-                                        variant='ghost'
-                                        size='icon-sm'
-                                        aria-label={t('talent.common.edit')}
-                                        onClick={() =>
-                                          setRequirementEdit({ requirement: r })
-                                        }
-                                      >
-                                        <PencilIcon />
-                                      </Button>
-                                      <Button
-                                        variant='ghost'
-                                        size='icon-sm'
-                                        aria-label={t('talent.common.remove')}
-                                        onClick={() =>
-                                          void run(
-                                            () =>
-                                              api.request({
-                                                path: `talent/framework/requirements/${encodeURIComponent(r.id)}`,
-                                                method: 'DELETE',
-                                              }),
-                                            t(
-                                              'talent.framework.requirementRemoved',
-                                            ),
-                                          )
-                                        }
-                                      >
-                                        <Trash2Icon />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                ) : null}
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : (
-                    <p className='text-sm text-muted-foreground'>
-                      {t('talent.framework.noRequirements')}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+                                        <Button
+                                          variant='ghost'
+                                          size='icon-sm'
+                                          aria-label={t('talent.common.remove')}
+                                          onClick={() =>
+                                            void run(
+                                              () =>
+                                                api.request({
+                                                  path: `talent/framework/requirements/${encodeURIComponent(r.id)}`,
+                                                  method: 'DELETE',
+                                                }),
+                                              t(
+                                                'talent.framework.requirementRemoved',
+                                              ),
+                                            )
+                                          }
+                                        >
+                                          <Trash2Icon />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  ) : null}
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <p className='text-sm text-muted-foreground'>
+                        {t('talent.framework.noRequirements')}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </div>

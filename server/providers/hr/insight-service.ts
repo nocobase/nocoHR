@@ -50,7 +50,14 @@ export interface CertificateWall {
 }
 
 export interface TimelineEntry {
-  readonly kind: 'jobEvent' | 'course' | 'exam' | 'certificate' | 'assessment';
+  readonly kind:
+    | 'jobEvent'
+    | 'course'
+    | 'exam'
+    | 'certificate'
+    | 'assessment'
+    // V4-12: 考核结果发布 (the cycle's name only, never the rating).
+    | 'review';
   readonly at: string;
   readonly title: string;
   readonly detail: string | null;
@@ -590,9 +597,28 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
             kind: 'assessment',
             at: iso(row.assessedAt),
             title: titles.get(String(row.competencyId)) ?? '',
-            detail: `L${String(row.level)} · ${String(row.source)}`,
+            // The level only: the source is an internal code (assessment / import / review), not wording.
+            detail: `L${String(row.level)}`,
           });
       }
+      // V4-12: 考核结果发布 — the cycle's name only, never the rating.
+      const published = await query
+        .selectFrom('reviewResults')
+        .innerJoin('reviewCycles', 'reviewCycles.id', 'reviewResults.cycleId')
+        .select([
+          'reviewCycles.title as title',
+          'reviewResults.publishedAt as publishedAt',
+        ])
+        .where('reviewResults.employeeId', '=', employeeId)
+        .where('reviewResults.publishedAt', 'is not', null)
+        .execute();
+      for (const row of published)
+        entries.push({
+          kind: 'review',
+          at: iso(row.publishedAt),
+          title: String(row.title),
+          detail: null,
+        });
       return entries.sort((a, b) => b.at.localeCompare(a.at));
     },
 
@@ -1135,10 +1161,14 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
     async teamSummary(ctx, departmentId) {
       const policies = await authorizeAction(ctx.authz, STEWARD, 'use');
       let department = departmentId;
-      if (!department) {
-        const headed = await organization.headedBy(ctx.userId);
-        department = headed[0];
-      }
+      const headed = await organization.headedBy(ctx.userId);
+      // V3-10: a team summary is for department heads and HR administrators only.
+      if (
+        !headed.length &&
+        !(await platform.can(ctx, 'talent.certification', 'manage'))
+      )
+        throw new HrError('STEWARD_TEAM_FORBIDDEN', 403);
+      if (!department) department = headed[0];
       return summarize(
         await scopedEmployees(
           policies,

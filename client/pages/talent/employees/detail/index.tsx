@@ -1,8 +1,16 @@
 import { useApiClient } from '@nocobase/app-client';
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { LinkIcon, LogOutIcon, PencilIcon, Trash2Icon } from 'lucide-react';
+import {
+  LinkIcon,
+  PencilIcon,
+  Trash2Icon,
+  UserCogIcon,
+  UserPlusIcon,
+} from 'lucide-react';
 import { useMemo, useRef, useState, type ReactElement } from 'react';
 import {
+  Link,
   matchPath,
   Navigate,
   NavLink,
@@ -45,6 +53,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -58,8 +67,10 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 
+import { SyncLockSwitch } from './sync-lock.js';
+
 import { EmployeeForm } from '../employee-form.js';
-import { LEAVE_REASONS, type EmployeesOutletContext } from '../types.js';
+import type { EmployeesOutletContext } from '../types.js';
 import type { DetailOutletContext } from './types.js';
 
 /** Route `/talent/employees/:employeeId`: the employee record with its tabs as child routes. */
@@ -82,8 +93,13 @@ function EmployeeDetailView({
     `talent/employees/${encodeURIComponent(employeeId)}`,
   );
   const [editOpen, setEditOpen] = useState(false);
-  const [leaveOpen, setLeaveOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  // V1-03 开通账号: the same action as the 组织同步 pending item, for a bound employee without a login.
+  const resolveSync = useCan({
+    resource: { type: 'composite', id: 'talent.orgSync' },
+    action: 'resolveIssues',
+  });
   const [deleteOpen, setDeleteOpen] = useState(false);
   const isParent =
     matchPath({ path: parentPath.pathname, end: true }, location.pathname) !==
@@ -117,6 +133,8 @@ function EmployeeDetailView({
   const tabs = [
     { path: 'profile', label: t('talent.detail.tabs.profile') },
     { path: 'abilities', label: t('talent.detail.tabs.abilities') },
+    { path: 'performance', label: t('talent.detail.tabs.performance') },
+    { path: 'portrait', label: t('talent.detail.tabs.portrait') },
     ...(detail.data?.can.viewContracts
       ? [{ path: 'contracts', label: t('talent.detail.tabs.contracts') }]
       : []),
@@ -157,13 +175,38 @@ function EmployeeDetailView({
                         : t('talent.detail.linkUser')}
                     </Button>
                   ) : null}
-                  {data.can.markLeave && data.employee.status !== 'leave' ? (
+                  {resolveSync.can &&
+                  !data.employee.userId &&
+                  data.employee.externalUserId &&
+                  data.employee.status !== 'leave' ? (
                     <Button
                       variant='outline'
-                      onClick={() => setLeaveOpen(true)}
+                      onClick={() => setAccountOpen(true)}
                     >
-                      <LogOutIcon data-icon='inline-start' />
-                      {t('talent.detail.markLeave')}
+                      <UserPlusIcon data-icon='inline-start' />
+                      {t('talent.detail.accountFromProvider', {
+                        provider: t(
+                          `orgSync.provider.${data.employee.externalProvider ?? 'feishu'}`,
+                        ),
+                      })}
+                    </Button>
+                  ) : null}
+                  {/* 更正任职信息 replaces step 1's "mark as left" (V1-02); it opens over the 档案 tab. */}
+                  {data.can.correctJob ? (
+                    <Button
+                      variant='outline'
+                      nativeButton={false}
+                      render={
+                        <Link
+                          to={{
+                            pathname: 'profile/correct-job',
+                            search: location.search,
+                          }}
+                        />
+                      }
+                    >
+                      <UserCogIcon data-icon='inline-start' />
+                      {t('talent.detail.correctJob')}
                     </Button>
                   ) : null}
                   {data.can.delete ? (
@@ -184,6 +227,7 @@ function EmployeeDetailView({
                 </>
               }
             />
+            <SyncLockSwitch detail={data} onChanged={detail.reload} />
             <nav
               aria-label={t('talent.detail.tabs.label')}
               className='flex flex-wrap gap-1 border-b pb-2'
@@ -214,17 +258,17 @@ function EmployeeDetailView({
               detail={data}
               onDeleted={() => list.reload()}
             />
-            <LeaveDialog
-              open={leaveOpen}
-              onOpenChange={setLeaveOpen}
-              detail={data}
-              onSaved={reload}
-            />
             <LinkUserDialog
               open={linkOpen}
               onOpenChange={setLinkOpen}
               detail={data}
               onSaved={reload}
+            />
+            <ProviderAccountDialog
+              open={accountOpen}
+              onOpenChange={setAccountOpen}
+              detail={data}
+              onCreated={reload}
             />
           </>
         )}
@@ -261,9 +305,11 @@ function EditDialog({
             {t('talent.detail.editTitle', { name: detail.employee.name })}
           </DialogTitle>
           <DialogDescription>
-            {detail.coreFieldsLocked
-              ? t('talent.employees.coreLocked')
-              : t('talent.detail.editDescription')}
+            {detail.syncManaged
+              ? t('talent.employees.syncManaged')
+              : detail.coreFieldsLocked
+                ? t('talent.employees.coreLocked')
+                : t('talent.detail.editDescription')}
           </DialogDescription>
         </DialogHeader>
         {open ? (
@@ -271,6 +317,7 @@ function EditDialog({
             formId='employee-edit-form'
             employee={detail.employee}
             coreLocked={detail.coreFieldsLocked}
+            syncManaged={detail.syncManaged === true}
             canEditSensitive={detail.can.viewSensitive && detail.can.viewNotes}
             onSubmittingChange={(value) => {
               submittingRef.current = value;
@@ -300,114 +347,6 @@ function EditDialog({
   );
 }
 
-function LeaveDialog({
-  open,
-  onOpenChange,
-  detail,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  detail: EmployeeDetail;
-  onSaved: () => void;
-}): ReactElement {
-  const { t } = useTranslation();
-  const api = useApiClient();
-  const [leaveDate, setLeaveDate] = useState('');
-  const [leaveReason, setLeaveReason] = useState('resign');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string>();
-  return (
-    <AlertDialog
-      open={open}
-      onOpenChange={(next) => {
-        if (pending) return;
-        if (next) {
-          setLeaveDate(new Date().toISOString().slice(0, 10));
-          setError(undefined);
-        }
-        onOpenChange(next);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {t('talent.detail.leaveTitle', { name: detail.employee.name })}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('talent.detail.leaveDescription')}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor='leave-date'>
-              {t('talent.fields.leaveDate')}
-            </FieldLabel>
-            <Input
-              id='leave-date'
-              type='date'
-              value={leaveDate}
-              onChange={(e) => setLeaveDate(e.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor='leave-reason'>
-              {t('talent.fields.leaveReason')}
-            </FieldLabel>
-            <NativeSelect
-              id='leave-reason'
-              value={leaveReason}
-              onChange={(e) => setLeaveReason(e.target.value)}
-            >
-              {LEAVE_REASONS.map((r) => (
-                <NativeSelectOption key={r} value={r}>
-                  {t(`talent.leaveReason.${r}`)}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-          {error ? <FieldError>{error}</FieldError> : null}
-        </FieldGroup>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>
-            {t('actions.cancel')}
-          </AlertDialogCancel>
-          <AlertDialogAction
-            variant='destructive'
-            disabled={pending}
-            onClick={(event) => {
-              event.preventDefault();
-              setPending(true);
-              api
-                .request({
-                  path: `talent/employees/${encodeURIComponent(detail.employee.id)}/mark-leave`,
-                  method: 'POST',
-                  json: { leaveDate, leaveReason },
-                })
-                .then(() => {
-                  toast.add({
-                    type: 'success',
-                    title: t('talent.detail.leaveDone', {
-                      name: detail.employee.name,
-                    }),
-                  });
-                  onOpenChange(false);
-                  onSaved();
-                })
-                .catch((cause: unknown) => setError(errorMessage(cause, t)))
-                .finally(() => setPending(false));
-            }}
-          >
-            {pending ? <Spinner data-icon='inline-start' /> : null}
-            {t('talent.detail.markLeave')}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-/** Deleting undoes a mistaken import: only without a login account and when nothing references the record. */
 function DeleteDialog({
   open,
   onOpenChange,
@@ -596,6 +535,118 @@ function LinkUserDialog({
           >
             {pending ? <Spinner data-icon='inline-start' /> : null}
             {t('actions.save')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * 使用飞书身份开通: creates a login for an employee bound to an office-suite
+ * member and links it, through the 组织同步 endpoint. The email is sent only
+ * when the member has none in the office suite.
+ */
+function ProviderAccountDialog({
+  open,
+  onOpenChange,
+  detail,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  detail: EmployeeDetail;
+  onCreated: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const api = useApiClient();
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string>();
+  const [pending, setPending] = useState(false);
+  const provider = t(
+    `orgSync.provider.${detail.employee.externalProvider ?? 'feishu'}`,
+  );
+  async function submit(): Promise<void> {
+    setPending(true);
+    setError(undefined);
+    try {
+      await api.request({
+        path: `talent/org-sync/employees/${encodeURIComponent(detail.employee.id)}/account`,
+        method: 'POST',
+        json: email.trim() ? { email: email.trim() } : {},
+      });
+      toast.add({
+        type: 'success',
+        title: t('orgSync.account.done', { name: detail.employee.name }),
+      });
+      onOpenChange(false);
+      onCreated();
+    } catch (cause) {
+      setError(errorMessage(cause, t));
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (pending) return;
+        if (next) {
+          setEmail('');
+          setError(undefined);
+        }
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className='sm:max-w-md'>
+        <DialogHeader>
+          <DialogTitle>
+            {t('orgSync.account.title', { name: detail.employee.name })}
+          </DialogTitle>
+          <DialogDescription>
+            {t('orgSync.account.description', { provider })}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          id='provider-account-form'
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor='provider-account-email'>
+                {t('orgSync.account.email')}
+              </FieldLabel>
+              <Input
+                id='provider-account-email'
+                type='email'
+                autoComplete='off'
+                value={email}
+                maxLength={191}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <FieldDescription>
+                {t('orgSync.account.emailHint', { provider })}
+              </FieldDescription>
+            </Field>
+            {error ? <FieldError>{error}</FieldError> : null}
+          </FieldGroup>
+        </form>
+        <DialogFooter>
+          <Button
+            variant='outline'
+            disabled={pending}
+            onClick={() => onOpenChange(false)}
+          >
+            {t('actions.cancel')}
+          </Button>
+          <Button type='submit' form='provider-account-form' disabled={pending}>
+            {pending ? <Spinner data-icon='inline-start' /> : null}
+            {t('orgSync.account.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

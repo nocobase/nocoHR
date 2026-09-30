@@ -7,6 +7,10 @@ import { Link, Outlet, useNavigate } from 'react-router';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { errorMessage } from '@/components/talent/errors';
+import {
+  examDeviceHeaders,
+  rememberDevice,
+} from '@/components/talent/exam-device';
 import type { Attempt, MyExam } from '@/components/talent/exam-types';
 import {
   BlockSkeleton,
@@ -94,7 +98,10 @@ function ExamCard({ exam }: { exam: MyExam }): ReactElement {
       const result = await api.request<{ data: Attempt }>({
         path: `talent/my-exams/${encodeURIComponent(exam.examId)}/start`,
         method: 'POST',
+        headers: examDeviceHeaders(exam.examId),
       });
+      // V3-10 单设备作答: this browser keeps the attempt's device token.
+      rememberDevice(result.data);
       void navigate(`attempts/${encodeURIComponent(result.data.id)}`);
     } catch (cause) {
       toast.add({ type: 'error', title: errorMessage(cause, t) });

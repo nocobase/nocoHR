@@ -13,7 +13,11 @@ import {
 import type { ProfileChangeRequest } from '@/components/talent/types';
 import { useRemote } from '@/components/talent/use-remote';
 import { str } from '@/components/talent/text';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import {
   Card,
   CardContent,
@@ -22,6 +26,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Field, FieldLabel } from '@/components/ui/field';
+import { resolveAppUrl } from '@nocobase/app-client';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 
@@ -77,16 +82,36 @@ function ChangesBody(): ReactElement {
     timeStyle: 'short',
   });
 
+  const [adopted, setAdopted] = useState<
+    Record<string, Record<string, { on: boolean; value: unknown }>>
+  >({});
+  const [failures, setFailures] = useState<Record<string, string>>({});
+
+  /** The HR assistant's fields: all adopted as read until HR unticks or rewrites one. */
+  function choicesOf(request: ProfileChangeRequest) {
+    return (
+      adopted[request.id] ??
+      Object.fromEntries(
+        Object.entries(request.changes).map(([field, value]) => [
+          field,
+          { on: true, value },
+        ]),
+      )
+    );
+  }
+
   async function decide(
     id: string,
     decision: 'approve' | 'reject',
+    values?: Record<string, unknown>,
   ): Promise<void> {
     setBusy(id);
+    setFailures((f) => ({ ...f, [id]: '' }));
     try {
       await api.request({
         path: `talent/profile-changes/${encodeURIComponent(id)}/${decision}`,
         method: 'POST',
-        json: { comment: comments[id] ?? null },
+        json: { comment: comments[id] ?? null, ...(values ? { values } : {}) },
       });
       toast.add({
         type: 'success',
@@ -98,7 +123,8 @@ function ChangesBody(): ReactElement {
       changes.reload();
       reload();
     } catch (cause) {
-      toast.add({ type: 'error', title: errorMessage(cause, t) });
+      // Inside the drawer the message stays with the request it belongs to.
+      setFailures((f) => ({ ...f, [id]: errorMessage(cause, t) }));
     } finally {
       setBusy(null);
     }
@@ -114,30 +140,153 @@ function ChangesBody(): ReactElement {
       {changes.data.map((request) => (
         <Card key={request.id}>
           <CardHeader>
-            <CardTitle>{request.employeeName}</CardTitle>
+            <CardTitle className='flex flex-wrap items-center gap-2'>
+              {request.employeeName}
+              <Badge
+                variant={request.source === 'ai' ? 'secondary' : 'outline'}
+              >
+                {t(`talent.changes.source.${request.source ?? 'self'}`)}
+              </Badge>
+            </CardTitle>
             <CardDescription>
               {format.format(new Date(request.createdAt))}
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-3'>
-            <dl className='space-y-2 text-sm'>
-              {Object.keys(request.changes).map((field) => (
-                <div
-                  key={field}
-                  className='grid grid-cols-[7rem_1fr_1fr] gap-2'
-                >
-                  <dt className='text-muted-foreground'>
-                    {t(`talent.changes.fields.${field}`)}
-                  </dt>
-                  <dd className='whitespace-pre-line text-muted-foreground line-through'>
-                    {describe(request.current[field], t)}
-                  </dd>
-                  <dd className='whitespace-pre-line font-medium'>
-                    {describe(request.changes[field], t)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            {failures[request.id] ? (
+              <Alert variant='destructive'>
+                <AlertDescription>{failures[request.id]}</AlertDescription>
+              </Alert>
+            ) : null}
+            {request.source === 'ai' ? (
+              <>
+                <p className='text-sm text-muted-foreground'>
+                  {t('talent.changes.aiHint')}
+                  {request.attachmentPath ? (
+                    <>
+                      {' '}
+                      <a
+                        className='text-primary underline-offset-4 hover:underline'
+                        href={resolveAppUrl(request.attachmentPath)}
+                        target='_blank'
+                        rel='noreferrer'
+                      >
+                        {t('talent.changes.viewAttachment')}
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+                <ul className='space-y-3'>
+                  {Object.keys(request.changes).map((field) => {
+                    const choice = choicesOf(request)[field] ?? {
+                      on: false,
+                      value: null,
+                    };
+                    const confidence = request.confidence?.[field];
+                    const scalar = typeof request.changes[field] !== 'object';
+                    const setChoice = (next: { on: boolean; value: unknown }) =>
+                      setAdopted((all) => ({
+                        ...all,
+                        [request.id]: { ...choicesOf(request), [field]: next },
+                      }));
+                    return (
+                      <li
+                        key={field}
+                        className='space-y-2 rounded-md border p-3 text-sm'
+                      >
+                        <div className='flex items-center gap-2'>
+                          <Checkbox
+                            id={`adopt-${request.id}-${field}`}
+                            checked={choice.on}
+                            disabled={busy === request.id}
+                            onCheckedChange={(checked) =>
+                              setChoice({ ...choice, on: checked === true })
+                            }
+                          />
+                          <label
+                            htmlFor={`adopt-${request.id}-${field}`}
+                            className='font-medium'
+                          >
+                            {t('talent.changes.adopt', {
+                              field: t(`talent.changes.fields.${field}`),
+                            })}
+                          </label>
+                          {confidence ? (
+                            <span className='text-muted-foreground'>
+                              {t('talent.changes.confidence', {
+                                percent: Math.round(
+                                  confidence.confidence * 100,
+                                ),
+                              })}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className='grid gap-2 sm:grid-cols-2'>
+                          <div>
+                            <p className='text-xs text-muted-foreground'>
+                              {t('talent.changes.currentValue')}
+                            </p>
+                            <p className='whitespace-pre-line'>
+                              {describe(request.current[field], t)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className='text-xs text-muted-foreground'>
+                              {t('talent.changes.readValue')}
+                            </p>
+                            {scalar ? (
+                              <Input
+                                aria-label={t('talent.changes.readValueFor', {
+                                  field: t(`talent.changes.fields.${field}`),
+                                })}
+                                value={str(choice.value ?? '')}
+                                disabled={!choice.on || busy === request.id}
+                                onChange={(e) =>
+                                  setChoice({
+                                    ...choice,
+                                    value: e.target.value,
+                                  })
+                                }
+                              />
+                            ) : (
+                              <p className='whitespace-pre-line'>
+                                {describe([request.changes[field]], t)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {confidence?.snippet ? (
+                          <p className='text-xs text-muted-foreground'>
+                            {t('talent.changes.snippet', {
+                              text: confidence.snippet,
+                            })}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : (
+              <dl className='space-y-2 text-sm'>
+                {Object.keys(request.changes).map((field) => (
+                  <div
+                    key={field}
+                    className='grid grid-cols-[7rem_1fr_1fr] gap-2'
+                  >
+                    <dt className='text-muted-foreground'>
+                      {t(`talent.changes.fields.${field}`)}
+                    </dt>
+                    <dd className='whitespace-pre-line text-muted-foreground line-through'>
+                      {describe(request.current[field], t)}
+                    </dd>
+                    <dd className='whitespace-pre-line font-medium'>
+                      {describe(request.changes[field], t)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
             <Field>
               <FieldLabel htmlFor={`comment-${request.id}`}>
                 {t('talent.changes.comment')}
@@ -159,8 +308,24 @@ function ChangesBody(): ReactElement {
                 {t('talent.changes.reject')}
               </Button>
               <Button
-                disabled={busy === request.id}
-                onClick={() => void decide(request.id, 'approve')}
+                disabled={
+                  busy === request.id ||
+                  (request.source === 'ai' &&
+                    !Object.values(choicesOf(request)).some((c) => c.on))
+                }
+                onClick={() =>
+                  void decide(
+                    request.id,
+                    'approve',
+                    request.source === 'ai'
+                      ? Object.fromEntries(
+                          Object.entries(choicesOf(request))
+                            .filter(([, c]) => c.on)
+                            .map(([field, c]) => [field, c.value]),
+                        )
+                      : undefined,
+                  )
+                }
               >
                 {t('talent.changes.approve')}
               </Button>

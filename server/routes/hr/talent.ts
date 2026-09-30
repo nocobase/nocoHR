@@ -14,6 +14,7 @@ import { HrError, isRecord, requireString } from '../../providers/hr/shared.js';
 import {
   hrCoreServiceToken,
   organizationServiceToken,
+  personnelSettingsToken,
   talentServiceToken,
 } from '../../providers/hr/tokens.js';
 import {
@@ -81,8 +82,19 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
 
     // ---------- Employees ----------
     const filters = (c: {
-      req: { query: (k: string) => string | undefined };
+      req: {
+        query: {
+          (k: string): string | undefined;
+          (): Record<string, string>;
+        };
+      };
     }) => ({
+      // 界面追加字段 filters arrive as `cf.<key>=value`.
+      custom: Object.fromEntries(
+        Object.entries(c.req.query())
+          .filter(([key]) => key.startsWith('cf.'))
+          .map(([key, value]) => [key.slice(3), String(value)]),
+      ),
       search: c.req.query('search') || undefined,
       departmentId: c.req.query('departmentId') || undefined,
       positionId: c.req.query('positionId') || undefined,
@@ -92,11 +104,9 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
         ? c.req.query('ids')!.split(',').filter(Boolean)
         : undefined,
       batchId: c.req.query('batch') || undefined,
-      quick:
-        c.req.query('quick') === 'noPosition' ||
-        c.req.query('quick') === 'noManager'
-          ? (c.req.query('quick') as 'noPosition' | 'noManager')
-          : undefined,
+      quick: (['noPosition', 'noManager', 'hasGaps'] as const).find(
+        (q) => q === c.req.query('quick'),
+      ),
     });
 
     routes.get('/employees', async (c) =>
@@ -108,8 +118,8 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
         201,
       ),
     );
-    routes.get('/employees/import-template', () => {
-      const buffer = talent.importTemplate();
+    routes.get('/employees/import-template', async () => {
+      const buffer = await talent.importTemplate();
       return new Response(new Uint8Array(buffer), {
         headers: {
           'content-type':
@@ -201,11 +211,25 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
           actor(c),
           c.req.param('id'),
           isRecord(body)
-            ? (body as { leaveDate?: string; leaveReason?: string })
+            ? (body as {
+                leaveDate?: string;
+                leaveReason?: string;
+                note?: string;
+              })
             : {},
         ),
       });
     });
+    // 更正任职信息: department, position or status with a reason; writes a manual job event.
+    routes.post('/employees/:id/correct-job', async (c) =>
+      c.json({
+        data: await talent.correctJob(
+          actor(c),
+          c.req.param('id'),
+          await readJson(c),
+        ),
+      }),
+    );
     routes.get('/employees/:id/gaps', async (c) =>
       c.json({ data: await talent.gaps(actor(c), c.req.param('id')) }),
     );
@@ -286,6 +310,16 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
     });
     routes.get('/me/profile-change', async (c) =>
       c.json({ data: (await core.myProfileChange(actor(c))) ?? null }),
+    );
+    // The fields 人事设置 · 员工自助 lets employees change, for the request form.
+    routes.get('/me/profile-change/fields', async (c) =>
+      c.json({
+        data: (
+          await app.container
+            .resolve(personnelSettingsToken)
+            .read('selfService')
+        ).value.fields,
+      }),
     );
     routes.post('/me/profile-change', async (c) => {
       const body = await readJson(c);
@@ -475,6 +509,10 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
         201,
       ),
     );
+    // The chain the action being filled in would get, before it is submitted.
+    routes.post('/actions/preview', async (c) =>
+      c.json({ data: await core.previewChain(actor(c), await readJson(c)) }),
+    );
     routes.get('/actions/:id', async (c) => {
       const action = await core.getAction(actor(c), c.req.param('id'));
       if (!action) throw new HrError('ACTION_NOT_FOUND', 404);
@@ -603,6 +641,8 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
           c.req.param('id'),
           decision,
           comment,
+          // An HR assistant suggestion: the fields HR adopts, with HR's final values.
+          isRecord(body) ? body.values : undefined,
         ),
       });
     });

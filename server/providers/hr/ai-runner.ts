@@ -59,10 +59,111 @@ export interface AIRunner {
   structured<T>(
     input: StructuredRunInput<T>,
   ): Promise<{ data: T; sessionId: string }>;
+  /**
+   * V1-04 办公软件机器人: one turn of a conversation as the user, with the
+   * employee's own tools (so `searchKnowledge` scopes to that user). A tool
+   * that needs approval pauses the turn; the reply then says so and the bot
+   * links to NocoHR, where confirmations happen.
+   */
+  reply(input: {
+    readonly employee: string;
+    readonly userId: string;
+    readonly title: string;
+    readonly text: string;
+    readonly timeZone: string;
+    readonly sessionId?: string;
+  }): Promise<{
+    text: string;
+    sessionId: string;
+    paused: boolean;
+    /** V1-04 飞书卡片: the tool calls a paused turn waits on, with their arguments, so the bot can turn one into a card. */
+    pending: { name: string; args: unknown }[];
+  }>;
 }
 
 export function createAIRunner(container: ServiceContainer): AIRunner {
   return {
+    async reply(input) {
+      const plugin = await import('@nocobase/app-plugin-ai-employee/server');
+      const { aiConversationsManagerToken, agentServiceFactoryToken } = plugin;
+      if (
+        !container.has(aiConversationsManagerToken) ||
+        !container.has(agentServiceFactoryToken)
+      )
+        throw new AIUnavailableError('ai-employee plugin not registered');
+      try {
+        const conversation = input.sessionId
+          ? { sessionId: input.sessionId }
+          : await container.resolve(aiConversationsManagerToken).create({
+              userId: input.userId,
+              aiEmployee: { username: input.employee },
+              title: input.title,
+            });
+        const agent = await container
+          .resolve(agentServiceFactoryToken)
+          .createAIEmployee({
+            username: input.employee,
+            state: {
+              sessionId: conversation.sessionId,
+              timezone: input.timeZone,
+            },
+            actor: {
+              id: input.userId,
+              roles: [],
+              isRoot: false,
+              locale: 'zh-CN',
+            },
+            runtime: {
+              logger: container.resolve(loggingToken).getLogger('hr-ai'),
+            },
+          });
+        const result = await agent.invoke({
+          userMessages: [
+            { role: 'user', content: { type: 'text', content: input.text } },
+          ],
+          signal: AbortSignal.timeout(120_000),
+        });
+        const content = result.message?.content as unknown;
+        const text =
+          typeof content === 'string'
+            ? content
+            : content &&
+                typeof content === 'object' &&
+                'content' in content &&
+                typeof content.content === 'string'
+              ? content.content
+              : '';
+        // An interrupt action names its tool call; the arguments are on the turn that requested it.
+        const calls = (result.message?.toolCalls ?? []) as {
+          id?: unknown;
+          name?: unknown;
+          args?: unknown;
+        }[];
+        const pending = (result.interrupt?.actions ?? []).map((action) => {
+          const call = calls.find((c) => c.id === action.toolCall?.id);
+          return {
+            name:
+              action.toolCall?.name ??
+              (typeof call?.name === 'string' ? call.name : ''),
+            args: call?.args ?? null,
+          };
+        });
+        return {
+          text,
+          sessionId: conversation.sessionId,
+          paused: Boolean(result.interrupt),
+          pending,
+        };
+      } catch (error) {
+        if (
+          error instanceof plugin.AgentServiceError &&
+          error.code === 'CONFIGURATION_ERROR'
+        )
+          throw new AIUnavailableError(error.rootMessage);
+        throw error;
+      }
+    },
+
     async structured<T>(input: StructuredRunInput<T>) {
       const plugin = await import('@nocobase/app-plugin-ai-employee/server');
       const { aiConversationsManagerToken, agentServiceFactoryToken } = plugin;

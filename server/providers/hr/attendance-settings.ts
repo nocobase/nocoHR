@@ -16,6 +16,7 @@ import {
 import {
   attendanceConfigDefaults,
   attendanceConfigSchemas,
+  decodeSetting,
   isAttendanceConfigSection,
   type AttendanceConfigSection,
   type AttendanceConfiguration,
@@ -59,7 +60,7 @@ export function createAttendanceSettingsService(database: DatabaseManager) {
     });
     return {
       value: attendanceConfigSchemas[section].parse(
-        row?.value ?? attendanceConfigDefaults[section],
+        decodeSetting(row?.value) ?? attendanceConfigDefaults[section],
       ) as AttendanceConfiguration[K],
       revision: Number(row?.revision ?? 0),
     };
@@ -80,7 +81,7 @@ export function createAttendanceSettingsService(database: DatabaseManager) {
         .findOne({ filter: { id: `attendance.${section}` } });
       return {
         value: attendanceConfigSchemas[section].parse(
-          row?.value ?? attendanceConfigDefaults[section],
+          decodeSetting(row?.value) ?? attendanceConfigDefaults[section],
         ),
         revision: Number(row?.revision ?? 0),
       };
@@ -117,7 +118,7 @@ export function createAttendanceSettingsService(database: DatabaseManager) {
         });
         config[section] = {
           value: attendanceConfigSchemas[section].parse(
-            row?.value ?? attendanceConfigDefaults[section],
+            decodeSetting(row?.value) ?? attendanceConfigDefaults[section],
           ),
           revision: Number(row?.revision ?? 0),
         };

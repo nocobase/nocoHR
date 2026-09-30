@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/card';
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -38,12 +39,24 @@ import {
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
+import { useLookups } from '@/components/talent/use-lookups';
+
+import { ApprovalChainCard } from './approval-chain-card.js';
+import { ChecklistsCard, ComplianceCard, DraftsCard } from './change-cards.js';
+import {
+  GradeOrderCard,
+  JobInfoCard,
+  KnowledgeReviewCard,
+  SelfServiceCard,
+} from './other-cards.js';
+import type { AllSettings, SettingsOptions } from './types.js';
 
 interface Snapshot {
   revision: number;
   value: {
     probationDays?: number;
     contractDays?: number[];
+    dailyTime?: string;
     maxMonths?: number;
   };
 }
@@ -61,19 +74,69 @@ function windowsOf(value: string): number[] {
 
 export default function PersonnelSettingsPage(): ReactElement {
   const { t } = useTranslation();
-  const remote = useRemote<Settings>('talent/personnel-settings');
+  const remote = useRemote<AllSettings>('talent/personnel-settings');
+  const options = useRemote<SettingsOptions>(
+    'talent/personnel-settings/options',
+  );
+  const lookups = useLookups();
+  const error = remote.error ?? options.error ?? lookups.error;
   return (
     <PageContainer className='max-w-3xl'>
       <PageHeader
         title={t('personnelSettings.title')}
         description={t('personnelSettings.description')}
       />
-      {remote.error ? (
-        <LoadError error={remote.error} onRetry={remote.reload} />
-      ) : remote.data ? (
+      {error ? (
+        <LoadError
+          error={error}
+          onRetry={() => {
+            remote.reload();
+            options.reload();
+            lookups.reload();
+          }}
+        />
+      ) : remote.data && options.data && !lookups.loading ? (
         <>
-          <SettingsCard section='reminders' initial={remote.data.reminders} />
-          <SettingsCard section='probation' initial={remote.data.probation} />
+          <SettingsCard
+            key={`reminders-${remote.data.reminders.revision}`}
+            section='reminders'
+            initial={remote.data.reminders}
+          />
+          <SettingsCard
+            key={`probation-${remote.data.probation.revision}`}
+            section='probation'
+            initial={remote.data.probation}
+          />
+          <ApprovalChainCard
+            // A draft applied below changes the chain: a new revision remounts the card with it.
+            key={`chain-${remote.data.approvalChain.revision}`}
+            initial={remote.data.approvalChain}
+            departments={lookups.departments}
+            options={options.data}
+          />
+          <SelfServiceCard initial={remote.data.selfService} />
+          <GradeOrderCard
+            initial={remote.data.gradeOrder}
+            options={options.data}
+          />
+          <JobInfoCard initial={remote.data.jobInfo} />
+          {remote.data.knowledge ? (
+            <KnowledgeReviewCard initial={remote.data.knowledge} />
+          ) : null}
+          {remote.data.checklists ? (
+            <ChecklistsCard
+              key={`checklists-${remote.data.checklists.revision}`}
+              initial={remote.data.checklists}
+            />
+          ) : null}
+          {remote.data.compliance ? (
+            <ComplianceCard
+              key={`compliance-${remote.data.compliance.revision}`}
+              initial={remote.data.compliance}
+            />
+          ) : null}
+          {/* 一句话改配置: an applied draft changes the chain or a section, so the page reloads its cards. */}
+          <DraftsCard onApplied={remote.reload} />
         </>
       ) : (
         <BlockSkeleton rows={6} />
@@ -99,6 +162,7 @@ function SettingsCard({
   const defaults = (item: Snapshot) => ({
     first: String(reminders ? item.value.probationDays : item.value.maxMonths),
     windows: (item.value.contractDays ?? []).join(', '),
+    dailyTime: item.value.dailyTime ?? '09:00',
   });
   const schema = useMemo(
     () =>
@@ -123,6 +187,12 @@ function SettingsCard({
             new Set(values).size === values.length
           );
         }, t('personnelSettings.invalidWindows')),
+        dailyTime: z
+          .string()
+          .refine(
+            (v) => !reminders || /^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(v.trim()),
+            t('personnelSettings.invalidTime'),
+          ),
       }),
     [t, reminders],
   );
@@ -146,6 +216,7 @@ function SettingsCard({
             ? {
                 probationDays: Number(values.first),
                 contractDays: windowsOf(values.windows),
+                dailyTime: values.dailyTime.trim(),
               }
             : { maxMonths: Number(values.first) },
         },
@@ -246,6 +317,25 @@ function SettingsCard({
                     aria-invalid={Boolean(form.formState.errors.windows)}
                   />
                   <FieldError errors={[form.formState.errors.windows]} />
+                </Field>
+              ) : null}
+              {reminders ? (
+                <Field data-invalid={Boolean(form.formState.errors.dailyTime)}>
+                  <FieldLabel htmlFor={`personnel-${section}-time`}>
+                    {t('personnelSettings.dailyTime')} *
+                  </FieldLabel>
+                  <Input
+                    {...form.register('dailyTime')}
+                    id={`personnel-${section}-time`}
+                    type='time'
+                    disabled={busy}
+                    aria-required='true'
+                    aria-invalid={Boolean(form.formState.errors.dailyTime)}
+                  />
+                  <FieldDescription>
+                    {t('personnelSettings.dailyTimeHint')}
+                  </FieldDescription>
+                  <FieldError errors={[form.formState.errors.dailyTime]} />
                 </Field>
               ) : null}
             </FieldGroup>

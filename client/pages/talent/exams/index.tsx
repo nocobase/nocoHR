@@ -1,6 +1,6 @@
 import { useTranslation } from '@nocobase/i18n/client';
-import { PlusIcon } from 'lucide-react';
-import { useMemo, type ReactElement } from 'react';
+import { PlusIcon, SlidersHorizontalIcon } from 'lucide-react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { Link, Outlet } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
@@ -13,7 +13,7 @@ import {
 } from '@/components/talent/states';
 import { useRemote } from '@/components/talent/use-remote';
 import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -23,14 +23,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
+import { ExamRulesDialog } from './rules-dialog.js';
 import type { ExamsOutletContext } from './types.js';
 
 /** 考试管理 — exams an instructor is responsible for: papers, publishing, grading and attempts. */
 export default function ExamsPage(): ReactElement {
   const { t } = useTranslation();
-  const list = useRemote<{ items: ExamSummary[]; canCreate: boolean }>(
-    'talent/exams',
-  );
+  const list = useRemote<{
+    items: ExamSummary[];
+    canCreate: boolean;
+    canConfigure?: boolean;
+  }>('talent/exams');
+  const [rulesOpen, setRulesOpen] = useState(false);
   const context = useMemo<ExamsOutletContext>(
     () => ({ reload: list.reload }),
     [list.reload],
@@ -41,12 +45,20 @@ export default function ExamsPage(): ReactElement {
         title={t('navigation.talentExams')}
         description={t('talent.exams.description')}
         actions={
-          list.data?.canCreate ? (
-            <Link to='new' className={buttonVariants()}>
-              <PlusIcon data-icon='inline-start' />
-              {t('talent.exams.create')}
-            </Link>
-          ) : null
+          <>
+            {list.data?.canConfigure ? (
+              <Button variant='outline' onClick={() => setRulesOpen(true)}>
+                <SlidersHorizontalIcon data-icon='inline-start' />
+                {t('talent.examRules.open')}
+              </Button>
+            ) : null}
+            {list.data?.canCreate ? (
+              <Link to='new' className={buttonVariants()}>
+                <PlusIcon data-icon='inline-start' />
+                {t('talent.exams.create')}
+              </Link>
+            ) : null}
+          </>
         }
       />
       {list.error ? (
@@ -78,6 +90,9 @@ export default function ExamsPage(): ReactElement {
                 <TableHead className='hidden text-right md:table-cell'>
                   {t('talent.exams.fields.passRate')}
                 </TableHead>
+                <TableHead className='hidden text-right lg:table-cell'>
+                  {t('talent.examiner.agreement')}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -94,6 +109,13 @@ export default function ExamsPage(): ReactElement {
                       <Badge variant='default' className='ml-2'>
                         {t('talent.exams.gradingCount', {
                           count: exam.grading,
+                        })}
+                      </Badge>
+                    ) : null}
+                    {exam.flagged ? (
+                      <Badge variant='destructive' className='ml-2'>
+                        {t('talent.examIntegrity.flaggedCount', {
+                          count: exam.flagged,
                         })}
                       </Badge>
                     ) : null}
@@ -135,6 +157,11 @@ export default function ExamsPage(): ReactElement {
                   <TableCell className='hidden text-right tabular-nums md:table-cell'>
                     {exam.passRate === null ? '—' : `${exam.passRate}%`}
                   </TableCell>
+                  <TableCell className='hidden text-right tabular-nums lg:table-cell'>
+                    {exam.aiAgreement?.rate == null
+                      ? '—'
+                      : `${exam.aiAgreement.rate}%`}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -142,6 +169,7 @@ export default function ExamsPage(): ReactElement {
         </div>
       )}
       <Outlet context={context} />
+      <ExamRulesDialog open={rulesOpen} onOpenChange={setRulesOpen} />
     </PageContainer>
   );
 }

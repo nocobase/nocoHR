@@ -101,6 +101,55 @@ export interface ExamSummary {
   readonly candidates: number;
   readonly passRate: number | null;
   readonly grading: number;
+  /** V3-10 防作弊 settings with their defaults applied. */
+  readonly antiCheat: AntiCheat;
+  /** Whether the examiner suggests scores for short answers before an instructor grades them. */
+  readonly aiGrading: boolean;
+  /** Examiner suggestions compared with the final scores: how many were within one point. */
+  readonly aiAgreement: {
+    compared: number;
+    withinOne: number;
+    rate: number | null;
+  };
+  /** Submitted attempts with integrity flags nobody has reviewed yet. */
+  readonly flagged: number;
+}
+
+export interface AntiCheat {
+  readonly shuffleOptions: boolean;
+  readonly disableCopy: boolean;
+  readonly maxBlurCount: number;
+  readonly blurAction: 'flag' | 'submit';
+  readonly singleDevice: boolean;
+}
+
+export const DEFAULT_ANTI_CHEAT: AntiCheat = {
+  shuffleOptions: true,
+  disableCopy: true,
+  maxBlurCount: 3,
+  blurAction: 'flag',
+  singleDevice: true,
+};
+
+export interface IntegrityFlag {
+  readonly type: 'blur' | 'multiDevice' | 'pasteAttempt';
+  readonly at: string;
+  readonly detail: string | null;
+}
+
+/** The examiner's suggestion for one short answer; it never takes effect by itself. */
+export interface GradingSuggestion {
+  readonly score: number;
+  readonly matchedPoints: readonly string[];
+  readonly missingPoints: readonly string[];
+  readonly rationale: string;
+  readonly at: string;
+}
+
+export interface LossByCompetency {
+  readonly competencyId: string;
+  readonly lost: number;
+  readonly total: number;
 }
 
 export interface ExamDetail extends ExamSummary {
@@ -116,10 +165,12 @@ export interface ExamDetail extends ExamSummary {
     publish: boolean;
     grade: boolean;
     resetAttempts: boolean;
+    reviewIntegrity: boolean;
+    voidAttempt: boolean;
   };
 }
 
-interface PaperItem {
+export interface PaperItem {
   readonly questionId: string;
   readonly type: QuestionType;
   readonly stem: string;
@@ -141,6 +192,11 @@ export interface AttemptView {
   readonly submittedAt: string | null;
   readonly items: readonly PaperItem[];
   readonly answers: Record<string, unknown>;
+  /** What the answering page enforces; the server enforces the device and the blur limit. */
+  readonly antiCheat: Omit<AntiCheat, 'shuffleOptions'>;
+  readonly blurCount: number;
+  /** Issued when this device started or took over the attempt; the client sends it back in `x-exam-device`. */
+  readonly deviceToken: string | null;
 }
 
 export interface AttemptResult {
@@ -167,7 +223,17 @@ export interface AttemptResult {
     explanation?: string | null;
     gradingNotes?: string | null;
     comment?: string | null;
+    /** Graders only: the examiner's suggestion for a short answer. */
+    aiSuggestion?: GradingSuggestion | null;
   }[];
+  /** Points lost per competency, once the attempt is scored. */
+  readonly lossByCompetency: readonly (LossByCompetency & { title: string })[];
+  readonly integrity: {
+    blurCount: number;
+    flags: readonly IntegrityFlag[];
+    review: string | null;
+    voidReason: string | null;
+  } | null;
   readonly wrongByCompetency: readonly {
     competencyId: string;
     title: string;
@@ -248,9 +314,12 @@ export interface ExamService {
     options?: { ownerUserId?: string },
   ): Promise<{ created: number; skipped: number; ids: string[] }>;
 
-  listExams(
-    ctx: ActorContext,
-  ): Promise<{ items: ExamSummary[]; canCreate: boolean }>;
+  listExams(ctx: ActorContext): Promise<{
+    items: ExamSummary[];
+    canCreate: boolean;
+    /** V3-10: may adjust the exam → competency rule. */
+    canConfigure: boolean;
+  }>;
   getExam(ctx: ActorContext, id: string): Promise<ExamDetail | undefined>;
   saveExam(
     ctx: ActorContext,
@@ -272,17 +341,30 @@ export interface ExamService {
   ruleAvailability(ctx: ActorContext, rules: unknown): Promise<number[]>;
 
   myExams(ctx: ActorContext): Promise<MyExam[]>;
-  startAttempt(ctx: ActorContext, examId: string): Promise<AttemptView>;
-  getAttempt(ctx: ActorContext, attemptId: string): Promise<AttemptView>;
+  /** `deviceToken`: the token this device holds for the attempt, from the `x-exam-device` header. */
+  startAttempt(
+    ctx: ActorContext,
+    examId: string,
+    deviceToken?: string | null,
+    /** V4-13: the candidate's language (the request's Accept-Language). */
+    locale?: string,
+  ): Promise<AttemptView>;
+  getAttempt(
+    ctx: ActorContext,
+    attemptId: string,
+    deviceToken?: string | null,
+  ): Promise<AttemptView>;
   saveAnswers(
     ctx: ActorContext,
     attemptId: string,
     answers: unknown,
+    deviceToken?: string | null,
   ): Promise<{ savedAt: string; deadlineAt: string }>;
   submitAttempt(
     ctx: ActorContext,
     attemptId: string,
     answers: unknown,
+    deviceToken?: string | null,
   ): Promise<AttemptResult>;
   attemptResult(ctx: ActorContext, attemptId: string): Promise<AttemptResult>;
 
@@ -312,6 +394,49 @@ export interface ExamService {
     }[]
   >;
   autoSubmitExpired(): Promise<number>;
+
+  // ---------- V3-10 10B ----------
+  /** The answering page reports a blur or a blocked paste; past the limit the attempt may be submitted. */
+  recordIntegrity(
+    ctx: ActorContext,
+    attemptId: string,
+    input: unknown,
+    deviceToken?: string | null,
+  ): Promise<{ blurCount: number; maxBlurCount: number; submitted: boolean }>;
+  /** 异常答卷: submitted attempts with integrity flags, for the exam's reviewers. */
+  listIntegrity(ctx: ActorContext, examId: string): Promise<AttemptResult[]>;
+  /** An instructor keeps a flagged attempt (valid) or voids it with a reason; optionally resets the attempts. */
+  reviewIntegrity(
+    ctx: ActorContext,
+    attemptId: string,
+    input: unknown,
+  ): Promise<AttemptResult>;
+  /** 考官: the short answers of an attempt with reference answers and grading points, for a grader. */
+  gradingMaterial(
+    ctx: ActorContext,
+    attemptId: string,
+  ): Promise<{
+    attemptId: string;
+    examTitle: string;
+    status: string;
+    items: {
+      questionId: string;
+      stem: string;
+      score: number;
+      referenceAnswer: string;
+      gradingPoints: string | null;
+      response: string;
+      aiSuggestion: GradingSuggestion | null;
+    }[];
+  }>;
+  /** Writes the examiner's suggestion; never changes the attempt's status or score, and never overwrites one. */
+  saveGradingSuggestion(
+    ctx: ActorContext,
+    attemptId: string,
+    input: unknown,
+  ): Promise<{ saved: boolean }>;
+  /** The candidate's own result for the examiner to explain: answers only as `showAnswersAfter` allows. */
+  explainResult(ctx: ActorContext, attemptId: string): Promise<AttemptResult>;
 }
 
 export interface ExamServiceDeps {
@@ -328,6 +453,27 @@ export interface ExamServiceDeps {
   /** A renewal exam ran out of attempts without a pass; the certification steward assigns remedial learning. */
   readonly onRecertificationExhausted?: () =>
     ((attemptId: string) => void) | undefined;
+  /** V3-10: the administrator-adjusted exam → competency rule; falls back to `examCompetency`. */
+  readonly examRules?: () => Promise<{
+    minWeight: number;
+    fullRate: number;
+    partialRate: number;
+  }>;
+  /**
+   * V3-10: an attempt with short answers was submitted on an exam with AI
+   * grading. The examiner suggests scores and the instructor is told once the
+   * suggestions exist. Returning false means the examiner is not running, and
+   * the instructor is told at once.
+   */
+  readonly onGradingRequested?: () =>
+    ((attemptId: string) => boolean) | undefined;
+  /** V3-10: a non-renewal attempt failed; the learning coach drafts a remedial plan. */
+  readonly onExamFailed?: () => ((attemptId: string) => void) | undefined;
+  /** V4-13: the confirmed translations (stem, options) of original questions in a language. */
+  readonly translatedQuestions?: (
+    ids: readonly string[],
+    locale: string,
+  ) => Promise<Map<string, { stem: string; options: QuestionOption[] }>>;
 }
 
 // ---------- Helpers ----------
@@ -469,6 +615,82 @@ function parseOptions(value: unknown, type: QuestionType): QuestionOption[] {
     seen.add(key);
     return { key, text: text.trim() };
   });
+}
+
+/** An exam's anti-cheating settings with the defaults applied to anything not stored. */
+export function resolveAntiCheat(value: unknown): AntiCheat {
+  const stored = json<Record<string, unknown>>(value, {});
+  const flag = (key: keyof AntiCheat) =>
+    typeof stored[key] === 'boolean'
+      ? stored[key]
+      : (DEFAULT_ANTI_CHEAT[key] as boolean);
+  const max = Number(stored.maxBlurCount);
+  return {
+    shuffleOptions: flag('shuffleOptions'),
+    disableCopy: flag('disableCopy'),
+    maxBlurCount:
+      Number.isInteger(max) && max >= 0 && max <= 100
+        ? max
+        : DEFAULT_ANTI_CHEAT.maxBlurCount,
+    blurAction: stored.blurAction === 'submit' ? 'submit' : 'flag',
+    singleDevice: flag('singleDevice'),
+  };
+}
+
+function parseAntiCheat(value: unknown): AntiCheat {
+  if (value === undefined || value === null) return DEFAULT_ANTI_CHEAT;
+  if (!isRecord(value)) throw new HrError('EXAM_ANTI_CHEAT_INVALID', 400);
+  for (const key of ['shuffleOptions', 'disableCopy', 'singleDevice'])
+    if (value[key] !== undefined && typeof value[key] !== 'boolean')
+      throw new HrError('EXAM_ANTI_CHEAT_INVALID', 400);
+  if (
+    value.maxBlurCount !== undefined &&
+    (!Number.isInteger(value.maxBlurCount) ||
+      Number(value.maxBlurCount) < 0 ||
+      Number(value.maxBlurCount) > 100)
+  )
+    throw new HrError('EXAM_ANTI_CHEAT_INVALID', 400);
+  if (
+    value.blurAction !== undefined &&
+    value.blurAction !== 'flag' &&
+    value.blurAction !== 'submit'
+  )
+    throw new HrError('EXAM_ANTI_CHEAT_INVALID', 400);
+  return resolveAntiCheat(value);
+}
+
+/** Points lost per competency: every competency a question carries takes its whole score. */
+export function computeLoss(
+  items: readonly PaperItem[],
+  results: Readonly<Record<string, { score: number | null }>>,
+): LossByCompetency[] {
+  const totals = new Map<string, { lost: number; total: number }>();
+  for (const item of items)
+    for (const competencyId of item.competencyIds) {
+      const entry = totals.get(competencyId) ?? { lost: 0, total: 0 };
+      entry.total += item.score;
+      entry.lost += item.score - Number(results[item.questionId]?.score ?? 0);
+      totals.set(competencyId, entry);
+    }
+  return [...totals.entries()]
+    .map(([competencyId, t]) => ({
+      competencyId,
+      lost: Math.round(t.lost * 100) / 100,
+      total: t.total,
+    }))
+    .sort((a, b) => b.lost - a.lost);
+}
+
+/** Whether an attempt's flags need an instructor: too many blurs, another device, or a blocked paste. */
+export function isFlagged(
+  flags: readonly IntegrityFlag[],
+  blurCount: number,
+  antiCheat: AntiCheat,
+): boolean {
+  return (
+    blurCount > antiCheat.maxBlurCount ||
+    flags.some((f) => f.type === 'multiDevice' || f.type === 'pasteAttempt')
+  );
 }
 
 // ---------- Service ----------
@@ -786,7 +1008,9 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       .select(['id'])
       .where('type', '=', rule.questionType)
       .where('reviewStatus', '=', 'confirmed')
-      .where('active', '=', true);
+      .where('active', '=', true)
+      // V4-13: a translation is the same question as its original (按 translationOfId 归并).
+      .where('translationOfId', 'is', null);
     if (rule.difficulty)
       builder = builder.where('difficulty', '=', rule.difficulty);
     let ids = (await builder.execute()).map((r) => String(r.id));
@@ -848,14 +1072,56 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
         questionCount = rules.reduce((sum, r) => sum + r.count, 0);
         totalScore = rules.reduce((sum, r) => sum + r.count * r.scoreEach, 0);
       }
-      const attempts = await database
+      const all = await database
         .query()
         .selectFrom('examAttempts')
-        .select(['employeeId', 'status'])
+        .select([
+          'employeeId',
+          'status',
+          'itemResults',
+          'blurCount',
+          'integrityFlags',
+          'integrityReview',
+        ])
         .where('examId', '=', id)
-        .where('status', '!=', 'voided')
         .execute();
+      const attempts = all.filter((a) => a.status !== 'voided');
       const candidates = new Set(attempts.map((a) => String(a.employeeId)));
+      const antiCheat = resolveAntiCheat(row.antiCheat);
+      // 考官: suggestion against final score, for graded short answers.
+      let compared = 0;
+      let withinOne = 0;
+      for (const attempt of attempts) {
+        if (attempt.status !== 'passed' && attempt.status !== 'failed')
+          continue;
+        for (const result of Object.values(
+          json<
+            Record<
+              string,
+              { score?: number | null; aiSuggestion?: { score?: number } }
+            >
+          >(attempt.itemResults, {}),
+        )) {
+          if (
+            typeof result?.aiSuggestion?.score !== 'number' ||
+            typeof result.score !== 'number'
+          )
+            continue;
+          compared += 1;
+          if (Math.abs(result.aiSuggestion.score - result.score) <= 1)
+            withinOne += 1;
+        }
+      }
+      const flagged = all.filter(
+        (a) =>
+          a.status !== 'inProgress' &&
+          a.integrityReview == null &&
+          isFlagged(
+            json<IntegrityFlag[]>(a.integrityFlags, []),
+            Number(a.blurCount ?? 0),
+            antiCheat,
+          ),
+      ).length;
       const passed = new Set(
         attempts
           .filter((a) => a.status === 'passed')
@@ -881,6 +1147,16 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
           ? Math.round((passed.size / candidates.size) * 1000) / 10
           : null,
         grading: attempts.filter((a) => a.status === 'grading').length,
+        antiCheat,
+        aiGrading: row.aiGrading == null ? true : bool(row.aiGrading),
+        aiAgreement: {
+          compared,
+          withinOne,
+          rate: compared
+            ? Math.round((withinOne / compared) * 1000) / 10
+            : null,
+        },
+        flagged,
       });
     }
     return result;
@@ -931,6 +1207,8 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
         publish: canManage && (await platform.can(ctx, EXAM, 'publish')),
         grade: await platform.can(ctx, EXAM, 'grade'),
         resetAttempts: await platform.can(ctx, EXAM, 'resetAttempts'),
+        reviewIntegrity: await platform.can(ctx, EXAM, 'reviewIntegrity'),
+        voidAttempt: await platform.can(ctx, EXAM, 'voidAttempt'),
       },
     };
   }
@@ -952,6 +1230,8 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
   async function buildPaper(
     exam: Record<string, unknown>,
     connection?: DatabaseConnection,
+    // V4-13: the candidate's language; a confirmed translation replaces the texts, the question stays the original.
+    locale?: string,
   ): Promise<PaperItem[]> {
     const mode = String(exam.paperMode);
     const picks: { questionId: string; score: number }[] = [];
@@ -983,6 +1263,14 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       picks.map((p) => p.questionId),
       connection,
     );
+    const shuffleOptions = resolveAntiCheat(exam.antiCheat).shuffleOptions;
+    const translated =
+      locale && deps.translatedQuestions
+        ? await deps.translatedQuestions(
+            picks.map((p) => p.questionId),
+            locale,
+          )
+        : new Map<string, { stem: string; options: QuestionOption[] }>();
     const tags = picks.length
       ? await (connection ? connection.query : database.query())
           .selectFrom('questionCompetencies')
@@ -995,17 +1283,23 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
           .execute()
       : [];
     return picks.map((pick) => {
-      const row = rows.find((r) => String(r.id) === pick.questionId)!;
+      const found = rows.find((r) => String(r.id) === pick.questionId)!;
+      const text = translated.get(pick.questionId);
+      const row = text
+        ? { ...found, stem: text.stem, options: text.options }
+        : found;
       const type = String(row.type) as QuestionType;
       const answer = json<unknown>(row.answer, null);
       return {
         questionId: pick.questionId,
         type,
         stem: String(row.stem),
-        // Option order is shuffled per attempt; keys stay attached to their text.
+        // With 选项乱序 on, option order is shuffled per attempt and kept in the snapshot; keys stay attached to their text.
         options:
           type === 'single' || type === 'multiple'
-            ? shuffle(json<QuestionOption[]>(row.options, []))
+            ? shuffleOptions
+              ? shuffle(json<QuestionOption[]>(row.options, []))
+              : json<QuestionOption[]>(row.options, [])
             : [],
         blankCount:
           type === 'blank' && Array.isArray(answer) ? answer.length : 0,
@@ -1079,7 +1373,11 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
     };
   }
 
-  /** Attempts that count against the limit: recertification keeps its own count. */
+  /**
+   * Attempts that count against the limit: recertification keeps its own
+   * count. An attempt voided after an integrity review still counts (it has a
+   * `voidReason`); a reset stops everything before it from counting.
+   */
   async function countedAttempts(
     employeeId: string,
     examId: string,
@@ -1098,7 +1396,10 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       ])
       .where('employeeId', '=', employeeId)
       .where('examId', '=', examId)
-      .where('status', '!=', 'voided');
+      .where('resetAt', 'is', null)
+      .where((eb) =>
+        eb.or([eb('status', '!=', 'voided'), eb('voidReason', 'is not', null)]),
+      );
     builder = recertAssignmentId
       ? builder.where('assignmentId', '=', recertAssignmentId)
       : builder.where('assignmentId', 'is', null);
@@ -1128,8 +1429,11 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
 
   function toAttemptView(
     row: Record<string, unknown>,
-    examTitle: string,
+    exam: Record<string, unknown>,
+    deviceToken: string | null = null,
   ): AttemptView {
+    const examTitle = String(exam.title);
+    const antiCheat = resolveAntiCheat(exam.antiCheat);
     return {
       id: String(row.id),
       examId: String(row.examId),
@@ -1142,7 +1446,92 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       submittedAt: iso(row.submittedAt),
       items: json<PaperItem[]>(row.paperSnapshot, []),
       answers: json<Record<string, unknown>>(row.answers, {}),
+      antiCheat: {
+        disableCopy: antiCheat.disableCopy,
+        maxBlurCount: antiCheat.maxBlurCount,
+        blurAction: antiCheat.blurAction,
+        singleDevice: antiCheat.singleDevice,
+      },
+      blurCount: Number(row.blurCount ?? 0),
+      deviceToken,
     };
+  }
+
+  const MAX_FLAGS = 200;
+
+  async function appendFlag(
+    attemptId: string,
+    flag: IntegrityFlag,
+    extra: Record<string, unknown> = {},
+  ): Promise<void> {
+    const row = await database
+      .query()
+      .selectFrom('examAttempts')
+      .select(['integrityFlags'])
+      .where('id', '=', attemptId)
+      .executeTakeFirst();
+    const flags = json<IntegrityFlag[]>(row?.integrityFlags, []);
+    await database
+      .query()
+      .updateTable('examAttempts')
+      .set({
+        integrityFlags: [...flags, flag].slice(-MAX_FLAGS),
+        ...extra,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', attemptId)
+      .execute();
+  }
+
+  /**
+   * 单设备作答: the device that started (or last took over) an attempt holds
+   * its token. Opening the attempt without that token is another device: it
+   * takes the attempt over and the takeover is flagged. After a takeover, a
+   * save or submission without the current token is refused and flagged. A
+   * client that never sends a token is accepted until the first takeover.
+   */
+  async function assertDevice(
+    row: Record<string, unknown>,
+    exam: Record<string, unknown>,
+    token: string | null | undefined,
+  ): Promise<void> {
+    if (!resolveAntiCheat(exam.antiCheat).singleDevice) return;
+    const stored = row.deviceToken == null ? null : str(row.deviceToken);
+    if (!stored || token === stored) return;
+    const flags = json<IntegrityFlag[]>(row.integrityFlags, []);
+    if (!token && !flags.some((f) => f.type === 'multiDevice')) return;
+    await appendFlag(String(row.id), {
+      type: 'multiDevice',
+      at: new Date().toISOString(),
+      detail: 'rejected',
+    });
+    throw new HrError('ATTEMPT_DEVICE_CHANGED', 409);
+  }
+
+  /** Opening an attempt on a device without its token takes it over: a new token for this device. */
+  async function takeOver(
+    row: Record<string, unknown>,
+    exam: Record<string, unknown>,
+    token: string | null | undefined,
+  ): Promise<string | null> {
+    if (!resolveAntiCheat(exam.antiCheat).singleDevice) return null;
+    const stored = row.deviceToken == null ? null : str(row.deviceToken);
+    if (stored && token === stored) return null;
+    const next = newId();
+    if (stored)
+      await appendFlag(
+        String(row.id),
+        { type: 'multiDevice', at: new Date().toISOString(), detail: 'opened' },
+        { deviceToken: next },
+      );
+    else
+      await database
+        .query()
+        .updateTable('examAttempts')
+        .set({ deviceToken: next, updatedAt: new Date() })
+        .where('id', '=', String(row.id))
+        .execute();
+    return next;
   }
 
   function cleanAnswers(
@@ -1240,6 +1629,8 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
           score,
           status,
           itemResults: JSON.stringify(results),
+          // Scored attempts carry their loss by competency; a graded one gets it when the grade is in.
+          lossByCompetency: hasShort ? null : computeLoss(items, results),
           updatedAt: stamp,
         })
         .where('id', '=', attemptId)
@@ -1255,6 +1646,11 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
     });
     if (!outcome) return 'skipped';
     if (outcome.status === 'grading') {
+      // V3-10 考官: with AI grading on, the instructor is told once the suggestions exist.
+      const aiGrading =
+        outcome.exam.aiGrading == null ? true : bool(outcome.exam.aiGrading);
+      if (aiGrading && deps.onGradingRequested?.()?.(attemptId))
+        return outcome.status;
       await notify({
         key: `attempt:${attemptId}:grading`,
         userIds: [String(outcome.exam.ownerUserId)],
@@ -1287,14 +1683,20 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       .select(['employeeId', 'examId', 'assignmentId'])
       .where('id', '=', attemptId)
       .executeTakeFirst();
-    if (!row?.assignmentId) return;
-    const assignment = await database
-      .query()
-      .selectFrom('assignments')
-      .select(['source'])
-      .where('id', '=', str(row.assignmentId))
-      .executeTakeFirst();
-    if (!assignment || str(assignment.source) !== 'recertification') return;
+    if (!row) return;
+    const assignment = row.assignmentId
+      ? await database
+          .query()
+          .selectFrom('assignments')
+          .select(['source'])
+          .where('id', '=', str(row.assignmentId))
+          .executeTakeFirst()
+      : undefined;
+    if (!assignment || str(assignment.source) !== 'recertification') {
+      // V3-10 学习教练: a failed ordinary exam gets a remedial plan draft; renewals are the steward's.
+      deps.onExamFailed?.()?.(attemptId);
+      return;
+    }
     const exam = await examRow(str(row.examId));
     if (!exam) return;
     const attempts = await countedAttempts(
@@ -1329,7 +1731,9 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
   async function writeCompetencyLevels(
     attempt: Record<string, unknown>,
   ): Promise<void> {
-    const rule = deps.examCompetency();
+    const rule = deps.examRules
+      ? await deps.examRules()
+      : deps.examCompetency();
     const items = json<PaperItem[]>(attempt.paperSnapshot, []);
     const results = json<Record<string, { score: number | null }>>(
       attempt.itemResults,
@@ -1428,11 +1832,17 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
           score: number | null;
           correct: boolean | null;
           comment: string | null;
+          aiSuggestion?: GradingSuggestion;
         }
       >
     >(row.itemResults, {});
     const visible =
       options.forGrader || answersVisible(exam, String(row.status));
+    const scored = row.status === 'passed' || row.status === 'failed';
+    const loss = scored
+      ? (json<LossByCompetency[] | null>(row.lossByCompetency, null) ??
+        computeLoss(items, results))
+      : [];
     const questions = await loadQuestionRows(items.map((i) => i.questionId));
     const employee = await platform.employee(String(row.employeeId));
     // Wrong answers grouped by competency, with published courses that cover it.
@@ -1446,7 +1856,9 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
         tally.set(competencyId, entry);
       }
     }
-    const competencyIds = [...tally.keys()];
+    const competencyIds = [
+      ...new Set([...tally.keys(), ...loss.map((l) => l.competencyId)]),
+    ];
     const titles = competencyIds.length
       ? new Map(
           (
@@ -1504,9 +1916,25 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
                     comment: result?.comment ?? null,
                   }
                 : {}),
+              ...(options.forGrader && item.type === 'short'
+                ? { aiSuggestion: result?.aiSuggestion ?? null }
+                : {}),
             };
           })
         : [],
+      lossByCompetency: loss.map((l) => ({
+        ...l,
+        title: titles.get(l.competencyId) ?? l.competencyId,
+      })),
+      integrity: options.forGrader
+        ? {
+            blurCount: Number(row.blurCount ?? 0),
+            flags: json<IntegrityFlag[]>(row.integrityFlags, []),
+            review:
+              row.integrityReview == null ? null : str(row.integrityReview),
+            voidReason: row.voidReason == null ? null : str(row.voidReason),
+          }
+        : null,
       wrongByCompetency: [...tally.entries()]
         .filter(([, entry]) => entry.wrong > 0)
         .map(([competencyId, entry]) => ({
@@ -1558,6 +1986,18 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
             ]),
           sort: (s) => [s.field('updatedAt').desc()],
         })) as Record<string, unknown>[];
+      // V4-13: translations are reviewed in 译文审核, not listed as questions of their own.
+      const translated = new Set(
+        (
+          await database
+            .query()
+            .selectFrom('questions')
+            .select(['id'])
+            .where('translationOfId', 'is not', null)
+            .execute()
+        ).map((t) => String(t.id)),
+      );
+      rows = rows.filter((r) => !translated.has(String(r.id)));
       if (filters.competencyId) {
         const tagged = await database
           .query()
@@ -1995,6 +2435,7 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       return {
         items: await toExamSummaries(rows),
         canCreate: await platform.can(ctx, EXAM, 'manage'),
+        canConfigure: await platform.can(ctx, EXAM, 'configure'),
       };
     },
 
@@ -2043,6 +2484,14 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
           ['never', 'afterSubmit', 'afterPass'] as const,
           'INVALID_INPUT',
         ),
+        antiCheat: JSON.stringify(parseAntiCheat(input.antiCheat)),
+        aiGrading: (() => {
+          if (input.aiGrading === undefined || input.aiGrading === null)
+            return true;
+          if (typeof input.aiGrading !== 'boolean')
+            throw new HrError('INVALID_INPUT', 400);
+          return input.aiGrading;
+        })(),
       };
       const rules = paperMode === 'random' ? parseRules(input.randomRules) : [];
       let paper: { questionId: string; score: number }[] = [];
@@ -2327,7 +2776,7 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       return result;
     },
 
-    async startAttempt(ctx, examId) {
+    async startAttempt(ctx, examId, deviceToken, locale) {
       const policies = await authorizeAction(ctx.authz, TAKING, 'start');
       const employee = await ownEmployee(ctx);
       const exam = await examRow(examId);
@@ -2354,7 +2803,11 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
         ) {
           await finalize(String(open.id), undefined);
         } else {
-          return toAttemptView(open, String(exam.title));
+          return toAttemptView(
+            open,
+            exam,
+            await takeOver(open, exam, deviceToken),
+          );
         }
       }
       const attempts = await countedAttempts(
@@ -2368,7 +2821,7 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
         throw new HrError('EXAM_AWAITING_GRADING', 409);
       if (attempts.length >= Number(exam.maxAttempts))
         throw new HrError('EXAM_NO_ATTEMPTS_LEFT', 409);
-      const items = await buildPaper(exam);
+      const items = await buildPaper(exam, undefined, locale);
       const started = new Date();
       const deadline = new Date(
         started.getTime() + Number(exam.durationMinutes) * 60_000,
@@ -2383,6 +2836,7 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       const attemptNo =
         allNos.reduce((max, r) => Math.max(max, Number(r.attemptNo)), 0) + 1;
       const id = newId();
+      const issuedToken = newId();
       await database
         .repository('examAttempts')
         .withPolicy(policyOf(policies, 'examAttempts'))
@@ -2404,6 +2858,9 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
             status: 'inProgress',
             gradedBy: null,
             itemResults: null,
+            blurCount: 0,
+            integrityFlags: null,
+            deviceToken: issuedToken,
             createdAt: started,
             updatedAt: started,
           },
@@ -2423,10 +2880,10 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
         .selectAll()
         .where('id', '=', id)
         .executeTakeFirst()) as Record<string, unknown>;
-      return toAttemptView(row, String(exam.title));
+      return toAttemptView(row, exam, issuedToken);
     },
 
-    async getAttempt(ctx, attemptId) {
+    async getAttempt(ctx, attemptId, deviceToken) {
       const { row } = await loadOwnAttempt(ctx, 'save', attemptId);
       const exam = (await examRow(String(row.examId)))!;
       if (
@@ -2441,14 +2898,25 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
           .selectAll()
           .where('id', '=', attemptId)
           .executeTakeFirst()) as Record<string, unknown>;
-        return toAttemptView(fresh, String(exam.title));
+        return toAttemptView(fresh, exam);
       }
-      return toAttemptView(row, String(exam.title));
+      return toAttemptView(
+        row,
+        exam,
+        row.status === 'inProgress'
+          ? await takeOver(row, exam, deviceToken)
+          : null,
+      );
     },
 
-    async saveAnswers(ctx, attemptId, answers) {
+    async saveAnswers(ctx, attemptId, answers, deviceToken) {
       const { row, policies } = await loadOwnAttempt(ctx, 'save', attemptId);
       if (row.status !== 'inProgress') throw new HrError('ATTEMPT_CLOSED', 409);
+      await assertDevice(
+        row,
+        (await examRow(String(row.examId)))!,
+        deviceToken,
+      );
       const deadline = new Date(String(iso(row.deadlineAt))).getTime();
       if (deadline + SUBMIT_GRACE_MS < Date.now()) {
         await finalize(attemptId, undefined);
@@ -2469,9 +2937,14 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       return { savedAt: stamp.toISOString(), deadlineAt: iso(row.deadlineAt)! };
     },
 
-    async submitAttempt(ctx, attemptId, answers) {
+    async submitAttempt(ctx, attemptId, answers, deviceToken) {
       const { row } = await loadOwnAttempt(ctx, 'submit', attemptId);
       if (row.status !== 'inProgress') throw new HrError('ATTEMPT_CLOSED', 409);
+      await assertDevice(
+        row,
+        (await examRow(String(row.examId)))!,
+        deviceToken,
+      );
       const deadline = new Date(String(iso(row.deadlineAt))).getTime();
       if (deadline + SUBMIT_GRACE_MS < Date.now()) {
         // Answers sent after the deadline are refused; the attempt is scored with what was saved in time.
@@ -2573,6 +3046,7 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
           });
         subjective += score;
         results[item.questionId] = {
+          ...results[item.questionId],
           score,
           correct: score >= item.score,
           comment: requireString(graded.comment, 'INVALID_INPUT', {
@@ -2599,6 +3073,7 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
               status,
               gradedBy: ctx.userId,
               itemResults: JSON.stringify(results),
+              lossByCompetency: computeLoss(items, results),
               updatedAt: stamp,
             },
           });
@@ -2639,20 +3114,29 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
             f.and([
               f.string('examId').eq(examId),
               f.string('employeeId').eq(employeeId),
-              f.string('status').eq('failed'),
+              f.or([
+                f.string('status').eq('failed'),
+                f.string('status').eq('voided'),
+              ]),
             ]),
         })) as Record<string, unknown>[];
-      if (!rows.length) throw new HrError('NOTHING_TO_RESET', 409);
-      // Failed attempts stay on record but no longer count against the limit.
-      for (const row of rows)
+      // Failed attempts and attempts voided after an integrity review, not yet reset.
+      const counted = rows.filter(
+        (r) =>
+          r.resetAt == null && (r.status === 'failed' || r.voidReason != null),
+      );
+      if (!counted.length) throw new HrError('NOTHING_TO_RESET', 409);
+      // They stay on record but no longer count against the limit.
+      const stamp = new Date();
+      for (const row of counted)
         await database
           .repository('examAttempts')
           .withPolicy(policyOf(policies, 'examAttempts'))
           .updateOne({
-            filter: { id: String(row.id), status: 'failed' },
-            values: { status: 'voided', updatedAt: new Date() },
+            filter: { id: String(row.id), status: String(row.status) },
+            values: { status: 'voided', resetAt: stamp, updatedAt: stamp },
           });
-      return { reset: rows.length };
+      return { reset: counted.length };
     },
 
     async examCandidates(ctx, examId) {
@@ -2691,16 +3175,296 @@ export function createExamService(deps: ExamServiceDeps): ExamService {
       return result.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
     },
 
-    async autoSubmitExpired() {
-      const cutoff = new Date(Date.now() - SUBMIT_GRACE_MS);
-      const rows = await database
+    // ---------- V3-10 10B: anti-cheating ----------
+    async recordIntegrity(ctx, attemptId, input, deviceToken) {
+      const { row } = await loadOwnAttempt(ctx, 'save', attemptId);
+      if (!isRecord(input)) throw new HrError('INVALID_INPUT', 400);
+      const type = requireEnum(
+        input.type,
+        ['blur', 'pasteAttempt'] as const,
+        'INVALID_INPUT',
+      );
+      const exam = (await examRow(String(row.examId)))!;
+      const antiCheat = resolveAntiCheat(exam.antiCheat);
+      if (row.status !== 'inProgress')
+        return {
+          blurCount: Number(row.blurCount ?? 0),
+          maxBlurCount: antiCheat.maxBlurCount,
+          submitted: false,
+        };
+      await assertDevice(row, exam, deviceToken);
+      const blurCount = Number(row.blurCount ?? 0) + (type === 'blur' ? 1 : 0);
+      await appendFlag(
+        attemptId,
+        {
+          type,
+          at: new Date().toISOString(),
+          detail:
+            type === 'blur'
+              ? String(blurCount)
+              : requireString(input.detail, 'INVALID_INPUT', {
+                  optional: true,
+                  max: 200,
+                }),
+        },
+        type === 'blur' ? { blurCount } : {},
+      );
+      // Past the limit with blurAction = submit: scored with what was saved.
+      let submitted = false;
+      if (
+        type === 'blur' &&
+        blurCount > antiCheat.maxBlurCount &&
+        antiCheat.blurAction === 'submit'
+      )
+        submitted = (await finalize(attemptId, undefined)) !== 'skipped';
+      return { blurCount, maxBlurCount: antiCheat.maxBlurCount, submitted };
+    },
+
+    async listIntegrity(ctx, examId) {
+      const policies = await assertExamInScope(ctx, 'reviewIntegrity', examId);
+      const exam = (await examRow(examId))!;
+      const antiCheat = resolveAntiCheat(exam.antiCheat);
+      const rows = (await database
+        .repository('examAttempts')
+        .withPolicy(policyOf(policies, 'examAttempts'))
+        .findMany({
+          filter: { examId },
+          sort: (s) => [s.field('submittedAt').desc()],
+        })) as Record<string, unknown>[];
+      const own = await platform.employeeOfUser(ctx.userId);
+      return Promise.all(
+        rows
+          .filter(
+            (r) =>
+              r.status !== 'inProgress' &&
+              (!own || String(r.employeeId) !== own.id) &&
+              isFlagged(
+                json<IntegrityFlag[]>(r.integrityFlags, []),
+                Number(r.blurCount ?? 0),
+                antiCheat,
+              ),
+          )
+          .map((r) => toResult(r, { forGrader: true })),
+      );
+    },
+
+    async reviewIntegrity(ctx, attemptId, input) {
+      if (!isRecord(input)) throw new HrError('INVALID_INPUT', 400);
+      const decision = requireEnum(
+        input.decision,
+        ['valid', 'void'] as const,
+        'INVALID_INPUT',
+      );
+      const policies = await authorizeAction(
+        ctx.authz,
+        EXAM,
+        decision === 'void' ? 'voidAttempt' : 'reviewIntegrity',
+      );
+      const row = (await database
+        .repository('examAttempts')
+        .withPolicy(policyOf(policies, 'examAttempts'))
+        .findOne({ filter: { id: attemptId } })) as
+        Record<string, unknown> | undefined;
+      if (!row) throw new HrError('ATTEMPT_NOT_FOUND', 404);
+      await assertExamInScope(ctx, 'reviewIntegrity', String(row.examId));
+      const own = await platform.employeeOfUser(ctx.userId);
+      if (own && String(row.employeeId) === own.id)
+        throw new HrError('GRADE_OWN_ATTEMPT', 403);
+      if (row.status === 'inProgress' || row.status === 'voided')
+        throw new HrError('ATTEMPT_NOT_REVIEWABLE', 409);
+      const stamp = new Date();
+      if (decision === 'void') {
+        const reason = requireString(input.reason, 'VOID_REASON_REQUIRED', {
+          max: 1000,
+        });
+        if (!reason) throw new HrError('VOID_REASON_REQUIRED', 400);
+        // A pass a certificate was issued on is not voided here: HR revokes the certificate first.
+        if (row.status === 'passed') {
+          const cited = await database
+            .query()
+            .selectFrom('employeeCertificates')
+            .select(['id', 'evidence'])
+            .where('employeeId', '=', String(row.employeeId))
+            .execute();
+          if (
+            cited.some((c) =>
+              json<{ attemptIds?: string[] }>(
+                c.evidence,
+                {},
+              ).attemptIds?.includes(attemptId),
+            )
+          )
+            throw new HrError('ATTEMPT_CERTIFIED', 409);
+        }
+        await database
+          .repository('examAttempts')
+          .withPolicy(policyOf(policies, 'examAttempts'))
+          .updateOne({
+            filter: { id: attemptId, status: String(row.status) },
+            values: {
+              status: 'voided',
+              voidReason: reason,
+              integrityReview: 'voided',
+              updatedAt: stamp,
+            },
+          });
+      } else {
+        await database
+          .repository('examAttempts')
+          .withPolicy(policyOf(policies, 'examAttempts'))
+          .updateOne({
+            filter: { id: attemptId },
+            values: { integrityReview: 'valid', updatedAt: stamp },
+          });
+      }
+      if (input.resetAttempts === true)
+        await service
+          .resetAttempts(ctx, String(row.examId), String(row.employeeId))
+          .catch((error: unknown) => {
+            if (!(
+              error instanceof HrError && error.code === 'NOTHING_TO_RESET'
+            ))
+              throw error;
+          });
+      const fresh = (await database
         .query()
         .selectFrom('examAttempts')
-        .select(['id'])
-        .where('status', '=', 'inProgress')
-        .where('deadlineAt', '<', cutoff)
-        .limit(100)
+        .selectAll()
+        .where('id', '=', attemptId)
+        .executeTakeFirst()) as Record<string, unknown>;
+      return toResult(fresh, { forGrader: true });
+    },
+
+    // ---------- V3-10 10B: the examiner ----------
+    async gradingMaterial(ctx, attemptId) {
+      const policies = await authorizeAction(ctx.authz, EXAM, 'grade');
+      const row = (await database
+        .repository('examAttempts')
+        .withPolicy(policyOf(policies, 'examAttempts'))
+        .findOne({ filter: { id: attemptId } })) as
+        Record<string, unknown> | undefined;
+      if (!row) throw new HrError('ATTEMPT_NOT_FOUND', 404);
+      // Only the exam's graders: its owner (instructors) or HR.
+      await assertExamInScope(ctx, 'grade', String(row.examId));
+      const own = await platform.employeeOfUser(ctx.userId);
+      if (own && String(row.employeeId) === own.id)
+        throw new HrError('GRADE_OWN_ATTEMPT', 403);
+      const exam = (await examRow(String(row.examId)))!;
+      const items = json<PaperItem[]>(row.paperSnapshot, []).filter(
+        (i) => i.type === 'short',
+      );
+      const answers = json<Record<string, unknown>>(row.answers, {});
+      const results = json<
+        Record<string, { aiSuggestion?: GradingSuggestion }>
+      >(row.itemResults, {});
+      const questions = await loadQuestionRows(items.map((i) => i.questionId));
+      return {
+        attemptId,
+        examTitle: String(exam.title),
+        status: String(row.status),
+        items: items.map((item) => {
+          const question = questions.find(
+            (q) => String(q.id) === item.questionId,
+          );
+          return {
+            questionId: item.questionId,
+            stem: item.stem,
+            score: item.score,
+            referenceAnswer: str(json<unknown>(question?.answer, '') ?? ''),
+            gradingPoints:
+              question?.gradingNotes == null
+                ? null
+                : str(question.gradingNotes),
+            response:
+              typeof answers[item.questionId] === 'string'
+                ? (answers[item.questionId] as string)
+                : '',
+            aiSuggestion: results[item.questionId]?.aiSuggestion ?? null,
+          };
+        }),
+      };
+    },
+
+    async saveGradingSuggestion(ctx, attemptId, input) {
+      if (!isRecord(input)) throw new HrError('INVALID_INPUT', 400);
+      const material = await service.gradingMaterial(ctx, attemptId);
+      if (material.status !== 'grading')
+        throw new HrError('ATTEMPT_NOT_GRADING', 409);
+      const questionId = requireString(input.questionId, 'INVALID_INPUT', {
+        max: 64,
+      })!;
+      const item = material.items.find((i) => i.questionId === questionId);
+      if (!item) throw new HrError('QUESTION_NOT_FOUND', 404);
+      // One suggestion per answer: a repeated trigger never replaces it.
+      if (item.aiSuggestion) return { saved: false };
+      const score = Number(input.score);
+      if (!Number.isFinite(score) || score < 0)
+        throw new HrError('GRADE_SCORE_INVALID', 400);
+      const points = (value: unknown) => {
+        if (value === undefined || value === null) return [];
+        if (
+          !Array.isArray(value) ||
+          value.length > 20 ||
+          value.some((v) => typeof v !== 'string' || v.length > 500)
+        )
+          throw new HrError('INVALID_INPUT', 400);
+        return value as string[];
+      };
+      const suggestion: GradingSuggestion = {
+        // Never above the question's points.
+        score: Math.min(item.score, Math.round(score * 2) / 2),
+        matchedPoints: points(input.matchedPoints),
+        missingPoints: points(input.missingPoints),
+        rationale:
+          requireString(input.rationale, 'INVALID_INPUT', { max: 2000 }) ?? '',
+        at: new Date().toISOString(),
+      };
+      // Read and write in one statement pair on the query builder; the status and score stay as they are.
+      const row = await database
+        .query()
+        .selectFrom('examAttempts')
+        .select(['itemResults'])
+        .where('id', '=', attemptId)
+        .executeTakeFirst();
+      const results = json<Record<string, Record<string, unknown>>>(
+        row?.itemResults,
+        {},
+      );
+      if (results[questionId]?.aiSuggestion) return { saved: false };
+      results[questionId] = {
+        score: null,
+        correct: null,
+        comment: null,
+        ...results[questionId],
+        aiSuggestion: suggestion,
+      };
+      await database
+        .query()
+        .updateTable('examAttempts')
+        .set({ itemResults: results, updatedAt: new Date() })
+        .where('id', '=', attemptId)
+        .where('status', '=', 'grading')
         .execute();
+      return { saved: true };
+    },
+
+    async explainResult(ctx, attemptId) {
+      return service.attemptResult(ctx, attemptId);
+    },
+
+    async autoSubmitExpired() {
+      const cutoff = Date.now() - SUBMIT_GRACE_MS;
+      // Compared in code: a stored datetime and a bound Date do not compare reliably in every dialect (SQLite).
+      const rows = (
+        await database
+          .query()
+          .selectFrom('examAttempts')
+          .select(['id', 'deadlineAt'])
+          .where('status', '=', 'inProgress')
+          .execute()
+      )
+        .filter((row) => new Date(iso(row.deadlineAt)!).getTime() < cutoff)
+        .slice(0, 100);
       let count = 0;
       for (const row of rows)
         if ((await finalize(String(row.id), undefined)) !== 'skipped')

@@ -78,6 +78,13 @@ export interface Employee {
   readonly birthDate?: string | null;
   readonly address?: string | null;
   readonly note?: string | null;
+  /** 界面追加字段: values the viewer may read, keyed by internal key. */
+  readonly customFields?: Record<string, unknown>;
+  /** V1-03: the office-suite identity this employee is bound to. */
+  readonly externalProvider?: string | null;
+  readonly externalUserId?: string | null;
+  /** A sync leaves this employee's department, position, manager and status alone. */
+  readonly syncLocked?: boolean;
 }
 
 export interface EmployeeListItem extends Employee {
@@ -95,10 +102,14 @@ export interface EmployeeDetail {
   readonly managerName: string | null;
   readonly userName: string | null;
   readonly coreFieldsLocked: boolean;
+  /** V1-03: the office suite is the data master and this employee is bound to it. */
+  readonly syncManaged?: boolean;
   readonly can: {
     readonly update: boolean;
     readonly linkUser: boolean;
     readonly markLeave: boolean;
+    /** 更正任职信息: HR only, in service, and not switched off in 人事设置. */
+    readonly correctJob: boolean;
     readonly delete: boolean;
     readonly assess: boolean;
     readonly viewAssessments: boolean;
@@ -147,17 +158,38 @@ export interface JobEvent {
   readonly fromPosition: string | null;
   readonly toPosition: string | null;
   readonly actionId: string | null;
+  /** action: a personnel action; manual: 更正任职信息 or a backfilled employee; import: an Excel import. */
+  readonly source?: 'action' | 'manual' | 'import' | 'sync';
+  /** The reason a manual correction gave. */
+  readonly note?: string | null;
 }
 
 export interface ApprovalStep {
   readonly level: number;
-  readonly kind: 'departmentHead' | 'hrAdmin';
+  /** extra: a level an administrator added for a department in 人事设置 · 审批链. */
+  readonly kind: 'departmentHead' | 'hrAdmin' | 'extra';
+  /** An added level's name; default levels are named by kind. */
+  readonly name?: string | null;
+  /** Levels folded into this one because the same person approves them. */
+  readonly merged?: readonly {
+    readonly kind: 'departmentHead' | 'hrAdmin' | 'extra';
+    readonly name: string | null;
+  }[];
+  readonly approverUserIds?: readonly string[];
+  /** Any HR administrator decides this level. */
+  readonly anyHrAdmin?: boolean;
+  /** Why the configured approver does not decide: none found, or the employee themselves. */
+  readonly fallback?: 'noApprover' | 'selfEscalated' | null;
+  /** Filled in by the chain previews only. */
+  readonly approverNames?: readonly string[];
   readonly approverUserId: string | null;
   readonly departmentId: string | null;
   readonly status: 'pending' | 'approved' | 'rejected' | 'auto';
   readonly decidedBy: string | null;
   readonly decidedAt: string | null;
   readonly comment: string | null;
+  /** feishuCard: decided on a Feishu approval card. */
+  readonly via?: 'feishuCard' | null;
 }
 
 export interface PersonnelAction {
@@ -190,6 +222,15 @@ export interface ProfileChangeRequest {
   readonly employeeName: string;
   readonly changes: Record<string, unknown>;
   readonly current: Record<string, unknown>;
+  /** self: the employee's own request; ai: the HR assistant's reading of an attachment. */
+  readonly source?: 'self' | 'assistant' | 'feishuCard' | 'ai';
+  readonly attachmentFileId?: string | null;
+  /** The protected content path of that attachment. */
+  readonly attachmentPath?: string | null;
+  readonly confidence?: Record<
+    string,
+    { readonly confidence: number; readonly snippet: string }
+  > | null;
   readonly status: string;
   readonly reviewerUserId: string | null;
   readonly reviewedAt: string | null;

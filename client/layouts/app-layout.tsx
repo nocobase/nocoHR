@@ -153,7 +153,7 @@ export function AppLayout({
               <Outlet />
             </div>
           </main>
-          {/* Application addition: phones get a learner tab bar (学习 · 考试 · 问答 · 我的) under main, because the
+          {/* Application addition: phones get a employee tab bar (学习 · 考试 · 问答 · 自助 · 我的) under main, because the
           sidebar drawer is too far away for pages employees open daily. It reads the same authorized items. */}
           <MobileTabBar items={menuItems} />
         </div>

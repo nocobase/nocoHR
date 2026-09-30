@@ -90,7 +90,12 @@ describe('leave duration', () => {
         },
       ],
     });
-    expect(result).toEqual({ duration: 1, dates: ['2026-10-31'], hours: 4 });
+    expect(result).toEqual({
+      duration: 1,
+      dates: ['2026-10-31'],
+      hours: 4,
+      balanceDays: 1,
+    });
   });
 
   it('does not count a shift that only touches the request boundary', () => {
@@ -124,6 +129,7 @@ describe('leave duration', () => {
       duration: 2,
       hours: 2,
       dates: ['2026-10-09', '2026-10-12'],
+      balanceDays: 2,
     });
     expect(() =>
       calculateLeaveDuration({
@@ -183,7 +189,12 @@ describe('leave duration', () => {
           },
         ],
       }),
-    ).toEqual({ duration: 1, dates: ['2026-10-31'], hours: 9 });
+    ).toEqual({
+      duration: 1,
+      dates: ['2026-10-31'],
+      hours: 9,
+      balanceDays: 1,
+    });
   });
 
   it.each([

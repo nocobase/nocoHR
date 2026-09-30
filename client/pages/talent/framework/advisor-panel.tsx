@@ -14,7 +14,14 @@ import {
 } from '@/extensions/nocobase-ai';
 
 export interface AdvisorLauncherProps {
-  readonly position: { id: string; title: string; code: string };
+  readonly position: {
+    id: string;
+    title: string;
+    code: string;
+    /** V3-08: an extracted 岗位说明书 is handed to the advisor as its primary source. */
+    jdFilename?: string | null;
+    jdStatus?: string | null;
+  };
   /** Called when the panel closes, so the page can show drafts the advisor wrote. */
   readonly onClosed: () => void;
 }
@@ -79,7 +86,11 @@ function Launcher({ position, onClosed }: AdvisorLauncherProps): ReactElement {
             task: {
               title: t('talent.advisor.taskTitle', { title: position.title }),
               message: {
-                system: `The user is working on position "${position.title}" (code ${position.code}, positionId ${position.id}). Call getPositionContext with this positionId first.`,
+                system: `The user is working on position "${position.title}" (code ${position.code}, positionId ${position.id}). Call getPositionContext with this positionId first.${
+                  position.jdStatus === 'ready'
+                    ? ` The position has an uploaded job description ("${position.jdFilename ?? ''}"); getPositionContext returns its text as jdText. Use it as the primary source and cite the clause each competency comes from.`
+                    : ''
+                }`,
                 user: t('talent.advisor.prompt', { title: position.title }),
               },
               autoSend: false,

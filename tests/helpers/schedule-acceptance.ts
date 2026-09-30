@@ -125,7 +125,7 @@ export function registerScheduleAcceptance(
         await authz.permissionSets.revoke(assignment.id);
       }
     });
-    it('allows scoped managers and HR but does not claim writes are ready or mutate records', async () => {
+    it('allows scoped managers and HR and does not mutate records', async () => {
       const before = await db()
         .repository('shiftSchedules')
         .findMany({ filter: { employeeId: employee.id } });
@@ -135,15 +135,11 @@ export function registerScheduleAcceptance(
       for (const user of ['hr01', 'mgr_njl']) {
         const result = await check(input(), user);
         expect(result.status).toBe(200);
-        expect(result.json.data).toMatchObject({
+        expect(result.json.data).toEqual({
           checks: {},
           hasBlock: false,
           hasWarn: false,
-          writesReady: false,
         });
-        expect(result.json.data.pendingRules).toContain(
-          'MONTHLY_OVERTIME_POLICY_REQUIRED',
-        );
       }
       expect(
         await db()

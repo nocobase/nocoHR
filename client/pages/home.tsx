@@ -8,14 +8,32 @@ import { Skeleton } from '../components/ui/skeleton';
 const page = (id: string) =>
   ({ resource: { type: 'page', id }, action: 'access' }) as const;
 
+/** Phones land on 问答 (V1-04): the width at which the App layout shows the bottom tab bar. */
+function isPhoneWidth(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(max-width: 767px)').matches
+  );
+}
+
 /**
- * The landing page after sign-in. It has no menu entry of its own: it forwards to the first talent page in menu
- * order that the signed-in user may open, so every role lands on something useful.
+ * The landing page after sign-in. It has no menu entry of its own: it forwards to the first page the signed-in user
+ * may open, so every role lands on something useful. V1-04: the 工作台 is the default landing page, and on a phone
+ * employees land on 问答 instead; the talent pages in menu order follow as the fallback.
  */
 export default function HomePage(): ReactElement {
   const { t } = useTranslation();
-  // One hook per candidate, in menu order; the list is fixed, so the hook order never changes.
-  const candidates = [
+  // One hook per candidate; the list of checks is fixed, so the hook order never changes.
+  const ask = {
+    path: '/talent/ask',
+    check: useCan(page('talent.knowledgeQa')),
+  };
+  const workbench = {
+    path: '/talent/workbench',
+    check: useCan(page('talent.workbench')),
+  };
+  const fallbacks = [
     { path: '/talent/me', check: useCan(page('talent.me')) },
     { path: '/talent/employees', check: useCan(page('talent.employees')) },
     { path: '/talent/framework', check: useCan(page('talent.framework')) },
@@ -28,6 +46,9 @@ export default function HomePage(): ReactElement {
     { path: '/talent/hr-reports', check: useCan(page('talent.hrReports')) },
     { path: '/talent/org-chart', check: useCan(page('talent.orgChart')) },
   ];
+  const candidates = isPhoneWidth()
+    ? [ask, workbench, ...fallbacks]
+    : [workbench, ...fallbacks, ask];
 
   // Wait for earlier candidates before choosing a later one, so the preferred page wins.
   for (const candidate of candidates) {

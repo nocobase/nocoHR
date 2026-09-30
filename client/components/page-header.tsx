@@ -26,7 +26,10 @@ export function PageHeader({
         ) : null}
       </div>
       {actions ? (
-        <div className='flex shrink-0 items-center gap-2'>{actions}</div>
+        // Actions wrap instead of running off a narrow screen (员工 has six); from `sm` up they stay right-aligned.
+        <div className='flex min-w-0 flex-wrap items-center gap-2 sm:justify-end'>
+          {actions}
+        </div>
       ) : null}
     </header>
   );

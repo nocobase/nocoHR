@@ -438,15 +438,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000001',
     idNumber: '999999199001010011',
     birthDate: '1990-01-01',
-    address: '测试市测试路 1 号',
+    address: '苏州市工业园区星湖街 328 号 6 幢 1203 室',
     education: {
-      school: '测试大学',
+      school: '苏南工商学院',
       degree: 'bachelor',
       major: '人力资源管理',
       startDate: '2008-09-01',
       endDate: '2012-06-30',
     },
-    contact: { name: '林测试', relation: '父亲', phone: '13900001001' },
+    contact: { name: '林国平', relation: '父亲', phone: '13900001001' },
   },
   {
     employeeId: 'emp-mgr-east',
@@ -461,15 +461,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000002',
     idNumber: '999999198505050022',
     birthDate: '1985-05-05',
-    address: '测试市测试路 2 号',
+    address: '苏州市吴中区东吴北路 118 号 3 幢 502 室',
     education: {
-      school: '测试理工大学',
+      school: '江南理工学院',
       degree: 'master',
       major: '机械工程',
       startDate: '2007-09-01',
       endDate: '2010-06-30',
     },
-    contact: { name: '周测试', relation: '配偶', phone: '13900001002' },
+    contact: { name: '沈文静', relation: '配偶', phone: '13900001002' },
   },
   {
     employeeId: 'emp-mgr-njl',
@@ -484,15 +484,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000003',
     idNumber: '999999199208080033',
     birthDate: '1992-08-08',
-    address: '测试市测试路 3 号',
+    address: '苏州市相城区采莲路 56 号 12 幢 701 室',
     education: {
-      school: '测试职业技术学院',
+      school: '姑苏职业技术学院',
       degree: 'associate',
       major: '机械制造与自动化',
       startDate: '2010-09-01',
       endDate: '2013-06-30',
     },
-    contact: { name: '陈测试', relation: '母亲', phone: '13900001003' },
+    contact: { name: '张秀兰', relation: '母亲', phone: '13900001003' },
   },
   {
     employeeId: 'emp-mgr-cd',
@@ -507,15 +507,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000011',
     idNumber: '999999198311110110',
     birthDate: '1983-11-11',
-    address: '测试市测试路 11 号',
+    address: '成都市龙泉驿区成龙大道 1266 号 2 栋 1802 室',
     education: {
-      school: '测试理工大学',
+      school: '西蜀理工学院',
       degree: 'bachelor',
       major: '材料成型及控制工程',
       startDate: '2001-09-01',
       endDate: '2005-06-30',
     },
-    contact: { name: '何测试', relation: '配偶', phone: '13900001011' },
+    contact: { name: '罗晓燕', relation: '配偶', phone: '13900001011' },
   },
   {
     employeeId: 'emp-wanglei',
@@ -530,15 +530,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000004',
     idNumber: '999999199903030044',
     birthDate: '1999-03-03',
-    address: '测试市测试路 4 号',
+    address: '苏州市吴中区宝带西路 1255 号 8 幢 304 室',
     education: {
-      school: '测试技工学校',
+      school: '吴江技工学校',
       degree: 'other',
       major: '数控加工',
       startDate: '2015-09-01',
       endDate: '2018-01-31',
     },
-    contact: { name: '王测试', relation: '父亲', phone: '13900001004' },
+    contact: { name: '王建国', relation: '父亲', phone: '13900001004' },
   },
   {
     employeeId: 'emp-limin',
@@ -553,15 +553,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000005',
     idNumber: '999999200011110055',
     birthDate: '2000-11-11',
-    address: '测试市测试路 5 号',
+    address: '苏州市高新区竹园路 209 号 5 幢 602 室',
     education: {
-      school: '测试职业技术学院',
+      school: '姑苏职业技术学院',
       degree: 'associate',
       major: '机电一体化技术',
       startDate: '2018-09-01',
       endDate: '2021-06-30',
     },
-    contact: { name: '李测试', relation: '母亲', phone: '13900001005' },
+    contact: { name: '潘桂芳', relation: '母亲', phone: '13900001005' },
   },
   {
     employeeId: 'emp-qianjin',
@@ -576,15 +576,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000010',
     idNumber: '999999199506060100',
     birthDate: '1995-06-06',
-    address: '测试市测试路 10 号',
+    address: '苏州市吴中区尹山湖路 88 号 15 幢 1101 室',
     education: {
-      school: '测试技工学校',
+      school: '吴江技工学校',
       degree: 'other',
       major: '数控车工',
       startDate: '2011-09-01',
       endDate: '2014-06-30',
     },
-    contact: { name: '钱测试', relation: '配偶', phone: '13900001010' },
+    contact: { name: '蒋丽华', relation: '配偶', phone: '13900001010' },
   },
   {
     employeeId: 'emp-zhaoyang',
@@ -599,15 +599,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000006',
     idNumber: '999999199707070066',
     birthDate: '1997-07-07',
-    address: '测试市测试路 6 号',
+    address: '苏州市吴中区吴中大道 2588 号 9 幢 403 室',
     education: {
-      school: '测试中专',
+      school: '太仓机电中等专业学校',
       degree: 'other',
       major: '机械加工技术',
       startDate: '2012-09-01',
       endDate: '2015-06-30',
     },
-    contact: { name: '赵测试', relation: '兄弟', phone: '13900001006' },
+    contact: { name: '赵鹏', relation: '兄弟', phone: '13900001006' },
   },
   {
     employeeId: 'emp-wumin',
@@ -622,15 +622,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000009',
     idNumber: '999999199604040099',
     birthDate: '1996-04-04',
-    address: '测试市测试路 9 号',
+    address: '苏州市姑苏区南环东路 36 号 2 幢 901 室',
     education: {
-      school: '测试职业技术学院',
+      school: '姑苏职业技术学院',
       degree: 'associate',
       major: '模具设计与制造',
       startDate: '2014-09-01',
       endDate: '2017-06-30',
     },
-    contact: { name: '吴测试', relation: '配偶', phone: '13900001009' },
+    contact: { name: '唐志强', relation: '配偶', phone: '13900001009' },
   },
   {
     employeeId: 'emp-sunli',
@@ -645,15 +645,15 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
     mobile: '13900000007',
     idNumber: '999999200202020077',
     birthDate: '2002-02-02',
-    address: '测试市测试路 7 号',
+    address: '苏州市相城区春申湖路 400 号 7 幢 206 室',
     education: {
-      school: '测试职业技术学院',
+      school: '姑苏职业技术学院',
       degree: 'associate',
       major: '汽车制造与试验技术',
       startDate: '2020-09-01',
       endDate: '2023-06-30',
     },
-    contact: { name: '孙测试', relation: '父亲', phone: '13900001007' },
+    contact: { name: '孙卫东', relation: '父亲', phone: '13900001007' },
   },
 ];
 
@@ -665,7 +665,7 @@ export const DEMO_ACCOUNTS = DEMO_PEOPLE.filter((p) => p.account).map((p) => ({
 }));
 
 /**
- * 《员工导入样例.xlsx》 (V1-01 测试数据): ten rows designed to exercise the
+ * 《9月新员工花名册.xlsx》 (V1-01 测试数据): ten rows designed to exercise the
  * preview and the HR assistant's health check. Rows 9 and 10 fail the
  * preview; without them the import updates 2, creates 6 and creates the
  * position "数控操作工". Row 6 repeats 孙丽's name and mobile under a new

@@ -12,7 +12,7 @@
  * configure. The document set is small, so ranking in memory after the
  * authorized query is fast enough.
  */
-import type { RepositoryRecord } from '@nocobase/db';
+import type { DatabaseManager, RepositoryRecord } from '@nocobase/db';
 import type { NocoBaseDriveManager } from '@nocobase/drive';
 
 import { authorizeAction, policyOf, tryAuthorizeAction } from './authorize.js';
@@ -115,6 +115,12 @@ export interface KbDocumentDetail extends KbDocumentSummary {
 }
 
 export interface KnowledgePassage {
+  /** V1-04: open conflicts this section is part of — both sayings are to be shown. */
+  readonly conflicts?: readonly {
+    readonly otherDocumentTitle: string;
+    readonly otherSectionTitle: string;
+    readonly otherExcerpt: string | null;
+  }[];
   readonly documentId: string;
   readonly documentTitle: string;
   readonly sectionIndex: number;
@@ -132,7 +138,9 @@ export interface KnowledgePassage {
 export interface KnowledgeGap {
   readonly id: string;
   readonly question: string;
+  /** The asker's department only: the gap list does not name who asked (V1-04). */
   readonly askedByName: string | null;
+  readonly channel: string;
   readonly askCount: number;
   readonly askedAt: string;
   readonly lastAskedAt: string;
@@ -206,6 +214,7 @@ export interface KnowledgeService {
     ctx: ActorContext,
     question: string,
     relatedDocumentId?: string | null,
+    channel?: 'app' | 'feishu' | 'dingtalk' | 'wecom',
   ): Promise<{ id: string }>;
   listGaps(ctx: ActorContext, status?: string): Promise<KnowledgeGap[]>;
   resolveGap(
@@ -241,6 +250,7 @@ export interface KnowledgeService {
     ctx: ActorContext,
     id: string,
     status: 'resolved' | 'ignored',
+    note?: string | null,
   ): Promise<DocumentConflictView>;
   /** Records a conflict once per pair of sections; answers whether it was new. */
   recordConflict(input: {
@@ -251,6 +261,7 @@ export interface KnowledgeService {
     description: string;
     excerpt: string | null;
     otherExcerpt: string | null;
+    source?: 'ai' | 'manual';
   }): Promise<{ id: string; created: boolean }>;
   /** Daily: review dates due within 30 days, and overdue ones (at most once in 7 days per document). */
   runReviewReminders(): Promise<{ upcoming: number; overdue: number }>;
@@ -275,6 +286,17 @@ export interface DocumentConflictView {
 
 export interface KnowledgeServiceDeps {
   readonly platform: Platform;
+  /** V1-04: review notice days, overdue interval and default cycle (人事设置 · 制度复核). */
+  readonly reviewConfig?: () => Promise<{
+    reviewNoticeDays: number;
+    overdueIntervalDays: number;
+    defaultReviewMonths: number;
+  }>;
+  /** V1-04 知识范围: the documents an AI employee may search (by number or category); empty is no limit. */
+  readonly knowledgeScope?: (employee: string) => Promise<{
+    docNos: readonly string[];
+    categories: readonly string[];
+  }>;
   readonly drive: () => NocoBaseDriveManager;
   readonly departmentTitle: (id: string) => Promise<string>;
   /** The public base path, such as `/main`, for links the assistant writes. */
@@ -624,6 +646,12 @@ export function createKnowledgeService(
             ]),
           sort: (s) => [s.field('updatedAt').desc()],
         })) as Record<string, unknown>[];
+      // V4-13: AI drafts wait in the 待审核 tab and translations in 译文审核.
+      rows = rows.filter(
+        (row) =>
+          !row.translationOfId &&
+          String(row.reviewStatus ?? 'confirmed') !== 'draft',
+      );
       if (filters.competencyId) {
         const tagged = await database
           .query()
@@ -730,6 +758,38 @@ export function createKnowledgeService(
       const policies = await authorizeAction(ctx.authz, DOCUMENT, 'manage');
       const values = parseInput(input, false) as DocumentInput;
       await assertReferences(values);
+      // 版本规则: one enabled, current version per number; (docNo, version) unique.
+      if (values.docNo) {
+        const sameNo = await database
+          .query()
+          .selectFrom('kbDocuments')
+          .select(['id', 'version', 'active', 'supersededById'])
+          .where('docNo', '=', values.docNo)
+          .execute();
+        if (
+          sameNo.some(
+            (d) => values.version && str(d.version) === values.version,
+          )
+        )
+          throw new HrError('DOCUMENT_VERSION_EXISTS', 409);
+        if (sameNo.some((d) => bool(d.active) && !d.supersededById))
+          throw new HrError('DOCUMENT_NO_ACTIVE_EXISTS', 409);
+      }
+      // An HR administrator may name another owner; everyone else owns what they upload.
+      const requestedOwner =
+        isRecord(input) && typeof input.ownerUserId === 'string'
+          ? input.ownerUserId
+          : null;
+      const ownerUserId =
+        requestedOwner &&
+        requestedOwner !== ctx.userId &&
+        (await ctx.authz.can({
+          resource: { type: 'settings', id: 'talent.hr' },
+          action: 'administer',
+        })) &&
+        (await platform.userName(requestedOwner))
+          ? requestedOwner
+          : ctx.userId;
       const id = newId();
       const stamp = new Date();
       await database.transaction(async (connection) => {
@@ -746,7 +806,7 @@ export function createKnowledgeService(
               parseStatus: 'pending',
               parseError: null,
               visibility: values.visibility,
-              ownerUserId: ctx.userId,
+              ownerUserId,
               reviewDate: values.reviewDate ?? null,
               autoDraftCourse: values.autoDraftCourse ?? true,
               active: true,
@@ -818,6 +878,7 @@ export function createKnowledgeService(
         filter: { id },
         values: { active, updatedAt: new Date() },
       });
+      if (!active) await closeConflictsOf(database.query(), id, '文档已停用');
       const [summary] = await toSummaries(ctx, [(await loadRow(id))!]);
       return summary;
     },
@@ -897,6 +958,12 @@ export function createKnowledgeService(
               .set({ supersededById: id, updatedAt: stamp })
               .where('id', '=', previousId)
               .execute();
+            // The old version leaves conflict checking too: its open conflicts close.
+            await closeConflictsOf(
+              connection.query,
+              previousId,
+              '文档已被新版本取代',
+            );
           });
         } else {
           await finish({
@@ -986,7 +1053,22 @@ export function createKnowledgeService(
           filter: { active: true, parseStatus: 'ready' },
         })) as Record<string, unknown>[];
       // A superseded version no longer answers: only the current version of a document is cited.
-      const current = rows.filter((row) => !row.supersededById);
+      // 知识范围 (设置 / AI 入口) narrows further; it never widens what the user may read.
+      const scope = (await deps.knowledgeScope?.('knowledgeAssistant')) ?? {
+        docNos: [],
+        categories: [],
+      };
+      const current = rows.filter(
+        (row) =>
+          !row.supersededById &&
+          // V4-13: a draft (an AI-drafted FAQ not yet confirmed) never answers; translations are not searched.
+          String(row.reviewStatus ?? 'confirmed') !== 'draft' &&
+          !row.translationOfId &&
+          (!scope.docNos.length ||
+            scope.docNos.includes(str(row.docNo ?? ''))) &&
+          (!scope.categories.length ||
+            scope.categories.includes(str(row.category))),
+      );
       const passages = current.flatMap((row) =>
         splitSections(row.contentText as string | null).map((section) => ({
           item: {
@@ -998,24 +1080,79 @@ export function createKnowledgeService(
           text: section.text,
         })),
       );
-      return rankPassages(text, passages, Math.min(Math.max(limit, 1), 8)).map(
-        ({ item, excerpt, score }) => {
-          const sectionTitle = item.section.title || item.documentTitle;
-          return {
-            documentId: item.documentId,
-            documentTitle: item.documentTitle,
-            sectionIndex: item.section.index,
-            sectionTitle,
-            excerpt,
-            path: `/talent/knowledge/${item.documentId}?section=${item.section.index}`,
-            href: withBase(
-              `/talent/knowledge/${item.documentId}?section=${item.section.index}`,
-            ),
-            citation: `《${item.documentTitle}》· ${sectionTitle}`,
-            score: Math.round(score * 100) / 100,
-          };
-        },
+      const ranked = rankPassages(
+        text,
+        passages,
+        Math.min(Math.max(limit, 1), 8),
       );
+      // Open conflicts on the returned sections, with the other side only when the user may read it.
+      const openConflicts = ranked.length
+        ? await database
+            .query()
+            .selectFrom('documentConflicts')
+            .selectAll()
+            .where('status', '=', 'open')
+            .execute()
+        : [];
+      const readable = new Map(
+        current.map((row) => [str(row.id), str(row.title)]),
+      );
+      const conflictsFor = (documentId: string, sectionTitle: string) =>
+        openConflicts
+          .map((c) =>
+            str(c.documentId) === documentId &&
+            str(c.sectionTitle) === sectionTitle
+              ? {
+                  other: str(c.otherDocumentId),
+                  otherSection: str(c.otherSectionTitle),
+                  excerpt: c.otherExcerpt,
+                }
+              : str(c.otherDocumentId) === documentId &&
+                  str(c.otherSectionTitle) === sectionTitle
+                ? {
+                    other: str(c.documentId),
+                    otherSection: str(c.sectionTitle),
+                    excerpt: c.excerpt,
+                  }
+                : null,
+          )
+          .filter(
+            (c): c is NonNullable<typeof c> =>
+              Boolean(c) && readable.has(c!.other),
+          )
+          .map((c) => ({
+            otherDocumentTitle: readable.get(c.other)!,
+            otherSectionTitle: c.otherSection,
+            otherExcerpt: c.excerpt == null ? null : str(c.excerpt),
+          }));
+      // V4-13: an uncontrolled document (an AI-drafted FAQ) is cited with a notice.
+      const uncontrolled = new Set(
+        current
+          .filter((row) => row.controlled === false || row.controlled === 0)
+          .map((row) => String(row.id)),
+      );
+      return ranked.map(({ item, excerpt, score }) => {
+        const sectionTitle = item.section.title || item.documentTitle;
+        const conflicts = conflictsFor(item.documentId, item.section.title);
+        const notice = uncontrolled.has(item.documentId)
+          ? '非受控文件，仅供参考'
+          : null;
+        return {
+          ...(conflicts.length ? { conflicts } : {}),
+          ...(notice ? { uncontrolled: true, notice } : {}),
+          documentId: item.documentId,
+          documentTitle: item.documentTitle,
+          sectionIndex: item.section.index,
+          sectionTitle,
+          excerpt,
+          path: `/talent/knowledge/${item.documentId}?section=${item.section.index}`,
+          href: withBase(
+            `/talent/knowledge/${item.documentId}?section=${item.section.index}`,
+          ),
+          citation: `《${item.documentTitle}》· ${sectionTitle}${notice ? `（${notice}）` : ''}`,
+          score: Math.round(score * 100) / 100,
+        };
+      });
     },
 
     async readDocument(ctx, id) {
@@ -1037,7 +1174,7 @@ export function createKnowledgeService(
       };
     },
 
-    async recordGap(ctx, question, relatedDocumentId) {
+    async recordGap(ctx, question, relatedDocumentId, channel = 'app') {
       const policies = await authorizeAction(ctx.authz, ASSISTANT, 'use');
       const text = question.trim().slice(0, 1000);
       if (!text) throw new HrError('INVALID_INPUT', 400);
@@ -1061,6 +1198,7 @@ export function createKnowledgeService(
             askCount: 1,
             lastAskedAt: stamp,
             relatedDocumentId: related,
+            channel,
             topic: null,
             reportedAt: null,
             status: 'open',
@@ -1234,6 +1372,7 @@ export function createKnowledgeService(
       if (!current) throw new HrError('DOCUMENT_NOT_FOUND', 404);
       if (current.supersededById) throw new HrError('DOCUMENT_SUPERSEDED', 409);
       const today = platform.currentDate();
+      const months = (await deps.reviewConfig?.())?.defaultReviewMonths ?? 12;
       const next =
         optionalDate(
           isRecord(input) ? input.nextReviewDate : undefined,
@@ -1241,7 +1380,7 @@ export function createKnowledgeService(
         ) ??
         (() => {
           const date = new Date(`${today}T00:00:00Z`);
-          date.setUTCMonth(date.getUTCMonth() + 12);
+          date.setUTCMonth(date.getUTCMonth() + months);
           return date.toISOString().slice(0, 10);
         })();
       if (next <= today) throw new HrError('INVALID_INPUT', 400);
@@ -1280,7 +1419,7 @@ export function createKnowledgeService(
         .repository('documentConflicts')
         .withPolicy(policyOf(policies, 'documentConflicts'))
         .findMany({
-          filter: status === 'all' ? {} : { status },
+          ...(status === 'all' ? {} : { filter: { status } }),
           sort: (s) => [s.field('createdAt').desc()],
         })) as Record<string, unknown>[];
       const result: DocumentConflictView[] = [];
@@ -1288,7 +1427,9 @@ export function createKnowledgeService(
       return result;
     },
 
-    async handleConflict(ctx, id, status) {
+    async handleConflict(ctx, id, status, note = null) {
+      if (status === 'ignored' && !note?.trim())
+        throw new HrError('CONFLICT_NOTE_REQUIRED', 400);
       const policies = await authorizeAction(
         ctx.authz,
         CONFLICT,
@@ -1305,6 +1446,7 @@ export function createKnowledgeService(
           status,
           handledBy: ctx.userId,
           handledAt: new Date(),
+          resolutionNote: note?.trim().slice(0, 1000) || null,
           updatedAt: new Date(),
         },
       });
@@ -1330,9 +1472,11 @@ export function createKnowledgeService(
         .values({
           id,
           ...input,
+          source: input.source ?? 'ai',
           status: 'open',
           handledBy: null,
           handledAt: null,
+          resolutionNote: null,
           createdAt: stamp,
           updatedAt: stamp,
         })
@@ -1342,9 +1486,14 @@ export function createKnowledgeService(
 
     async runReviewReminders() {
       const report = { upcoming: 0, overdue: 0 };
+      const config = (await deps.reviewConfig?.()) ?? {
+        reviewNoticeDays: REVIEW_NOTICE_DAYS,
+        overdueIntervalDays: REVIEW_REMINDER_INTERVAL_MS / 86_400_000,
+        defaultReviewMonths: 12,
+      };
       const today = platform.currentDate();
       const soon = new Date(`${today}T00:00:00Z`);
-      soon.setUTCDate(soon.getUTCDate() + REVIEW_NOTICE_DAYS);
+      soon.setUTCDate(soon.getUTCDate() + config.reviewNoticeDays);
       const rows = await database
         .query()
         .selectFrom('kbDocuments')
@@ -1371,7 +1520,7 @@ export function createKnowledgeService(
           .where(
             'sentAt',
             '>',
-            new Date(Date.now() - REVIEW_REMINDER_INTERVAL_MS),
+            new Date(Date.now() - config.overdueIntervalDays * 86_400_000),
           )
           .executeTakeFirst();
         if (recent) continue;
@@ -1405,6 +1554,34 @@ export function createKnowledgeService(
       );
     },
   };
+
+  async function askerDepartment(userId: string): Promise<string | null> {
+    const employee = await platform.employeeOfUser(userId);
+    if (!employee) return null;
+    return deps.departmentTitle(employee.departmentId);
+  }
+
+  /** A superseded or deactivated document takes its open conflicts with it; the system is the handler. */
+  async function closeConflictsOf(
+    query: ReturnType<DatabaseManager['query']>,
+    documentId: string,
+    note: string,
+  ): Promise<void> {
+    const stamp = new Date();
+    for (const column of ['documentId', 'otherDocumentId'] as const)
+      await query
+        .updateTable('documentConflicts')
+        .set({
+          status: 'resolved',
+          handledBy: 'system',
+          handledAt: stamp,
+          resolutionNote: note,
+          updatedAt: stamp,
+        })
+        .where(column, '=', documentId)
+        .where('status', '=', 'open')
+        .execute();
+  }
 
   /** Whether the caller holds a document action and the document is in its scope. */
   async function ownedOrScoped(
@@ -1469,7 +1646,8 @@ export function createKnowledgeService(
     return {
       id: String(row.id),
       question: String(row.question),
-      askedByName: await platform.userName(String(row.askedByUserId)),
+      askedByName: await askerDepartment(str(row.askedByUserId)),
+      channel: row.channel == null ? 'app' : str(row.channel),
       askCount: Number(row.askCount),
       askedAt: iso(row.askedAt ?? row.createdAt),
       lastAskedAt: iso(row.lastAskedAt),

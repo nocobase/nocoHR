@@ -1,11 +1,22 @@
 import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { useMemo, useRef, useState, type ReactElement } from 'react';
-import { useNavigate, useOutletContext } from 'react-router';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router';
 
 import { RouteDialog } from '@/components/route-dialog';
 import { CategoryBadge } from '@/components/talent/badges';
-import { errorMessage } from '@/components/talent/errors';
+import { CustomFieldInputs } from '@/components/talent/custom-fields';
+import {
+  compactValues,
+  customFieldErrors,
+  useCustomFieldDefinitions,
+  type CustomValues,
+} from '@/components/talent/custom-field-model';
+import {
+  errorCode,
+  errorDetails,
+  errorMessage,
+} from '@/components/talent/errors';
 import type { EmployeeListItem } from '@/components/talent/types';
 import { useLookups } from '@/components/talent/use-lookups';
 import { useRemote } from '@/components/talent/use-remote';
@@ -29,9 +40,28 @@ import { toast } from '@/components/ui/toast';
 import { useRouteOverlay } from '@/components/use-route-overlay';
 
 import { EMPLOYMENT_TYPES, LEAVE_REASONS } from '../employees/types.js';
+import { ActionChainPreview } from './chain-preview.js';
 import { ACTION_TYPES, type ActionsOutletContext } from './types.js';
 
 const FORM_ID = 'action-new-form';
+
+/** What `talent/org-sync/issues/prefill` answers with (V1-03). */
+interface IssuePrefill {
+  readonly issueKey: string;
+  readonly actionType: string;
+  readonly effectiveDate?: string;
+  readonly employeeId?: string | null;
+  readonly name?: string;
+  readonly employeeNo?: string;
+  readonly email?: string;
+  readonly mobile?: string;
+  readonly toDepartmentId?: string | null;
+  readonly toPositionId?: string | null;
+  readonly createAccount?: boolean;
+  readonly externalProvider?: string | null;
+  readonly externalUserId?: string | null;
+  readonly leaveReason?: string | null;
+}
 
 interface FrameworkLite {
   requirements: {
@@ -81,15 +111,132 @@ function ActionForm({
     'talent/employees',
   );
   const framework = useRemote<FrameworkLite>('talent/framework');
-  const [draft, setDraft] = useState<Record<string, string>>({
-    actionType: 'transfer',
+  // Links from the HR assistant's probation preparation pre-fill the form: ?type=regularize&employeeId=…
+  const [params, setParams] = useSearchParams();
+  const [prefill] = useState(() => {
+    const presetType = params.get('type');
+    return {
+      actionType:
+        presetType && (ACTION_TYPES as readonly string[]).includes(presetType)
+          ? presetType
+          : null,
+      employeeId: params.get('employeeId'),
+      // V3-10 任职资格材料 links a promotion with its target: &toPositionId=…(&toDepartmentId=…).
+      toPositionId: params.get('toPositionId'),
+      toDepartmentId: params.get('toDepartmentId'),
+      // V1-03: a pending item of 组织同步 raises this action, pre-filled from the office suite.
+      fromIssue: params.get('fromIssue'),
+    };
+  });
+  useEffect(() => {
+    // Read once, then drop them, so a refresh or a later visit starts clean.
+    if (
+      params.has('type') ||
+      params.has('employeeId') ||
+      params.has('toPositionId') ||
+      params.has('toDepartmentId') ||
+      params.has('fromIssue')
+    )
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete('type');
+          next.delete('employeeId');
+          next.delete('toPositionId');
+          next.delete('toDepartmentId');
+          next.delete('fromIssue');
+          return next;
+        },
+        { replace: true },
+      );
+  }, [params, setParams]);
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({
+    actionType: prefill.actionType ?? 'transfer',
     effectiveDate: new Date().toISOString().slice(0, 10),
     employmentType: 'fullTime',
     probationMonths: '3',
     leaveReason: 'resign',
-  });
+    ...(prefill.employeeId ? { employeeId: prefill.employeeId } : {}),
+    ...(prefill.toPositionId ? { toPositionId: prefill.toPositionId } : {}),
+    ...(prefill.toDepartmentId
+      ? { toDepartmentId: prefill.toDepartmentId }
+      : {}),
+  }));
+  const [positionError, setPositionError] = useState<string>();
+  const [leaveReasonError, setLeaveReasonError] = useState<string>();
   const [createAccount, setCreateAccount] = useState(false);
+  // 界面追加字段 placed on the onboarding form (工服尺码, 宿舍号…).
+  const { definitions: onboardFields } = useCustomFieldDefinitions(
+    'employees',
+    'onboardForm',
+  );
+  const [custom, setCustom] = useState<CustomValues>({});
+  const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
+  const [sync, setSync] = useState<{
+    issueKey: string;
+    externalUserId?: string;
+    externalProvider?: string;
+  } | null>(null);
+  const [prefilling, setPrefilling] = useState(Boolean(prefill.fromIssue));
+  useEffect(() => {
+    const key = prefill.fromIssue;
+    if (!key) return;
+    let cancelled = false;
+    api
+      .request<{ data: IssuePrefill }>({
+        path: 'talent/org-sync/issues/prefill',
+        method: 'POST',
+        json: { key },
+      })
+      .then(({ data }) => {
+        if (cancelled) return;
+        // 调岗 or 晋升: the page's other button overrides the suggestion.
+        const actionType =
+          prefill.actionType &&
+          (prefill.actionType === 'transfer' ||
+            prefill.actionType === 'promote') &&
+          (data.actionType === 'transfer' || data.actionType === 'promote')
+            ? prefill.actionType
+            : data.actionType;
+        const fields: Record<string, string> = { actionType };
+        for (const name of [
+          'effectiveDate',
+          'employeeId',
+          'name',
+          'employeeNo',
+          'email',
+          'mobile',
+          'toDepartmentId',
+          'toPositionId',
+        ] as const) {
+          const value = data[name];
+          if (typeof value === 'string') fields[name] = value;
+        }
+        if (data.actionType === 'offboard')
+          fields.leaveReason = data.leaveReason ?? '';
+        setDraft((d) => ({ ...d, ...fields }));
+        if (data.createAccount) setCreateAccount(true);
+        setSync({
+          issueKey: data.issueKey,
+          ...(data.actionType === 'onboard'
+            ? {
+                externalUserId: data.externalUserId ?? undefined,
+                externalProvider: data.externalProvider ?? undefined,
+              }
+            : {}),
+        });
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setError(errorMessage(cause, t));
+      })
+      .finally(() => {
+        if (!cancelled) setPrefilling(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, prefill.fromIssue, prefill.actionType, t]);
   const set = (key: string, value: string) =>
     setDraft((d) => ({ ...d, [key]: value }));
   const type = draft.actionType;
@@ -99,6 +246,26 @@ function ActionForm({
       e.status !== 'leave' &&
       (type !== 'regularize' || e.status === 'probation'),
   );
+  // A pre-filled employee who has left, finished probation or is out of scope.
+  const stalePrefill =
+    Boolean(prefill.employeeId) &&
+    draft.employeeId === prefill.employeeId &&
+    Boolean(employees.data) &&
+    !candidates.some((e) => e.id === prefill.employeeId);
+  const previewRequest: Record<string, unknown> | null =
+    type === 'onboard'
+      ? draft.toDepartmentId
+        ? { actionType: type, departmentId: draft.toDepartmentId }
+        : null
+      : draft.employeeId && !stalePrefill
+        ? {
+            actionType: type,
+            employeeId: draft.employeeId,
+            ...(draft.toDepartmentId
+              ? { toDepartmentId: draft.toDepartmentId }
+              : {}),
+          }
+        : null;
 
   // For a transfer or promotion, show the target position's mandatory requirements against the employee's current levels.
   const targetGap = useRemote<{
@@ -136,11 +303,24 @@ function ActionForm({
   }, [framework.data, draft.toPositionId, targetGap.data]);
 
   async function submit(): Promise<void> {
+    if (type === 'offboard' && !draft.leaveReason) {
+      setLeaveReasonError(t('talent.actions.leaveReasonRequired'));
+      document.getElementById('action-leave')?.focus();
+      return;
+    }
     const json: Record<string, unknown> = {
       actionType: type,
       effectiveDate: draft.effectiveDate,
       reason: draft.reason?.trim() || null,
     };
+    if (sync) {
+      json.syncIssueKey = sync.issueKey;
+      if (type === 'onboard' && sync.externalUserId)
+        Object.assign(json, {
+          externalUserId: sync.externalUserId,
+          externalProvider: sync.externalProvider,
+        });
+    }
     if (type === 'onboard') {
       Object.assign(json, {
         name: draft.name,
@@ -152,6 +332,9 @@ function ActionForm({
         employmentType: draft.employmentType,
         probationMonths: Number(draft.probationMonths || 0),
         createAccount,
+        ...(onboardFields.length
+          ? { customFields: compactValues(custom) }
+          : {}),
       });
     } else {
       Object.assign(json, { employeeId: draft.employeeId });
@@ -165,6 +348,7 @@ function ActionForm({
     }
     onSubmittingChange(true);
     setError(undefined);
+    setPositionError(undefined);
     try {
       const { data } = await api.request<{ data: { id: string } }>({
         path: 'talent/actions',
@@ -176,7 +360,13 @@ function ActionForm({
       reload();
       void navigate(`../${data.id}`, { replace: true });
     } catch (cause) {
-      setError(errorMessage(cause, t));
+      // A promotion to a position that is not higher in the family: shown under the target position.
+      if (errorCode(cause) === 'ACTION_PROMOTE_NOT_HIGHER')
+        setPositionError(errorMessage(cause, t));
+      else if (errorCode(cause) === 'CUSTOM_FIELD_INVALID') {
+        setCustomErrors(customFieldErrors(errorDetails(cause)));
+        setError(errorMessage(cause, t));
+      } else setError(errorMessage(cause, t));
       onSubmittingChange(false);
     }
   }
@@ -206,14 +396,18 @@ function ActionForm({
     </Field>
   );
   const positionSelect = (
-    <Field>
+    <Field data-invalid={Boolean(positionError)}>
       <FieldLabel htmlFor='action-position'>
         {t('talent.actions.targetPosition')}
       </FieldLabel>
       <NativeSelect
         id='action-position'
         value={draft.toPositionId ?? ''}
-        onChange={(e) => set('toPositionId', e.target.value)}
+        aria-invalid={Boolean(positionError)}
+        onChange={(e) => {
+          setPositionError(undefined);
+          set('toPositionId', e.target.value);
+        }}
       >
         <NativeSelectOption value=''>
           {t('talent.common.choose')}
@@ -226,6 +420,7 @@ function ActionForm({
             </NativeSelectOption>
           ))}
       </NativeSelect>
+      {positionError ? <FieldError>{positionError}</FieldError> : null}
     </Field>
   );
 
@@ -235,10 +430,23 @@ function ActionForm({
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        if (!prefilling) void submit();
       }}
     >
       <FieldGroup>
+        {prefill.fromIssue ? (
+          <p
+            className='flex items-center gap-2 text-sm text-muted-foreground'
+            role='status'
+          >
+            {prefilling ? <Spinner /> : null}
+            {t(
+              prefilling
+                ? 'talent.actions.prefillingFromSync'
+                : 'talent.actions.prefilledFromSync',
+            )}
+          </p>
+        ) : null}
         <div className='grid gap-4 sm:grid-cols-2'>
           <Field>
             <FieldLabel htmlFor='action-type'>
@@ -379,6 +587,20 @@ function ActionForm({
                 {t('talent.actions.createAccountHint')}
               </FieldDescription>
             ) : null}
+            {onboardFields.length ? (
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <CustomFieldInputs
+                  definitions={onboardFields}
+                  values={custom}
+                  onChange={(next) => {
+                    setCustom(next);
+                    setCustomErrors({});
+                  }}
+                  errors={customErrors}
+                  idPrefix='action-cf'
+                />
+              </div>
+            ) : null}
           </>
         ) : (
           <Field>
@@ -402,6 +624,9 @@ function ActionForm({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
+            {stalePrefill ? (
+              <FieldError>{t('talent.actions.prefillStale')}</FieldError>
+            ) : null}
           </Field>
         )}
 
@@ -458,21 +683,33 @@ function ActionForm({
         ) : null}
 
         {type === 'offboard' ? (
-          <Field>
+          <Field data-invalid={Boolean(leaveReasonError)}>
             <FieldLabel htmlFor='action-leave'>
-              {t('talent.fields.leaveReason')}
+              {t('talent.fields.leaveReason')} *
             </FieldLabel>
             <NativeSelect
               id='action-leave'
               value={draft.leaveReason}
-              onChange={(e) => set('leaveReason', e.target.value)}
+              aria-invalid={Boolean(leaveReasonError)}
+              onChange={(e) => {
+                setLeaveReasonError(undefined);
+                set('leaveReason', e.target.value);
+              }}
             >
+              {draft.leaveReason ? null : (
+                <NativeSelectOption value=''>
+                  {t('talent.common.choose')}
+                </NativeSelectOption>
+              )}
               {LEAVE_REASONS.map((r) => (
                 <NativeSelectOption key={r} value={r}>
                   {t(`talent.leaveReason.${r}`)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
+            {leaveReasonError ? (
+              <FieldError>{leaveReasonError}</FieldError>
+            ) : null}
           </Field>
         ) : null}
 
@@ -490,6 +727,10 @@ function ActionForm({
             onChange={(e) => set('reason', e.target.value)}
           />
         </Field>
+        <ActionChainPreview
+          request={previewRequest}
+          departmentTitle={lookups.departmentTitle}
+        />
         {error ? <FieldError>{error}</FieldError> : null}
       </FieldGroup>
     </form>

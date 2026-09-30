@@ -35,6 +35,8 @@ import { Markdown } from '@/components/talent/markdown';
 import { MultiCheckList } from '@/components/talent/multi-check';
 import { BlockSkeleton, LoadError } from '@/components/talent/states';
 import { useRemote } from '@/components/talent/use-remote';
+// V4-13
+import { TranslateButton } from '@/components/talent/talent-review-translate-button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -316,6 +318,9 @@ function Editor({
   }
 
   const actions: ReactNode[] = [];
+  // V4-13 生成英文版 (the server checks the owner or hr.admin).
+  if (course && canWrite.can)
+    actions.push(<TranslateButton key='translate' type='course' id={course.id} />);
   if (course && canWrite.can && canDraftQuestions.can) {
     actions.push(
       <AssistantLauncher

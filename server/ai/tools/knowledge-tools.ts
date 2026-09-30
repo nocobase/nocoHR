@@ -6,6 +6,7 @@ import {
 import { z } from 'zod';
 
 import { scopeForUser } from '../../providers/hr/authorize.js';
+import { currentChannel } from '../../providers/hr/channel-context.js';
 import { HrError } from '../../providers/hr/shared.js';
 import {
   knowledgeServiceToken,
@@ -113,6 +114,8 @@ export const recordKnowledgeGap = defineTools({
           await actorContext(ctx.deps, ctx.actor),
           args.question,
           args.relatedDocumentId ?? null,
+          // The bot adapter marks its turns; the server records the channel, never the model.
+          currentChannel(),
         ),
       };
     } catch (error) {

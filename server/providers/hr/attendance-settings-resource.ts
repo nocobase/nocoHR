@@ -39,6 +39,7 @@ export const RULE_FIELDS = [
   'monthlyOvertimeAlertHours',
   'minRestHours',
   'maxConsecutiveNights',
+  'exceptionExcusable',
   'active',
 ];
 const catalog = (name: string, editable: string[]) =>

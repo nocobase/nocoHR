@@ -1,5 +1,6 @@
 import { useTranslation } from '@nocobase/i18n/client';
 import { DataTable } from '@/components/data-table';
+import { useAppTimeZone } from '@/components/talent/attendance/app-time';
 import { LeaveProofButton } from '@/components/talent/leave-proof-button';
 import { Link } from 'react-router';
 
@@ -17,9 +18,11 @@ export interface MyLeaveRequestsContext {
 
 export function MyLeaveRequests({ rows }: { rows: OwnLeaveRequest[] }) {
   const { t, i18n } = useTranslation();
+  const zone = useAppTimeZone();
   const format = new Intl.DateTimeFormat(i18n.language, {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: zone,
   });
   return (
     <div className='grid gap-3'>

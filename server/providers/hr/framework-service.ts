@@ -44,6 +44,12 @@ export interface Position {
   aiDraftedAt: string | null;
   /** The employee import that created this position; null when created by hand. */
   importBatchId: string | null;
+  /** V3-08 岗位说明书: the uploaded file (an `hrFiles` row), its name, extracted text and extraction state. */
+  jdFileId: string | null;
+  jdFilename: string | null;
+  jdText: string | null;
+  jdStatus: 'pending' | 'ready' | 'failed' | null;
+  jdError: string | null;
   active: boolean;
   sortOrder: number;
 }
@@ -149,11 +155,12 @@ export interface FrameworkService {
   ): Promise<Competency & { levels: CompetencyLevel[] }>;
   confirmCompetencies(ctx: ActorContext, ids: readonly string[]): Promise<void>;
   discardCompetencies(ctx: ActorContext, ids: readonly string[]): Promise<void>;
+  /** Deactivating keeps history; `confirmedRequirements` is how many confirmed requirements still reference it. */
   setCompetencyActive(
     ctx: ActorContext,
     id: string,
     active: boolean,
-  ): Promise<Competency>;
+  ): Promise<Competency & { confirmedRequirements: number }>;
   /** Advisor tools: read a position and its confirmed and draft requirements. */
   positionContext(
     ctx: ActorContext,
@@ -174,6 +181,23 @@ export interface FrameworkService {
 
 function bool(value: unknown): boolean {
   return value === true || value === 1 || value === '1';
+}
+
+/**
+ * V3-08: told after a confirmation commits which positions went from "no
+ * confirmed requirement" to "some" (岗位要求首次整体确认), so the competency
+ * service can raise assessment to-dos. Registered at boot, released on
+ * shutdown; a listener failure never fails the confirmation.
+ */
+export type FirstConfirmationListener = (
+  positionIds: readonly string[],
+) => Promise<void> | void;
+const firstConfirmationListeners = new Set<FirstConfirmationListener>();
+export function onRequirementsFirstConfirmed(
+  listener: FirstConfirmationListener,
+): () => void {
+  firstConfirmationListeners.add(listener);
+  return () => firstConfirmationListeners.delete(listener);
 }
 
 export function toJobFamily(row: Record<string, unknown>): JobFamily {
@@ -202,6 +226,12 @@ export function toPosition(row: Record<string, unknown>): Position {
           ? row.aiDraftedAt.toISOString()
           : str(row.aiDraftedAt),
     importBatchId: row.importBatchId == null ? null : str(row.importBatchId),
+    jdFileId: row.jdFileId == null ? null : str(row.jdFileId),
+    jdFilename: row.jdFilename == null ? null : str(row.jdFilename),
+    jdText: row.jdText == null ? null : str(row.jdText),
+    jdStatus:
+      row.jdStatus == null ? null : (str(row.jdStatus) as Position['jdStatus']),
+    jdError: row.jdError == null ? null : str(row.jdError),
     active: bool(row.active),
     sortOrder: Number(row.sortOrder ?? 0),
   };
@@ -635,6 +665,32 @@ export function createFrameworkService(
         'confirm',
       );
       if (!ids.length) return { confirmedCompetencies: [] };
+      // Positions without any confirmed requirement before this confirmation.
+      const touched = [
+        ...new Set(
+          (
+            await database
+              .query()
+              .selectFrom('positionRequirements')
+              .select(['positionId'])
+              .where('id', 'in', [...ids])
+              .execute()
+          ).map((row) => String(row.positionId)),
+        ),
+      ];
+      const alreadyConfirmed = new Set(
+        touched.length
+          ? (
+              await database
+                .query()
+                .selectFrom('positionRequirements')
+                .select(['positionId'])
+                .where('positionId', 'in', touched)
+                .where('reviewStatus', '=', 'confirmed')
+                .execute()
+            ).map((row) => String(row.positionId))
+          : [],
+      );
       const result = await database.transaction(async (connection) => {
         const rows = await connection.query
           .selectFrom('positionRequirements')
@@ -689,6 +745,15 @@ export function createFrameworkService(
           'confirmed',
           ctx.userId,
         );
+      const first = touched.filter((id) => !alreadyConfirmed.has(id));
+      if (first.length)
+        for (const listener of firstConfirmationListeners) {
+          try {
+            await listener(first);
+          } catch {
+            // To-dos are a follow-up; the confirmation has committed.
+          }
+        }
       return result;
     },
 
@@ -958,6 +1023,21 @@ export function createFrameworkService(
     async discardCompetencies(ctx, ids) {
       const policies = await authorizeAction(ctx.authz, COMPETENCY, 'confirm');
       if (!ids.length) return;
+      // A confirmed requirement referencing a draft (added by hand) keeps it: discarding is refused.
+      const inUse = await database
+        .query()
+        .selectFrom('positionRequirements')
+        .select(['id', 'positionId', 'competencyId'])
+        .where('competencyId', 'in', [...ids])
+        .where('reviewStatus', '=', 'confirmed')
+        .execute();
+      if (inUse.length)
+        throw new HrError('COMPETENCY_IN_USE', 409, {
+          requirements: inUse.map((r) => ({
+            positionId: String(r.positionId),
+            competencyId: String(r.competencyId),
+          })),
+        });
       // A discarded competency takes its draft requirements with it.
       const requirements = await database
         .query()
@@ -1030,7 +1110,18 @@ export function createFrameworkService(
           filter: { id },
           values: { active, updatedAt: new Date() },
         });
-      return toCompetency(record);
+      // Deactivating is allowed while confirmed requirements still reference it; the page shows how many.
+      const confirmed = await database
+        .query()
+        .selectFrom('positionRequirements')
+        .select(['id'])
+        .where('competencyId', '=', id)
+        .where('reviewStatus', '=', 'confirmed')
+        .execute();
+      return {
+        ...toCompetency(record),
+        confirmedRequirements: confirmed.length,
+      };
     },
 
     async positionContext(ctx, positionId) {

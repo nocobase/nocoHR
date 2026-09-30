@@ -2,14 +2,18 @@ import { useApiClient } from '@nocobase/app-client';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useLocale, useTranslation } from '@nocobase/i18n/client';
 import {
+  CalendarCheckIcon,
   DownloadIcon,
   PencilIcon,
   PowerIcon,
   SparklesIcon,
+  TriangleAlertIcon,
+  UploadIcon,
 } from 'lucide-react';
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   Link,
+  Outlet,
   useOutletContext,
   useParams,
   useSearchParams,
@@ -33,13 +37,18 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/ui/toast';
 
 import { DocumentDialog } from './document-dialog.js';
-import type { KnowledgeOutletContext } from './types.js';
+import { ChangesCard, MarkReviewedDialog, VersionsCard } from './versions.js';
+// V3-11
+import { DocumentRevisionPanel } from '@/components/talent/profile/document-revision-panel';
+import { ReviewDate } from './review-date.js';
+import type { DocumentOutletContext, KnowledgeOutletContext } from './types.js';
 
 /** Route `/talent/knowledge/:documentId`: metadata, the extracted text by section, the original file. */
 export default function DocumentDetailPage(): ReactElement {
@@ -94,6 +103,22 @@ function DocumentBody({
       : document.sections.slice(0, 1).map((s) => `section-${s.index}`),
   );
   const [editOpen, setEditOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const superseded = Boolean(document.supersededById);
+  const canUploadVersion =
+    Boolean(document.can?.uploadVersion) && !superseded && document.active;
+  const canMarkReviewed = Boolean(document.can?.markReviewed) && !superseded;
+  const reloadList = outlet?.reload;
+  const childContext = useMemo<DocumentOutletContext>(
+    () => ({
+      document,
+      reload: () => {
+        onChanged();
+        reloadList?.();
+      },
+    }),
+    [document, onChanged, reloadList],
+  );
 
   // A citation opens the document at its section: expand it, then bring it into view.
   const [expandedFor, setExpandedFor] = useState(requested);
@@ -135,6 +160,16 @@ function DocumentBody({
   }
 
   const meta: [string, React.ReactNode][] = [
+    [t('knowledgeService.fields.docNo'), document.docNo ?? '—'],
+    [t('knowledgeService.fields.version'), document.version ?? '—'],
+    [
+      t('knowledgeService.fields.effectiveDate'),
+      document.effectiveDate
+        ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
+            new Date(`${document.effectiveDate}T00:00:00`),
+          )
+        : '—',
+    ],
     [
       t('talent.knowledge.fields.category'),
       t(`talent.docCategory.${document.category}`),
@@ -150,9 +185,13 @@ function DocumentBody({
     ],
     [
       t('talent.knowledge.fields.reviewDate'),
-      document.reviewDate
+      <ReviewDate key='review' date={document.reviewDate} />,
+    ],
+    [
+      t('knowledgeService.fields.lastReviewedAt'),
+      document.lastReviewedAt
         ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
-            new Date(`${document.reviewDate}T00:00:00`),
+            new Date(document.lastReviewedAt),
           )
         : '—',
     ],
@@ -240,6 +279,22 @@ function DocumentBody({
                 })}
               />
             ) : null}
+            {canMarkReviewed ? (
+              <Button variant='outline' onClick={() => setReviewOpen(true)}>
+                <CalendarCheckIcon data-icon='inline-start' />
+                {t('knowledgeService.review.mark')}
+              </Button>
+            ) : null}
+            {canUploadVersion ? (
+              <Button
+                variant='outline'
+                nativeButton={false}
+                render={<Link to='versions/new' />}
+              >
+                <UploadIcon data-icon='inline-start' />
+                {t('knowledgeService.version.upload')}
+              </Button>
+            ) : null}
             {document.canManage ? (
               <>
                 <Button variant='outline' onClick={() => void toggleActive()}>
@@ -257,6 +312,25 @@ function DocumentBody({
           </>
         }
       />
+      {superseded ? (
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>
+            {t('knowledgeService.version.supersededBy', {
+              version: document.supersededByVersion ?? '',
+            })}
+          </AlertTitle>
+          <AlertDescription>
+            <span>{t('knowledgeService.version.supersededHint')}</span>
+            <Link
+              to={`/talent/knowledge/${encodeURIComponent(document.supersededById ?? '')}`}
+              className='text-primary underline-offset-4 hover:underline'
+            >
+              {t('knowledgeService.version.openCurrent')}
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className='grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]'>
         <div className='space-y-4 self-start'>
           <Card>
@@ -274,6 +348,7 @@ function DocumentBody({
               </dl>
             </CardContent>
           </Card>
+          <VersionsCard document={document} />
           {document.canManage ? (
             <Card>
               <CardHeader>
@@ -322,51 +397,66 @@ function DocumentBody({
             </Card>
           ) : null}
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('talent.knowledge.content')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {document.parseStatus === 'failed' ? (
-              <p className='text-sm text-destructive'>
-                {t('talent.knowledge.parseFailed', {
-                  reason: document.parseError ?? '',
-                })}
-              </p>
-            ) : document.parseStatus === 'pending' ? (
-              <p className='text-sm text-muted-foreground'>
-                {t('talent.knowledge.parsing')}
-              </p>
-            ) : !document.sections.length ? (
-              <p className='text-sm text-muted-foreground'>
-                {t('talent.knowledge.noContent')}
-              </p>
-            ) : (
-              <Accordion
-                multiple
-                value={open}
-                onValueChange={(value) => setOpen(value as string[])}
-              >
-                {document.sections.map((section) => (
-                  <AccordionItem
-                    key={section.index}
-                    value={`section-${section.index}`}
-                    id={`section-${section.index}`}
-                    className='scroll-mt-24'
-                  >
-                    <AccordionTrigger>
-                      {section.title || t('talent.knowledge.untitledSection')}
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <Markdown>{section.text}</Markdown>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            )}
-          </CardContent>
-        </Card>
+        <div className='min-w-0 space-y-4'>
+          <ChangesCard document={document} />
+          {/* V3-11: the content writer's change note, the change brief and the revision suggestions of this version. */}
+          <DocumentRevisionPanel documentId={document.id} />
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('talent.knowledge.content')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {document.parseStatus === 'failed' ? (
+                <p className='text-sm text-destructive'>
+                  {t('talent.knowledge.parseFailed', {
+                    reason: document.parseError ?? '',
+                  })}
+                </p>
+              ) : document.parseStatus === 'pending' ? (
+                <p className='text-sm text-muted-foreground'>
+                  {t('talent.knowledge.parsing')}
+                </p>
+              ) : !document.sections.length ? (
+                <p className='text-sm text-muted-foreground'>
+                  {t('talent.knowledge.noContent')}
+                </p>
+              ) : (
+                <Accordion
+                  multiple
+                  value={open}
+                  onValueChange={(value) => setOpen(value as string[])}
+                >
+                  {document.sections.map((section) => (
+                    <AccordionItem
+                      key={section.index}
+                      value={`section-${section.index}`}
+                      id={`section-${section.index}`}
+                      className='scroll-mt-24'
+                    >
+                      <AccordionTrigger>
+                        {section.title || t('talent.knowledge.untitledSection')}
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <Markdown>{section.text}</Markdown>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
+      <MarkReviewedDialog
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        document={document}
+        onReviewed={() => {
+          onChanged();
+          outlet?.reload();
+        }}
+      />
+      <Outlet context={childContext} />
       <DocumentDialog
         open={editOpen}
         onOpenChange={setEditOpen}

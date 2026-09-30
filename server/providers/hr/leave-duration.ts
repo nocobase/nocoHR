@@ -9,7 +9,15 @@ export interface LeaveDurationSchedule {
   readonly shift?: {
     readonly startTime: string;
     readonly endTime: string;
+    readonly breakMinutes?: number;
   } | null;
+}
+
+/** 半天与小时假的口径 (attendance.leaveUnits). */
+export interface LeaveUnitPolicy {
+  readonly hourStep: number;
+  readonly standardDayHours: number;
+  readonly dayWindow: { readonly start: string; readonly end: string };
 }
 
 export interface LeaveDurationCalendar {
@@ -25,12 +33,17 @@ export interface LeaveDurationInput {
   readonly timeZone: string;
   readonly calendar?: LeaveDurationCalendar;
   readonly schedules?: readonly LeaveDurationSchedule[];
+  /** Required for halfDay; for hour, switches from gross hours to work-window hours. */
+  readonly units?: LeaveUnitPolicy;
 }
 
 export interface LeaveDurationResult {
+  /** In the type's unit: days (day, halfDay) or hours. */
   readonly duration: number;
   readonly dates: readonly string[];
   readonly hours: number;
+  /** What the balance moves by, always in days. */
+  readonly balanceDays: number;
 }
 
 function leaveLocalDate(value: string, timeZone: string): string {
@@ -156,10 +169,11 @@ export function calculateLeaveDuration(
   const from = dates[0];
   const to = dates[dates.length - 1];
   const calendar = input.calendar ?? {};
-  // Half-day boundaries and hours-to-days conversion are not defined by the
-  // current business configuration. Never invent an eight-hour workday.
-  if (input.unit === 'halfDay')
+  // Half days and hours need the configured policy (attendance.leaveUnits).
+  if (input.unit === 'halfDay' && !input.units)
     throw new HrError('LEAVE_UNIT_POLICY_REQUIRED', 409);
+  if (input.units && input.unit !== 'day')
+    return partialDayDuration(input, dates, calendar);
   let eligible = dates;
   let eligibleHours = hours;
   if (input.countBy === 'workdays')
@@ -216,5 +230,100 @@ export function calculateLeaveDuration(
     duration,
     dates: eligible,
     hours: Math.round(eligibleHours * 100) / 100,
+    balanceDays: duration,
+  };
+}
+
+/**
+ * Half days and hours against each eligible day's work window: its shift
+ * (countBy schedule) or the configured day window. A half day is either half
+ * of the window, split at its midpoint, that the leave overlaps; hours are the
+ * overlap, rounded up to the configured step, and move the balance by
+ * hours ÷ the window's standard hours (duration minus break).
+ */
+function partialDayDuration(
+  input: LeaveDurationInput,
+  dates: readonly string[],
+  calendar: LeaveDurationCalendar,
+): LeaveDurationResult {
+  const units = input.units!;
+  const start = new Date(input.startAt).getTime();
+  const end = new Date(input.endAt).getTime();
+  const windows: { date: string; from: number; to: number; std: number }[] = [];
+  if (input.countBy === 'schedule') {
+    const from = dates[0];
+    const seen = new Set<string>();
+    for (const row of input.schedules ?? []) {
+      if (row.date < addDays(from, -1) || row.date > dates.at(-1)!) continue;
+      if (!row.shiftId) continue;
+      if (!row.shift || seen.has(row.date))
+        throw new HrError('LEAVE_SCHEDULE_INVALID', 409);
+      seen.add(row.date);
+      const shiftStart = zonedInstant(
+        row.date,
+        row.shift.startTime,
+        input.timeZone,
+      );
+      const shiftEnd = zonedInstant(
+        shiftClock(row.shift.endTime) < shiftClock(row.shift.startTime)
+          ? addDays(row.date, 1)
+          : row.date,
+        row.shift.endTime,
+        input.timeZone,
+      );
+      if (shiftEnd <= shiftStart)
+        throw new HrError('LEAVE_SCHEDULE_INVALID', 409);
+      const std =
+        (shiftEnd - shiftStart) / 3_600_000 -
+        (row.shift.breakMinutes ?? 0) / 60;
+      windows.push({ date: row.date, from: shiftStart, to: shiftEnd, std });
+    }
+  } else {
+    for (const date of dates) {
+      if (input.countBy === 'workdays' && !isWorkday(date, calendar)) continue;
+      windows.push({
+        date,
+        from: zonedInstant(date, units.dayWindow.start, input.timeZone),
+        to: zonedInstant(date, units.dayWindow.end, input.timeZone),
+        std: units.standardDayHours,
+      });
+    }
+  }
+  const overlap = (a: number, b: number) =>
+    Math.max(0, Math.min(end, b) - Math.max(start, a));
+  const used: string[] = [];
+  let duration = 0;
+  let balanceDays = 0;
+  let hours = 0;
+  for (const w of windows) {
+    const mid = w.from + (w.to - w.from) / 2;
+    if (input.unit === 'halfDay') {
+      const halves =
+        (overlap(w.from, mid) > 0 ? 0.5 : 0) +
+        (overlap(mid, w.to) > 0 ? 0.5 : 0);
+      if (!halves) continue;
+      used.push(w.date);
+      duration += halves;
+      balanceDays += halves;
+      hours += overlap(w.from, w.to) / 3_600_000;
+    } else {
+      const h = overlap(w.from, w.to) / 3_600_000;
+      if (!h) continue;
+      used.push(w.date);
+      hours += h;
+      balanceDays += h / (w.std > 0 ? w.std : units.standardDayHours);
+    }
+  }
+  if (input.unit === 'hour') {
+    duration = Math.ceil(hours / units.hourStep - 1e-9) * units.hourStep;
+    // The rounding is part of what the balance moves by.
+    balanceDays = hours > 0 ? (balanceDays * duration) / hours : 0;
+  }
+  if (duration <= 0) throw new HrError('NO_ELIGIBLE_LEAVE_DAYS', 409);
+  return {
+    duration: Math.round(duration * 100) / 100,
+    dates: [...new Set(used)].sort(),
+    hours: Math.round(hours * 100) / 100,
+    balanceDays: Math.round(balanceDays * 10_000) / 10_000,
   };
 }

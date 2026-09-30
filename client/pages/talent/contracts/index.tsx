@@ -9,7 +9,7 @@ import {
   UploadIcon,
   XCircleIcon,
 } from 'lucide-react';
-import { useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
@@ -29,6 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -88,6 +89,30 @@ export default function ContractsPage(): ReactElement {
     contract: Contract | null;
   } | null>(null);
   const [terminating, setTerminating] = useState<Contract | null>(null);
+  // The HR assistant's renewal preparation links here with ?renew=<contract id>: open that renewal once.
+  const renewId = params.get('renew');
+  const [handledRenew, setHandledRenew] = useState<string | null>(null);
+  const [renewMissing, setRenewMissing] = useState(false);
+  if (renewId && list.data && handledRenew !== renewId) {
+    setHandledRenew(renewId);
+    const target = list.data.items.find(
+      (c) => c.id === renewId && c.status === 'active',
+    );
+    if (target && list.data.can.manage)
+      setEditing({ mode: 'renew', contract: target });
+    else setRenewMissing(true);
+  }
+  useEffect(() => {
+    if (renewId && handledRenew === renewId)
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete('renew');
+          return next;
+        },
+        { replace: true },
+      );
+  }, [renewId, handledRenew, setParams]);
   const uploadTargetRef = useRef<Contract | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -124,6 +149,13 @@ export default function ContractsPage(): ReactElement {
           ) : null
         }
       />
+      {renewMissing ? (
+        <Alert>
+          <AlertDescription>
+            {t('talent.contracts.renewMissing')}
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Tabs
         value={quick}
         onValueChange={(value) => {

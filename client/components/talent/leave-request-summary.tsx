@@ -1,6 +1,10 @@
 import { useTranslation } from '@nocobase/i18n/client';
+import { CustomFieldValues } from './custom-fields';
+import { useCustomFieldDefinitions } from './custom-field-model';
+import { formatLeaveDuration } from './leave-duration';
 import { LeaveProofButton } from './leave-proof-button';
 import type { LeaveRequestDetail } from './leave-request-types';
+import { useAppTimeZone } from './attendance/app-time.js';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -13,9 +17,21 @@ export function LeaveRequestSummary({
   busy?: boolean;
 }) {
   const { t, i18n } = useTranslation();
+  const zone = useAppTimeZone();
+  // 界面追加字段 on the detail; the endpoint already left out what this reader may not see.
+  const { definitions } = useCustomFieldDefinitions(
+    'leaveRequests',
+    'detail',
+    true,
+  );
+  // A sensitive field this reader was not sent is left out rather than shown empty.
+  const customDefinitions = definitions.filter(
+    (d) => !d.sensitive || row.customFields?.[d.key] != null,
+  );
   const format = new Intl.DateTimeFormat(i18n.language, {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: zone,
   });
   return (
     <>
@@ -62,14 +78,12 @@ export function LeaveRequestSummary({
                 {t('attendance.approvals.duration')}
               </dt>
               <dd>
-                {t('attendance.approvals.durationValue', {
-                  duration: new Intl.NumberFormat(i18n.language).format(
-                    row.duration,
-                  ),
-                  unit: row.leaveUnit
-                    ? t(`attendance.leave.enums.${row.leaveUnit}`)
-                    : t('attendance.approvals.unavailable'),
-                })}
+                {formatLeaveDuration(
+                  row.duration,
+                  row.leaveUnit,
+                  t,
+                  i18n.language,
+                )}
               </dd>
             </div>
             <div>
@@ -93,9 +107,17 @@ export function LeaveRequestSummary({
               </dd>
             </div>
           </dl>
+          {customDefinitions.length ? (
+            <div className='mt-4'>
+              <CustomFieldValues
+                definitions={customDefinitions}
+                values={row.customFields}
+              />
+            </div>
+          ) : null}
           <p className='mt-4 text-sm text-muted-foreground'>
             {t('attendance.leave.timeZone', {
-              zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              zone,
             })}
           </p>
         </CardContent>

@@ -215,7 +215,13 @@ export function createOrganizationService(
   }
 
   function titleText(title: string, locale = 'zh-CN'): string {
-    const decoded = decodeAuthorizationTitle(title);
+    let decoded: ReturnType<typeof decodeAuthorizationTitle>;
+    try {
+      decoded = decodeAuthorizationTitle(title);
+    } catch {
+      // A title written as plain text rather than an encoded one: show it as is.
+      return title;
+    }
     if (typeof decoded === 'string') return decoded;
     if (decoded && typeof decoded === 'object') {
       const key = decoded.key;

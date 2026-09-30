@@ -86,6 +86,8 @@ async function startAcceptanceServer() {
     }),
   );
   process.env.HR_DEMO_PASSWORD = PASSWORD;
+  // These suites build their own attendance fixtures; the V2-05 demo catalog is tested in v2-attendance.
+  process.env.HR_ATTENDANCE_DEMO = 'false';
   const root = path.resolve(import.meta.dirname, '../..');
   server = await createStandaloneServer({
     viteDevUrl: false,
@@ -1407,6 +1409,7 @@ async function call(
 afterAll(async () => {
   await server?.close();
   delete process.env.HR_DEMO_PASSWORD;
+  delete process.env.HR_ATTENDANCE_DEMO;
   if (directory) rmSync(directory, { recursive: true, force: true });
 });
 

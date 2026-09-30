@@ -92,7 +92,8 @@ export function AssessmentDialog({
     setError(undefined);
     try {
       await api.request({
-        path: `talent/employees/${encodeURIComponent(employeeId)}/assessments`,
+        // V3-08: the competency endpoint applies the same rule and updates the head's assessment to-do.
+        path: `talent/competency/employees/${encodeURIComponent(employeeId)}/assessments`,
         method: 'POST',
         json: {
           competencyId: selected.competencyId,

@@ -3,6 +3,12 @@ import { useTranslation } from '@nocobase/i18n/client';
 import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 
+import { CustomFieldInputs } from '@/components/talent/custom-fields';
+import {
+  compactValues,
+  useCustomFieldDefinitions,
+  type CustomValues,
+} from '@/components/talent/custom-field-model';
 import { errorMessage } from '@/components/talent/errors';
 import type { Employee, EmployeeProfile } from '@/components/talent/types';
 import { str } from '@/components/talent/text';
@@ -63,6 +69,8 @@ export interface ProfileChangeDialogProps {
   readonly employee: Employee;
   readonly profile: EmployeeProfile;
   readonly onSubmitted: () => void;
+  /** The fields 人事设置 · 员工自助 allows; the server checks the same list. */
+  readonly fields: readonly string[];
 }
 
 /**
@@ -75,8 +83,10 @@ export function ProfileChangeDialog({
   employee,
   profile,
   onSubmitted,
+  fields,
 }: ProfileChangeDialogProps): ReactElement {
   const { t } = useTranslation();
+  const allowed = (field: string) => fields.includes(field);
   const api = useApiClient();
   const initial = {
     mobile: employee.mobile ?? '',
@@ -103,6 +113,13 @@ export function ProfileChangeDialog({
     ]),
   };
   const [draft, setDraft] = useState(initial);
+  // 界面追加字段 placed for self-service (工服尺码…); sensitive ones never are.
+  const { definitions: selfFields } = useCustomFieldDefinitions(
+    'employees',
+    'selfService',
+  );
+  const initialCustom = employee.customFields ?? {};
+  const [custom, setCustom] = useState<CustomValues>(initialCustom);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
 
@@ -144,6 +161,14 @@ export function ProfileChangeDialog({
       'emergencyContacts',
     ] as const)
       if (!same(draft[kind], initial[kind])) changes[kind] = clean(draft[kind]);
+    const customChanged = Object.fromEntries(
+      Object.entries(compactValues(custom)).filter(
+        ([key, value]) =>
+          JSON.stringify(value ?? null) !==
+          JSON.stringify(initialCustom[key] ?? null),
+      ),
+    );
+    if (Object.keys(customChanged).length) changes.customFields = customChanged;
     if (!Object.keys(changes).length) {
       setError(t('talent.me.change.noChanges'));
       return;
@@ -173,6 +198,7 @@ export function ProfileChangeDialog({
         if (saving) return;
         if (next) {
           setDraft(initial);
+          setCustom(initialCustom);
           setError(undefined);
         }
         onOpenChange(next);
@@ -194,286 +220,326 @@ export function ProfileChangeDialog({
         >
           <FieldGroup>
             <div className='grid gap-4 sm:grid-cols-2'>
-              <Field>
-                <FieldLabel htmlFor='change-mobile'>
-                  {t('talent.fields.mobile')}
-                </FieldLabel>
-                <Input
-                  id='change-mobile'
-                  value={draft.mobile}
-                  maxLength={32}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, mobile: e.target.value }))
-                  }
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor='change-email'>
-                  {t('talent.fields.email')}
-                </FieldLabel>
-                <Input
-                  id='change-email'
-                  type='email'
-                  value={draft.email}
-                  maxLength={320}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, email: e.target.value }))
-                  }
-                />
-              </Field>
+              {allowed('mobile') ? (
+                <Field>
+                  <FieldLabel htmlFor='change-mobile'>
+                    {t('talent.fields.mobile')}
+                  </FieldLabel>
+                  <Input
+                    id='change-mobile'
+                    value={draft.mobile}
+                    maxLength={32}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, mobile: e.target.value }))
+                    }
+                  />
+                </Field>
+              ) : null}
+              {allowed('email') ? (
+                <Field>
+                  <FieldLabel htmlFor='change-email'>
+                    {t('talent.fields.email')}
+                  </FieldLabel>
+                  <Input
+                    id='change-email'
+                    type='email'
+                    value={draft.email}
+                    maxLength={320}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, email: e.target.value }))
+                    }
+                  />
+                </Field>
+              ) : null}
             </div>
-            <Field>
-              <FieldLabel htmlFor='change-address'>
-                {t('talent.fields.address')}
-              </FieldLabel>
-              <Input
-                id='change-address'
-                value={draft.address}
-                maxLength={300}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, address: e.target.value }))
-                }
-              />
-            </Field>
+            {allowed('address') ? (
+              <Field>
+                <FieldLabel htmlFor='change-address'>
+                  {t('talent.fields.address')}
+                </FieldLabel>
+                <Input
+                  id='change-address'
+                  value={draft.address}
+                  maxLength={300}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, address: e.target.value }))
+                  }
+                />
+              </Field>
+            ) : null}
 
-            <FieldSet>
-              <FieldLegend>{t('talent.profile.emergencyContacts')}</FieldLegend>
-              {draft.emergencyContacts.map((row, index) => (
-                <div
-                  key={index}
-                  className='grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2'
-                >
-                  <Input
-                    aria-label={t('talent.profile.contactName')}
-                    placeholder={t('talent.profile.contactName')}
-                    value={row.name}
-                    onChange={(e) =>
-                      updateRow(
-                        'emergencyContacts',
-                        index,
-                        'name',
-                        e.target.value,
-                      )
-                    }
-                  />
-                  <Input
-                    aria-label={t('talent.profile.relation')}
-                    placeholder={t('talent.profile.relation')}
-                    value={row.relation}
-                    onChange={(e) =>
-                      updateRow(
-                        'emergencyContacts',
-                        index,
-                        'relation',
-                        e.target.value,
-                      )
-                    }
-                  />
-                  <Input
-                    aria-label={t('talent.profile.phone')}
-                    placeholder={t('talent.profile.phone')}
-                    value={row.phone}
-                    onChange={(e) =>
-                      updateRow(
-                        'emergencyContacts',
-                        index,
-                        'phone',
-                        e.target.value,
-                      )
-                    }
-                  />
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='icon'
-                    aria-label={t('talent.common.remove')}
-                    onClick={() => removeRow('emergencyContacts', index)}
+            {allowed('emergencyContacts') ? (
+              <FieldSet>
+                <FieldLegend>
+                  {t('talent.profile.emergencyContacts')}
+                </FieldLegend>
+                {draft.emergencyContacts.map((row, index) => (
+                  <div
+                    key={index}
+                    className='grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2'
                   >
-                    <Trash2Icon />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                className='w-fit'
-                onClick={() =>
-                  addRow('emergencyContacts', {
-                    name: '',
-                    relation: '',
-                    phone: '',
-                  })
-                }
-              >
-                <PlusIcon data-icon='inline-start' />
-                {t('talent.profile.addContact')}
-              </Button>
-            </FieldSet>
+                    <Input
+                      aria-label={t('talent.profile.contactName')}
+                      placeholder={t('talent.profile.contactName')}
+                      value={row.name}
+                      onChange={(e) =>
+                        updateRow(
+                          'emergencyContacts',
+                          index,
+                          'name',
+                          e.target.value,
+                        )
+                      }
+                    />
+                    <Input
+                      aria-label={t('talent.profile.relation')}
+                      placeholder={t('talent.profile.relation')}
+                      value={row.relation}
+                      onChange={(e) =>
+                        updateRow(
+                          'emergencyContacts',
+                          index,
+                          'relation',
+                          e.target.value,
+                        )
+                      }
+                    />
+                    <Input
+                      aria-label={t('talent.profile.phone')}
+                      placeholder={t('talent.profile.phone')}
+                      value={row.phone}
+                      onChange={(e) =>
+                        updateRow(
+                          'emergencyContacts',
+                          index,
+                          'phone',
+                          e.target.value,
+                        )
+                      }
+                    />
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      aria-label={t('talent.common.remove')}
+                      onClick={() => removeRow('emergencyContacts', index)}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='w-fit'
+                  onClick={() =>
+                    addRow('emergencyContacts', {
+                      name: '',
+                      relation: '',
+                      phone: '',
+                    })
+                  }
+                >
+                  <PlusIcon data-icon='inline-start' />
+                  {t('talent.profile.addContact')}
+                </Button>
+              </FieldSet>
+            ) : null}
 
-            <FieldSet>
-              <FieldLegend>{t('talent.profile.educations')}</FieldLegend>
-              {draft.educations.map((row, index) => (
-                <div
-                  key={index}
-                  className='grid grid-cols-2 items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]'
+            {allowed('educations') ? (
+              <FieldSet>
+                <FieldLegend>{t('talent.profile.educations')}</FieldLegend>
+                {draft.educations.map((row, index) => (
+                  <div
+                    key={index}
+                    className='grid grid-cols-2 items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]'
+                  >
+                    <Input
+                      aria-label={t('talent.profile.school')}
+                      placeholder={t('talent.profile.school')}
+                      value={row.school}
+                      onChange={(e) =>
+                        updateRow('educations', index, 'school', e.target.value)
+                      }
+                    />
+                    <NativeSelect
+                      aria-label={t('talent.profile.degree')}
+                      value={row.degree}
+                      onChange={(e) =>
+                        updateRow('educations', index, 'degree', e.target.value)
+                      }
+                    >
+                      {DEGREES.map((d) => (
+                        <NativeSelectOption key={d} value={d}>
+                          {t(`talent.degree.${d}`)}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    <Input
+                      aria-label={t('talent.profile.major')}
+                      placeholder={t('talent.profile.major')}
+                      value={row.major}
+                      onChange={(e) =>
+                        updateRow('educations', index, 'major', e.target.value)
+                      }
+                    />
+                    <Input
+                      aria-label={t('talent.profile.startDate')}
+                      type='date'
+                      value={row.startDate}
+                      onChange={(e) =>
+                        updateRow(
+                          'educations',
+                          index,
+                          'startDate',
+                          e.target.value,
+                        )
+                      }
+                    />
+                    <Input
+                      aria-label={t('talent.profile.endDate')}
+                      type='date'
+                      value={row.endDate}
+                      onChange={(e) =>
+                        updateRow(
+                          'educations',
+                          index,
+                          'endDate',
+                          e.target.value,
+                        )
+                      }
+                    />
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      aria-label={t('talent.common.remove')}
+                      onClick={() => removeRow('educations', index)}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='w-fit'
+                  onClick={() =>
+                    addRow('educations', {
+                      school: '',
+                      degree: 'bachelor',
+                      major: '',
+                      startDate: '',
+                      endDate: '',
+                    })
+                  }
                 >
-                  <Input
-                    aria-label={t('talent.profile.school')}
-                    placeholder={t('talent.profile.school')}
-                    value={row.school}
-                    onChange={(e) =>
-                      updateRow('educations', index, 'school', e.target.value)
-                    }
-                  />
-                  <NativeSelect
-                    aria-label={t('talent.profile.degree')}
-                    value={row.degree}
-                    onChange={(e) =>
-                      updateRow('educations', index, 'degree', e.target.value)
-                    }
-                  >
-                    {DEGREES.map((d) => (
-                      <NativeSelectOption key={d} value={d}>
-                        {t(`talent.degree.${d}`)}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                  <Input
-                    aria-label={t('talent.profile.major')}
-                    placeholder={t('talent.profile.major')}
-                    value={row.major}
-                    onChange={(e) =>
-                      updateRow('educations', index, 'major', e.target.value)
-                    }
-                  />
-                  <Input
-                    aria-label={t('talent.profile.startDate')}
-                    type='date'
-                    value={row.startDate}
-                    onChange={(e) =>
-                      updateRow(
-                        'educations',
-                        index,
-                        'startDate',
-                        e.target.value,
-                      )
-                    }
-                  />
-                  <Input
-                    aria-label={t('talent.profile.endDate')}
-                    type='date'
-                    value={row.endDate}
-                    onChange={(e) =>
-                      updateRow('educations', index, 'endDate', e.target.value)
-                    }
-                  />
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='icon'
-                    aria-label={t('talent.common.remove')}
-                    onClick={() => removeRow('educations', index)}
-                  >
-                    <Trash2Icon />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                className='w-fit'
-                onClick={() =>
-                  addRow('educations', {
-                    school: '',
-                    degree: 'bachelor',
-                    major: '',
-                    startDate: '',
-                    endDate: '',
-                  })
-                }
-              >
-                <PlusIcon data-icon='inline-start' />
-                {t('talent.profile.addEducation')}
-              </Button>
-            </FieldSet>
+                  <PlusIcon data-icon='inline-start' />
+                  {t('talent.profile.addEducation')}
+                </Button>
+              </FieldSet>
+            ) : null}
 
-            <FieldSet>
-              <FieldLegend>{t('talent.profile.experiences')}</FieldLegend>
-              {draft.experiences.map((row, index) => (
-                <div
-                  key={index}
-                  className='grid grid-cols-2 items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]'
-                >
-                  <Input
-                    aria-label={t('talent.profile.company')}
-                    placeholder={t('talent.profile.company')}
-                    value={row.company}
-                    onChange={(e) =>
-                      updateRow('experiences', index, 'company', e.target.value)
-                    }
-                  />
-                  <Input
-                    aria-label={t('talent.profile.jobTitle')}
-                    placeholder={t('talent.profile.jobTitle')}
-                    value={row.title}
-                    onChange={(e) =>
-                      updateRow('experiences', index, 'title', e.target.value)
-                    }
-                  />
-                  <Input
-                    aria-label={t('talent.profile.startDate')}
-                    type='date'
-                    value={row.startDate}
-                    onChange={(e) =>
-                      updateRow(
-                        'experiences',
-                        index,
-                        'startDate',
-                        e.target.value,
-                      )
-                    }
-                  />
-                  <Input
-                    aria-label={t('talent.profile.endDate')}
-                    type='date'
-                    value={row.endDate}
-                    onChange={(e) =>
-                      updateRow('experiences', index, 'endDate', e.target.value)
-                    }
-                  />
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='icon'
-                    aria-label={t('talent.common.remove')}
-                    onClick={() => removeRow('experiences', index)}
+            {allowed('experiences') ? (
+              <FieldSet>
+                <FieldLegend>{t('talent.profile.experiences')}</FieldLegend>
+                {draft.experiences.map((row, index) => (
+                  <div
+                    key={index}
+                    className='grid grid-cols-2 items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]'
                   >
-                    <Trash2Icon />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                className='w-fit'
-                onClick={() =>
-                  addRow('experiences', {
-                    company: '',
-                    title: '',
-                    startDate: '',
-                    endDate: '',
-                    description: '',
-                  })
-                }
-              >
-                <PlusIcon data-icon='inline-start' />
-                {t('talent.profile.addExperience')}
-              </Button>
-            </FieldSet>
+                    <Input
+                      aria-label={t('talent.profile.company')}
+                      placeholder={t('talent.profile.company')}
+                      value={row.company}
+                      onChange={(e) =>
+                        updateRow(
+                          'experiences',
+                          index,
+                          'company',
+                          e.target.value,
+                        )
+                      }
+                    />
+                    <Input
+                      aria-label={t('talent.profile.jobTitle')}
+                      placeholder={t('talent.profile.jobTitle')}
+                      value={row.title}
+                      onChange={(e) =>
+                        updateRow('experiences', index, 'title', e.target.value)
+                      }
+                    />
+                    <Input
+                      aria-label={t('talent.profile.startDate')}
+                      type='date'
+                      value={row.startDate}
+                      onChange={(e) =>
+                        updateRow(
+                          'experiences',
+                          index,
+                          'startDate',
+                          e.target.value,
+                        )
+                      }
+                    />
+                    <Input
+                      aria-label={t('talent.profile.endDate')}
+                      type='date'
+                      value={row.endDate}
+                      onChange={(e) =>
+                        updateRow(
+                          'experiences',
+                          index,
+                          'endDate',
+                          e.target.value,
+                        )
+                      }
+                    />
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      aria-label={t('talent.common.remove')}
+                      onClick={() => removeRow('experiences', index)}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='w-fit'
+                  onClick={() =>
+                    addRow('experiences', {
+                      company: '',
+                      title: '',
+                      startDate: '',
+                      endDate: '',
+                      description: '',
+                    })
+                  }
+                >
+                  <PlusIcon data-icon='inline-start' />
+                  {t('talent.profile.addExperience')}
+                </Button>
+              </FieldSet>
+            ) : null}
             {error ? <FieldError>{error}</FieldError> : null}
+            {selfFields.length ? (
+              <div className='grid gap-4 sm:grid-cols-2'>
+                <CustomFieldInputs
+                  definitions={selfFields}
+                  values={custom}
+                  onChange={setCustom}
+                  disabled={saving}
+                  idPrefix='change-cf'
+                />
+              </div>
+            ) : null}
           </FieldGroup>
         </form>
         <DialogFooter>

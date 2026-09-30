@@ -17,6 +17,8 @@ export const departmentTitleTranslations: Readonly<
     'departments.seed.szAs': '装配车间',
     'departments.seed.cd': '成都工厂',
     'departments.seed.cdMc': '成都机加工车间',
+    // V3-08
+    'departments.seed.sales': '销售部',
   },
   'en-US': {
     'departments.seed.root': 'Qiheng Precision',
@@ -29,5 +31,7 @@ export const departmentTitleTranslations: Readonly<
     'departments.seed.szAs': 'Assembly Workshop',
     'departments.seed.cd': 'Chengdu Plant',
     'departments.seed.cdMc': 'Chengdu Machining Workshop',
+    // V3-08
+    'departments.seed.sales': 'Sales',
   },
 };

@@ -1,5 +1,5 @@
 import { useTranslation } from '@nocobase/i18n/client';
-import { PlusIcon } from 'lucide-react';
+import { PlusIcon, UploadIcon } from 'lucide-react';
 import { useMemo, type ReactElement } from 'react';
 import { Link, Outlet, useLocation, useSearchParams } from 'react-router';
 
@@ -39,6 +39,8 @@ export default function CompetenciesPage(): ReactElement {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const draftOnly = params.get('drafts') === '1';
+  // V3-08: 已停用 filter.
+  const inactiveOnly = params.get('inactive') === '1';
   const list = useRemote<{
     competencies: CompetencyItem[];
     canManage: boolean;
@@ -63,15 +65,32 @@ export default function CompetenciesPage(): ReactElement {
         description={t('talent.competencies.description')}
         actions={
           list.data?.canManage ? (
-            <Button
-              nativeButton={false}
-              render={
-                <Link to={{ pathname: 'new', search: location.search }} />
-              }
-            >
-              <PlusIcon data-icon='inline-start' />
-              {t('talent.competencies.create')}
-            </Button>
+            <>
+              <Button
+                variant='outline'
+                nativeButton={false}
+                render={
+                  <Link
+                    to={{
+                      pathname: 'assessments-import',
+                      search: location.search,
+                    }}
+                  />
+                }
+              >
+                <UploadIcon data-icon='inline-start' />
+                {t('talent.competencyExt.import.open')}
+              </Button>
+              <Button
+                nativeButton={false}
+                render={
+                  <Link to={{ pathname: 'new', search: location.search }} />
+                }
+              >
+                <PlusIcon data-icon='inline-start' />
+                {t('talent.competencies.create')}
+              </Button>
+            </>
           ) : null
         }
       />
@@ -89,6 +108,20 @@ export default function CompetenciesPage(): ReactElement {
         <Label htmlFor='drafts-only'>
           {t('talent.competencies.draftsOnly')}
         </Label>
+        <Switch
+          id='inactive-only'
+          className='ml-4'
+          checked={inactiveOnly}
+          onCheckedChange={(checked) => {
+            const next = new URLSearchParams(params);
+            if (checked) next.set('inactive', '1');
+            else next.delete('inactive');
+            setParams(next, { replace: true });
+          }}
+        />
+        <Label htmlFor='inactive-only'>
+          {t('talent.competencyExt.inactiveOnly')}
+        </Label>
       </div>
       {list.error ? (
         <LoadError error={list.error} onRetry={list.reload} />
@@ -105,7 +138,7 @@ export default function CompetenciesPage(): ReactElement {
       ) : (
         CATEGORIES.map((category) => {
           const rows = list.data!.competencies.filter(
-            (c) => c.category === category,
+            (c) => c.category === category && (!inactiveOnly || !c.active),
           );
           if (!rows.length) return null;
           return (

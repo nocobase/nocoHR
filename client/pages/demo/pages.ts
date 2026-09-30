@@ -10,4 +10,9 @@ export const DEMO_PAGES: Readonly<
     path: '/demo/batch-record',
     title: 'navigation.demoBatchRecord',
   },
+  // V4-14 叉车出库登记, opened by the 叉车证 certification.
+  'demo.forkliftDispatch': {
+    path: '/demo/forklift-dispatch',
+    title: 'navigation.demoForkliftDispatch',
+  },
 };

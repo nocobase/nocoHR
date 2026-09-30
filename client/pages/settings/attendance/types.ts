@@ -22,6 +22,8 @@ export interface Rule extends CatalogRecord {
   punchSource: 'feishu' | 'dingtalk' | 'wecom' | 'device';
   lateGraceMinutes: number;
   overtimeRequiresApproval: boolean;
+  /** 允许说明豁免 (V2-05 realigned); absent on rules saved before it existed. */
+  exceptionExcusable?: boolean;
   monthlyOvertimeAlertHours: number;
   minRestHours: number;
   maxConsecutiveNights: number;
@@ -37,6 +39,32 @@ export interface Configuration {
   annualLeave: { bands: { minimumYears: number; days: number }[] };
   calendar: {
     years: { year: number; holidays: string[]; adjustedWorkdays: string[] }[];
+  };
+  /** V2-05 轮班模板. */
+  rotations: {
+    templates: {
+      key: string;
+      title: string;
+      shiftCodes: string[];
+      periodDays: number;
+      workDays: number;
+    }[];
+  };
+  /** V2-05 半天与小时假. */
+  leaveUnits: {
+    hourStep: number;
+    standardDayHours: number;
+    dayWindow: { start: string; end: string };
+  };
+  /** V2-05 预计当月加班. */
+  overtime: { standardDayHours: number };
+  /** V2-05 按部门追加审批级别. */
+  approval: {
+    extraLevels: {
+      departmentId: string;
+      approverUserId: string;
+      types: ('leave' | 'missingPunch' | 'overtime' | 'shiftSwap')[];
+    }[];
   };
 }
 export type Section = keyof Configuration;

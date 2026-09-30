@@ -66,6 +66,84 @@ export const attendanceConfigSchemas = {
         ),
     })
     .strict(),
+  /**
+   * 轮班模板: a shift order and period. Each period works `workDays` days on
+   * one shift, then rests; the next period moves to the next shift in order.
+   */
+  rotations: z
+    .object({
+      templates: z
+        .array(
+          z
+            .object({
+              key: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/u),
+              title: z.string().trim().min(1).max(100),
+              shiftCodes: z.array(z.string().min(1).max(64)).min(1).max(10),
+              periodDays: z.number().int().min(1).max(31),
+              workDays: z.number().int().min(1).max(31),
+            })
+            .strict()
+            .refine((t) => t.workDays <= t.periodDays),
+        )
+        .max(50)
+        .refine((rows) => new Set(rows.map((r) => r.key)).size === rows.length),
+    })
+    .strict(),
+  /**
+   * 半天与小时假 (user-agreed defaults, 2026-09-29): a half day splits the
+   * day's work window at its midpoint; hours round up to `hourStep` and turn
+   * into balance days at the shift's standard hours (duration minus break),
+   * or `standardDayHours` without a shift. `dayWindow` is the work window of
+   * a day that has no shift (countBy workdays / calendar).
+   */
+  leaveUnits: z
+    .object({
+      hourStep: z.number().positive().max(8),
+      standardDayHours: z.number().positive().max(24),
+      dayWindow: z
+        .object({
+          start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u),
+          end: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u),
+        })
+        .strict()
+        .refine((w) => w.start < w.end),
+    })
+    .strict(),
+  /**
+   * 预计当月加班 (user-agreed default): approved overtime plus scheduled
+   * hours beyond `standardDayHours` a day (standard hours); comprehensive
+   * hours compare the month's scheduled total with its workdays ×
+   * `standardDayHours`; flexible hours have no forecast and no lateness.
+   */
+  overtime: z
+    .object({ standardDayHours: z.number().positive().max(24) })
+    .strict(),
+  /** 按部门追加的审批级别: one more approver after the defaults, for these request types. */
+  approval: z
+    .object({
+      extraLevels: z
+        .array(
+          z
+            .object({
+              departmentId: z.string().min(1).max(64),
+              approverUserId: z.string().min(1).max(64),
+              types: z
+                .array(
+                  z.enum([
+                    'leave',
+                    'missingPunch',
+                    'overtime',
+                    'shiftSwap',
+                    'exception',
+                  ]),
+                )
+                .min(1),
+            })
+            .strict(),
+        )
+        .max(50),
+    })
+    .strict(),
 } as const;
 
 export type AttendanceConfigSection = keyof typeof attendanceConfigSchemas;
@@ -90,10 +168,29 @@ export const attendanceConfigDefaults: AttendanceConfiguration = {
   },
   // No invented statutory holiday dates: HR supplies the applicable calendar.
   calendar: { years: [] },
+  rotations: { templates: [] },
+  leaveUnits: {
+    hourStep: 0.5,
+    standardDayHours: 8,
+    dayWindow: { start: '08:30', end: '17:30' },
+  },
+  overtime: { standardDayHours: 8 },
+  approval: { extraLevels: [] },
 };
 
 export function isAttendanceConfigSection(
   value: string,
 ): value is AttendanceConfigSection {
   return Object.hasOwn(attendanceConfigSchemas, value);
+}
+
+/**
+ * A stored setting value: an object from the Repository, or JSON text when a
+ * seed wrote it through the query builder.
+ */
+export function decodeSetting(value: unknown): unknown {
+  let decoded = value;
+  for (let i = 0; i < 3 && typeof decoded === 'string'; i++)
+    decoded = JSON.parse(decoded);
+  return decoded;
 }

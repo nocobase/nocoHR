@@ -21,6 +21,22 @@ export interface KbDocument {
   readonly positions: readonly NamedRef[];
   readonly updatedAt: string;
   readonly canManage: boolean;
+  /** V1-04 versions: the document number and version; a superseded version no longer answers questions. */
+  readonly docNo?: string | null;
+  readonly version?: string | null;
+  readonly effectiveDate?: string | null;
+  readonly previousVersionId?: string | null;
+  readonly supersededById?: string | null;
+  readonly supersededByVersion?: string | null;
+  readonly lastReviewedAt?: string | null;
+}
+
+/** One section's change against the previous version (server/providers/hr/document-changes.ts). */
+export interface SectionChange {
+  readonly sectionTitle: string;
+  readonly changeType: 'added' | 'modified' | 'removed';
+  readonly before: string | null;
+  readonly after: string | null;
 }
 
 export interface DocumentSection {
@@ -45,12 +61,49 @@ export interface KbDocumentDetail extends KbDocument {
     mimeType: string;
     size: number;
   } | null;
+  /** Every version with the same document number, newest first. */
+  readonly versions?: readonly {
+    id: string;
+    version: string | null;
+    effectiveDate: string | null;
+    parseStatus: string;
+    superseded: boolean;
+  }[];
+  readonly changeSummary?: readonly SectionChange[] | null;
+  readonly changeNote?: string | null;
+  readonly can?: {
+    uploadVersion: boolean;
+    markReviewed: boolean;
+    rerunRevision: boolean;
+  };
+}
+
+/** A document conflict (`GET talent/kb/conflicts`). */
+export interface DocumentConflict {
+  readonly id: string;
+  readonly documentId: string;
+  readonly documentTitle: string;
+  readonly sectionTitle: string;
+  readonly otherDocumentId: string;
+  readonly otherDocumentTitle: string;
+  readonly otherSectionTitle: string;
+  readonly description: string;
+  readonly excerpt: string | null;
+  readonly otherExcerpt: string | null;
+  readonly status: 'open' | 'resolved' | 'ignored';
+  readonly source?: 'ai' | 'manual';
+  readonly resolutionNote?: string | null;
+  readonly handledByName: string | null;
+  readonly createdAt: string;
+  readonly can: { resolve: boolean; ignore: boolean };
 }
 
 export interface KnowledgeGap {
   readonly id: string;
   readonly question: string;
+  /** The asker's department only; the gap list does not name who asked (V1-04). */
   readonly askedByName: string | null;
+  readonly channel?: 'app' | 'feishu' | 'dingtalk' | 'wecom';
   readonly askCount: number;
   readonly askedAt: string;
   readonly lastAskedAt: string;

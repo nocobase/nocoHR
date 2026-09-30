@@ -126,7 +126,7 @@ export interface AffectedContent {
 export interface RevisionService {
   listRevisions(
     ctx: ActorContext,
-    filters: { documentId?: string; status?: string },
+    filters: { documentId?: string; status?: string; reason?: string },
   ): Promise<RevisionGroup[]>;
   accept(ctx: ActorContext, id: string, input: unknown): Promise<RevisionView>;
   reject(ctx: ActorContext, id: string, input: unknown): Promise<RevisionView>;
@@ -173,8 +173,65 @@ export interface RevisionService {
   affectedEmployees(documentId: string): Promise<string[]>;
   /** Assigns a just-published change brief to the affected people. */
   onBriefPublished(courseId: string): Promise<{ assigned: number }>;
+  /** V3-11: how many people a change brief would reach, by department (no names). */
+  estimateAffected(documentId: string): Promise<{
+    total: number;
+    departments: { departmentId: string; count: number }[];
+  }>;
+  /** V3-11: a course's applied revisions, grouped by application. */
+  courseHistory(
+    ctx: ActorContext,
+    courseId: string,
+  ): Promise<
+    {
+      appliedAt: string;
+      appliedByName: string | null;
+      version: number | null;
+      revisions: {
+        id: string;
+        targetTitle: string;
+        sectionTitle: string | null;
+        explanation: string;
+      }[];
+    }[]
+  >;
+  /** V3-11: the content writer's change note, edited by the document's owner or HR. */
+  updateChangeNote(
+    ctx: ActorContext,
+    documentId: string,
+    note: unknown,
+  ): Promise<{ changeNote: string | null }>;
+  /** V3-11: a change brief's deadline in working days, adjustable by course managers. */
+  updateBriefDueDays(
+    ctx: ActorContext,
+    courseId: string,
+    days: unknown,
+  ): Promise<{ revisionDueDays: number }>;
+  /** V3-11: the change briefs, with their document version and the affected estimate. */
+  listBriefs(ctx: ActorContext): Promise<
+    {
+      courseId: string;
+      title: string;
+      status: string;
+      documentId: string;
+      documentTitle: string;
+      documentVersion: string | null;
+      revisionDueDays: number;
+      affectedEstimate: number;
+      assigned: number;
+    }[]
+  >;
   /** Confirmed questions answered at least `minAttempts` times with an abnormal correct rate or poor discrimination. */
-  lowQualityQuestions(minAttempts?: number): Promise<
+  lowQualityQuestions(
+    options?:
+      | number
+      | {
+          minAttempts?: number;
+          lowRate?: number;
+          highRate?: number;
+          minDiscrimination?: number;
+        },
+  ): Promise<
     {
       id: string;
       stem: string;
@@ -431,10 +488,8 @@ export function createRevisionService(
       ] as const)
         if (change[key] !== undefined)
           values[key] = change[key] === null ? null : str(change[key]);
-      if (change.options !== undefined)
-        values.options = JSON.stringify(change.options);
-      if (change.answer !== undefined)
-        values.answer = JSON.stringify(change.answer);
+      if (change.options !== undefined) values.options = change.options;
+      if (change.answer !== undefined) values.answer = change.answer;
       // The question stays confirmed: the instructor accepted this exact change.
       if (documentId) values.sourceDocumentId = documentId;
       await query
@@ -461,8 +516,7 @@ export function createRevisionService(
         'openingLine',
       ] as const)
         if (change[key] !== undefined) values[key] = str(change[key]);
-      if (change.rubric !== undefined)
-        values.rubric = JSON.stringify(change.rubric);
+      if (change.rubric !== undefined) values.rubric = change.rubric;
       if (documentId) values.sourceDocumentId = documentId;
       await query
         .updateTable('practiceScenarios')
@@ -486,6 +540,9 @@ export function createRevisionService(
         rows = rows.filter((r) => r.documentId === filters.documentId);
       if (filters.status)
         rows = rows.filter((r) => r.status === filters.status);
+      // V3-11: 题目质量 is its own tab.
+      if (filters.reason)
+        rows = rows.filter((r) => r.reason === filters.reason);
       const byDocument = new Map<string, Record<string, unknown>[]>();
       for (const row of rows) {
         const key = row.documentId ? str(row.documentId) : '';
@@ -597,7 +654,7 @@ export function createRevisionService(
         .updateTable('contentRevisions')
         .set({
           status: lesson ? 'accepted' : 'applied',
-          accepted: JSON.stringify(change),
+          accepted: change,
           reviewedBy: ctx.userId,
           reviewedAt: stamp,
           updatedAt: stamp,
@@ -678,7 +735,14 @@ export function createRevisionService(
             .execute();
           await connection.query
             .updateTable('contentRevisions')
-            .set({ status: 'applied', updatedAt: stamp })
+            .set({
+              status: 'applied',
+              // V3-11: the course's revision history.
+              appliedBy: ctx.userId,
+              appliedAt: stamp,
+              appliedVersion: version,
+              updatedAt: stamp,
+            })
             .where('id', '=', str(row.id))
             .execute();
         }
@@ -868,6 +932,14 @@ export function createRevisionService(
           skipped += 1;
           continue;
         }
+        // V3-11: a proposal touching fields its target type cannot change is skipped, not fatal.
+        let proposed: Record<string, unknown>;
+        try {
+          proposed = cleanProposal(item.targetType, item.proposed);
+        } catch {
+          skipped += 1;
+          continue;
+        }
         const id = newId();
         const stamp = new Date();
         await database
@@ -882,10 +954,8 @@ export function createRevisionService(
             courseId: info.courseId,
             ownerUserId: info.ownerUserId,
             sectionTitle: item.sectionTitle ?? null,
-            currentSnapshot: JSON.stringify(current),
-            proposed: JSON.stringify(
-              cleanProposal(item.targetType, item.proposed),
-            ),
+            currentSnapshot: current,
+            proposed,
             accepted: null,
             explanation: item.explanation.slice(0, 4000),
             status: 'open',
@@ -999,11 +1069,22 @@ export function createRevisionService(
       const { previous } = await service.documentChanges(documentId);
       if (!previous) return [];
       const query = database.query();
+      // V3-11: the old version and every earlier version of the same document number.
+      const oldIds: string[] = [];
+      for (let id: string | null = previous.id; id && !oldIds.includes(id);) {
+        oldIds.push(id);
+        const row: Record<string, unknown> | undefined = await query
+          .selectFrom('kbDocuments')
+          .select(['previousVersionId'])
+          .where('id', '=', id)
+          .executeTakeFirst();
+        id = row?.previousVersionId ? str(row.previousVersionId) : null;
+      }
       const oldCourses = (
         await query
           .selectFrom('courses')
           .select(['id'])
-          .where('sourceDocumentId', '=', previous.id)
+          .where('sourceDocumentId', 'in', oldIds)
           .execute()
       ).map((r) => str(r.id));
       // Courses already moved to the new version by an applied revision still count as "from the old version".
@@ -1018,12 +1099,22 @@ export function createRevisionService(
       ).map((r) => str(r.courseId));
       const courseIds = [...new Set([...oldCourses, ...moved])];
       const people = new Set<string>();
+      // V3-11: a course completed against an old version (courseSourceDocumentId, written at completion).
+      for (const row of await query
+        .selectFrom('assignments')
+        .select(['employeeId'])
+        .where('courseSourceDocumentId', 'in', oldIds)
+        .where('status', '=', 'completed')
+        .execute())
+        people.add(str(row.employeeId));
       if (courseIds.length) {
+        // Completions recorded before the version was stamped count by the course's source.
         for (const row of await query
           .selectFrom('assignments')
           .select(['employeeId'])
           .where('courseId', 'in', courseIds)
           .where('status', '=', 'completed')
+          .where('courseSourceDocumentId', 'is', null)
           .execute())
           people.add(str(row.employeeId));
         // Finished every lesson without an assignment.
@@ -1072,6 +1163,179 @@ export function createRevisionService(
         .where('status', '!=', 'leave')
         .execute();
       return active.map((r) => str(r.id)).sort();
+    },
+
+    async estimateAffected(documentId) {
+      const ids = await service.affectedEmployees(documentId);
+      if (!ids.length) return { total: 0, departments: [] };
+      const rows = await database
+        .query()
+        .selectFrom('employees')
+        .select(['departmentId'])
+        .where('id', 'in', ids)
+        .execute();
+      const counts = new Map<string, number>();
+      for (const row of rows)
+        counts.set(
+          str(row.departmentId),
+          (counts.get(str(row.departmentId)) ?? 0) + 1,
+        );
+      return {
+        total: ids.length,
+        departments: [...counts].map(([departmentId, count]) => ({
+          departmentId,
+          count,
+        })),
+      };
+    },
+
+    async courseHistory(ctx, courseId) {
+      const policies = await authorizeAction(
+        ctx.authz,
+        'talent.course',
+        'view',
+      );
+      const course = await database
+        .repository('courses')
+        .withPolicy(policyOf(policies, 'courses'))
+        .findOne({ filter: { id: courseId } });
+      if (!course) throw new HrError('COURSE_NOT_FOUND', 404);
+      const rows = await database
+        .query()
+        .selectFrom('contentRevisions')
+        .selectAll()
+        .where('courseId', '=', courseId)
+        .where('status', '=', 'applied')
+        .execute();
+      const groups = new Map<string, Record<string, unknown>[]>();
+      for (const row of rows) {
+        const key = `${iso(row.appliedAt ?? row.updatedAt)}|${str(row.appliedBy ?? row.reviewedBy ?? '')}`;
+        groups.set(key, [...(groups.get(key) ?? []), row]);
+      }
+      const history = [];
+      for (const [key, list] of groups) {
+        const [appliedAt, by] = key.split('|');
+        const revisions = [];
+        for (const row of list)
+          revisions.push({
+            id: str(row.id),
+            targetTitle:
+              (await targetInfo('lesson', str(row.targetId)))?.title ??
+              str(row.targetId),
+            sectionTitle: nullable(row.sectionTitle),
+            explanation: str(row.explanation),
+          });
+        history.push({
+          appliedAt,
+          appliedByName: await platform.userName(by || null),
+          version:
+            list[0]?.appliedVersion == null
+              ? null
+              : Number(list[0].appliedVersion),
+          revisions,
+        });
+      }
+      return history.sort((a, b) => b.appliedAt.localeCompare(a.appliedAt));
+    },
+
+    async updateChangeNote(ctx, documentId, note) {
+      const policies = await authorizeAction(
+        ctx.authz,
+        'talent.kbDocument',
+        'uploadVersion',
+      );
+      const row = await database
+        .repository('kbDocuments')
+        .withPolicy(policyOf(policies, 'kbDocuments'))
+        .findOne({ filter: { id: documentId } });
+      if (!row) throw new HrError('DOCUMENT_NOT_FOUND', 404);
+      const value = requireString(note, 'INVALID_INPUT', {
+        optional: true,
+        max: 4000,
+      });
+      await database
+        .query()
+        .updateTable('kbDocuments')
+        .set({ changeNote: value, updatedAt: new Date() })
+        .where('id', '=', documentId)
+        .execute();
+      return { changeNote: value };
+    },
+
+    async updateBriefDueDays(ctx, courseId, days) {
+      const policies = await authorizeAction(
+        ctx.authz,
+        'talent.course',
+        'manage',
+      );
+      const row = (await database
+        .repository('courses')
+        .withPolicy(policyOf(policies, 'courses'))
+        .findOne({ filter: { id: courseId } })) as
+        Record<string, unknown> | undefined;
+      if (!row || row.kind !== 'changeBrief')
+        throw new HrError('COURSE_NOT_FOUND', 404);
+      const value = Number(days);
+      if (!Number.isInteger(value) || value < 1 || value > 60)
+        throw new HrError('REVISION_DUE_DAYS_INVALID', 400);
+      await database
+        .query()
+        .updateTable('courses')
+        .set({ revisionDueDays: value, updatedAt: new Date() })
+        .where('id', '=', courseId)
+        .execute();
+      return { revisionDueDays: value };
+    },
+
+    async listBriefs(ctx) {
+      const policies = await authorizeAction(ctx.authz, REVISION, 'view');
+      void policies;
+      const rows = await database
+        .query()
+        .selectFrom('courses')
+        .innerJoin(
+          'kbDocuments',
+          'kbDocuments.id',
+          'courses.briefForDocumentId',
+        )
+        .select([
+          'courses.id as id',
+          'courses.title as title',
+          'courses.published as published',
+          'courses.reviewStatus as reviewStatus',
+          'courses.revisionDueDays as revisionDueDays',
+          'kbDocuments.id as documentId',
+          'kbDocuments.title as documentTitle',
+          'kbDocuments.version as documentVersion',
+        ])
+        .where('courses.kind', '=', 'changeBrief')
+        .execute();
+      const out = [];
+      for (const row of rows) {
+        const assigned = await database
+          .query()
+          .selectFrom('assignments')
+          .select(['id'])
+          .where('courseId', '=', str(row.id))
+          .where('source', '=', 'revision')
+          .execute();
+        out.push({
+          courseId: str(row.id),
+          title: str(row.title),
+          status: bool(row.published) ? 'published' : str(row.reviewStatus),
+          documentId: str(row.documentId),
+          documentTitle: str(row.documentTitle),
+          documentVersion: nullable(row.documentVersion),
+          revisionDueDays:
+            Number(row.revisionDueDays ?? DEFAULT_REVISION_DUE_DAYS) ||
+            DEFAULT_REVISION_DUE_DAYS,
+          affectedEstimate: (
+            await service.affectedEmployees(str(row.documentId))
+          ).length,
+          assigned: assigned.length,
+        });
+      }
+      return out;
     },
 
     async onBriefPublished(courseId) {
@@ -1159,7 +1423,14 @@ export function createRevisionService(
       return { assigned };
     },
 
-    async lowQualityQuestions(minAttempts = 20) {
+    async lowQualityQuestions(options = {}) {
+      // V3-11: the thresholds are the administrator's (题目质量月检).
+      const opts =
+        typeof options === 'number' ? { minAttempts: options } : options;
+      const minAttempts = opts.minAttempts ?? 20;
+      const lowRate = opts.lowRate ?? 0.3;
+      const highRate = opts.highRate ?? 0.98;
+      const minDiscrimination = opts.minDiscrimination ?? 0.1;
       const attempts = await database
         .query()
         .selectFrom('examAttempts')
@@ -1237,9 +1508,9 @@ export function createRevisionService(
             ? rate(sorted.slice(0, n)) - rate(sorted.slice(-n))
             : null;
         if (
-          correctRate < 0.3 ||
-          correctRate > 0.98 ||
-          (discrimination !== null && discrimination < 0.1)
+          correctRate < lowRate ||
+          correctRate > highRate ||
+          (discrimination !== null && discrimination < minDiscrimination)
         )
           result.push({
             id,

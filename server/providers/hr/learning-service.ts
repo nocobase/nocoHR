@@ -19,6 +19,7 @@ import {
 import { recordDraftOutcome } from './draft-snapshots.js';
 import type { ActorContext } from './framework-service.js';
 import type { KnowledgeService } from './knowledge-service.js';
+import type { LearningRules } from './learning-settings.js';
 import { bool, json, type EmployeeSummary, type Platform } from './platform.js';
 import {
   addDays,
@@ -293,10 +294,6 @@ export interface LearningService {
       href: string;
     }[]
   >;
-  cancelOpenAssignments(
-    connection: DatabaseConnection,
-    employeeId: string,
-  ): Promise<void>;
   /** Marks an employee's open exam assignment completed; step 3 calls it when the candidate passes. */
   completeExamAssignments(
     connection: DatabaseConnection,
@@ -316,6 +313,10 @@ export interface LearningServiceDeps {
   readonly onCoursePublished?: () => ((courseId: string) => void) | undefined;
   /** The public base path, such as `/main`, for links the assistant writes. */
   readonly basePath: () => string;
+  /** V3-09: the administrator's learning rules (due-soon days, default watch share). */
+  readonly rules?: () => Promise<
+    Pick<LearningRules, 'dueSoonDays' | 'minWatchPercent'>
+  >;
 }
 
 function iso(value: unknown): string | null {
@@ -547,9 +548,19 @@ export function createLearningService(
     minWatchPercent: number | null;
   }
 
+  async function ruleSet() {
+    return (
+      (await deps.rules?.()) ?? {
+        dueSoonDays: 3,
+        minWatchPercent: DEFAULT_MIN_WATCH_PERCENT,
+      }
+    );
+  }
+
   function parseLessons(
     value: unknown,
     requireExcerpt: boolean,
+    defaultWatchPercent: number = DEFAULT_MIN_WATCH_PERCENT,
   ): LessonInput[] {
     if (!Array.isArray(value)) throw new HrError('COURSE_LESSONS_INVALID', 400);
     if (value.length > 30) throw new HrError('COURSE_LESSONS_INVALID', 400);
@@ -621,7 +632,7 @@ export function createLearningService(
         minWatchPercent:
           contentType === 'video'
             ? (optionalInt(item.minWatchPercent, 10, 100) ??
-              DEFAULT_MIN_WATCH_PERCENT)
+              defaultWatchPercent)
             : null,
       };
     });
@@ -1216,7 +1227,20 @@ export function createLearningService(
     async listCourses(ctx, filters) {
       const policies = await authorizeAction(ctx.authz, COURSE, 'view');
       const q = filters.q?.trim();
-      const rows = await courseRows(policies, q);
+      // V4-13: an English version is reviewed in 译文审核, not listed as a course of its own.
+      const translated = new Set(
+        (
+          await database
+            .query()
+            .selectFrom('courses')
+            .select(['id'])
+            .where('translationOfId', 'is not', null)
+            .execute()
+        ).map((row) => String(row.id)),
+      );
+      const rows = (await courseRows(policies, q)).filter(
+        (row) => !translated.has(String((row as { id: unknown }).id)),
+      );
       let items = await toCourseSummaries(rows);
       if (filters.status)
         items = items.filter((c) => c.status === filters.status);
@@ -1268,7 +1292,11 @@ export function createLearningService(
       const lessons =
         input.lessons === undefined
           ? undefined
-          : parseLessons(input.lessons, existing?.source === 'ai');
+          : parseLessons(
+              input.lessons,
+              existing?.source === 'ai',
+              (await ruleSet()).minWatchPercent,
+            );
       if (competencyIds) await assertCompetencies(competencyIds);
       if (
         sourceDocumentId &&
@@ -1350,7 +1378,11 @@ export function createLearningService(
         max: 4000,
       });
       const competencyIds = ids(input.competencyIds);
-      const lessons = parseLessons(input.lessons, true);
+      const lessons = parseLessons(
+        input.lessons,
+        true,
+        (await ruleSet()).minWatchPercent,
+      );
       if (lessons.length < 1) throw new HrError('COURSE_LESSONS_INVALID', 400);
       await assertCompetencies(competencyIds);
       // A retried call returns the draft it already wrote instead of creating a second one.
@@ -1737,14 +1769,24 @@ export function createLearningService(
         .withPolicy(policyOf(policies, 'assignments'))
         .updateOne({
           filter: { id },
-          values: { status: 'cancelled', cancelledAt: stamp, updatedAt: stamp },
+          values: {
+            status: 'cancelled',
+            cancelledAt: stamp,
+            cancelReason: 'manual',
+            updatedAt: stamp,
+          },
         });
       // Cancelling a path cancels its unfinished steps with it.
       if (row.learningPathId)
         await database
           .query()
           .updateTable('assignments')
-          .set({ status: 'cancelled', cancelledAt: stamp, updatedAt: stamp })
+          .set({
+            status: 'cancelled',
+            cancelledAt: stamp,
+            cancelReason: 'parentCancelled',
+            updatedAt: stamp,
+          })
           .where('parentAssignmentId', '=', id)
           .where('status', 'in', [...OPEN_ASSIGNMENT_STATUSES, 'locked'])
           .execute();
@@ -2265,16 +2307,6 @@ export function createLearningService(
         }));
     },
 
-    async cancelOpenAssignments(connection, employeeId) {
-      const stamp = new Date();
-      await connection.query
-        .updateTable('assignments')
-        .set({ status: 'cancelled', cancelledAt: stamp, updatedAt: stamp })
-        .where('employeeId', '=', employeeId)
-        .where('status', 'in', [...OPEN_ASSIGNMENT_STATUSES, 'locked'])
-        .execute();
-    },
-
     async completeExamAssignments(connection, employeeId, examId) {
       const rows = await connection.query
         .selectFrom('assignments')
@@ -2308,6 +2340,8 @@ export function createLearningService(
         dueSoonReminders: 0,
       };
       const today = platform.currentDate();
+      // V3-09: how many days ahead a task counts as due soon is the administrator's setting.
+      const { dueSoonDays } = await ruleSet();
       const query = database.query();
       const overdue = await query
         .selectFrom('assignments')
@@ -2375,7 +2409,7 @@ export function createLearningService(
         .where('status', 'in', ['notStarted', 'inProgress'])
         .where('optional', '=', false)
         .where('dueDate', '>=', today)
-        .where('dueDate', '<=', addDays(today, 3))
+        .where('dueDate', '<=', addDays(today, dueSoonDays))
         .execute();
       for (const row of soon) {
         const employee = await platform.employee(String(row.employeeId));

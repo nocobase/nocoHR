@@ -16,6 +16,8 @@ export interface LeaveRequestDetail {
   canEdit: boolean;
   isOwnRequest: boolean;
   canCancel: boolean;
+  /** 界面追加字段 values this reader may see (e.g. 工作交接人). */
+  customFields?: Record<string, unknown>;
   approvals: {
     kind: string;
     approverUserId: string | null;

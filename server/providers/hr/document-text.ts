@@ -105,6 +105,18 @@ export function documentKind(
  * cannot be read, or that holds no text, raises an error whose code the
  * knowledge base shows as the parse failure reason.
  */
+/**
+ * A Markdown file's leading YAML block is its properties (title, subject…),
+ * not its body: the demo documents keep their 虚构资料 note there, as the
+ * specs ask, so it never reaches the indexed text.
+ */
+export function stripFrontMatter(markdown: string): string {
+  return markdown.replace(
+    /^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/u,
+    '',
+  );
+}
+
 export async function extractDocumentText(
   bytes: Uint8Array,
   kind: DocumentKind,
@@ -136,7 +148,8 @@ export async function extractDocumentText(
       text = htmlToText(result.value);
     } else {
       const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-      text = kind === 'markdown' ? decoded : markHeadings(decoded);
+      text =
+        kind === 'markdown' ? stripFrontMatter(decoded) : markHeadings(decoded);
     }
   } catch (error) {
     if (error instanceof HrError) throw error;

@@ -93,6 +93,8 @@ export const ATTEMPT_FIELDS = [
   'deviceToken',
   'voidReason',
   'lossByCompetency',
+  // V3-10: when a reset stopped the attempt counting.
+  'resetAt',
   'createdAt',
   'updatedAt',
 ] as const;
@@ -112,6 +114,8 @@ export const CERTIFICATION_FIELDS = [
   'active',
   'kind',
   'issuingAuthority',
+  // V3-10 任职资格: the position this certification qualifies for.
+  'qualifiesPositionId',
   'createdAt',
   'updatedAt',
 ] as const;
@@ -268,6 +272,7 @@ export const examResource = defineCompositeResource('talent.exam', (r) =>
             'status',
             'gradedBy',
             'itemResults',
+            'lossByCompetency',
             'updatedAt',
           ]),
         ),
@@ -278,8 +283,18 @@ export const examResource = defineCompositeResource('talent.exam', (r) =>
         .grant('exams', read('exams', EXAM_FIELDS))
         .grant(
           'examAttempts',
-          read('examAttempts', ATTEMPT_FIELDS).update(['status', 'updatedAt']),
+          read('examAttempts', ATTEMPT_FIELDS).update([
+            'status',
+            'resetAt',
+            'updatedAt',
+          ]),
         ),
+    )
+    // V3-10: the exam → competency rule (score share and rates), an application setting.
+    .action('configure', (a) =>
+      a
+        .title(label('authz.exam.configure'))
+        .grant('exams', read('exams', EXAM_FIELDS)),
     )
     // V2 step 6: reviewing attempts with integrity flags, and voiding one (people only; no AI tool does this).
     .action('reviewIntegrity', (a) =>
@@ -526,6 +541,72 @@ export const demoBatchResource = defineCompositeResource('demo.batch', (r) =>
     ),
 );
 
+/**
+ * V3-10 外部证书登记: an employee registers their own external certificate
+ * (or HR registers one for them) with a scan; only HR verifies, never the
+ * holder. Verification brings the certificate into its lifecycle.
+ */
+export const externalCertificateResource = defineCompositeResource(
+  'talent.externalCertificate',
+  (r) =>
+    r
+      .title(label('authz.externalCertificate.title'))
+      .action('register', (a) =>
+        a
+          .title(label('authz.externalCertificate.register'))
+          .grant(
+            'employees',
+            read('employees', ['id', 'name', 'departmentId', 'userId']),
+          )
+          .grant('certifications', read('certifications', CERTIFICATION_FIELDS))
+          .grant(
+            'employeeCertificates',
+            write('employeeCertificates', CERTIFICATE_FIELDS),
+          ),
+      )
+      .action('verify', (a) =>
+        a
+          .title(label('authz.externalCertificate.verify'))
+          .grant(
+            'employees',
+            read('employees', ['id', 'name', 'departmentId', 'userId']),
+          )
+          .grant('certifications', read('certifications', CERTIFICATION_FIELDS))
+          .grant(
+            'employeeCertificates',
+            read('employeeCertificates', CERTIFICATE_FIELDS).update([
+              'status',
+              'verifyStatus',
+              'verifiedBy',
+              'verifiedAt',
+              'verifyNote',
+              'supersededById',
+              'updatedAt',
+            ]),
+          ),
+      ),
+);
+
+/** V3-10 考官: suggested scores for short answers, and a candidate's own result explained. */
+export const examinerResource = defineCompositeResource(
+  'talent.examiner',
+  (r) =>
+    r
+      .title(label('authz.examiner.title'))
+      .action('use', (a) =>
+        a
+          .title(label('authz.examiner.use'))
+          .grant('examAttempts', read('examAttempts', ATTEMPT_FIELDS)),
+      )
+      .action('configure', (a) =>
+        a
+          .title(label('authz.actions.configure'))
+          .grant('aiAutomationSettings', automationSettingsWrite)
+          .grant('aiTaskRuns', automationRunsRead)
+          .grant('aiTaskRunItems', automationRunItemsRead),
+      ),
+);
+
 export const EXAM_COLLECTIONS: readonly { name: string; title: string }[] = [
   { name: 'questions', title: 'collections.questions' },
   { name: 'questionCompetencies', title: 'collections.questionCompetencies' },
@@ -547,6 +628,8 @@ export const EXAM_COMPOSITES = [
   trainingReportResource,
   certificationStewardResource,
   demoBatchResource,
+  externalCertificateResource,
+  examinerResource,
 ] as const;
 
 /** Collections whose rows belong to one employee and follow the employee scopes. */

@@ -17,8 +17,11 @@ import { cn } from '@/lib/utils';
 import { CategoryBadge } from './badges.js';
 import type { GapRow } from './types.js';
 
+/** V3-08: `assessed: false` marks a competency nobody has assessed (未评定), distinct from an assessment of 0. */
+export type GapTableRow = GapRow & { readonly assessed?: boolean };
+
 export interface GapTableProps {
-  readonly rows: readonly GapRow[];
+  readonly rows: readonly GapTableRow[];
   /** Rendered in a trailing column, such as an "Assess" button. */
   readonly action?: (row: GapRow) => ReactNode;
   /** Rendered under the competency name, such as links to courses that close the gap. */
@@ -87,7 +90,13 @@ export function GapTable({ rows, action, extra }: GapTableProps): ReactElement {
                     {row.requiredLevel ?? '—'}
                   </TableCell>
                   <TableCell className='text-right tabular-nums'>
-                    {row.currentLevel}
+                    {row.assessed === false ? (
+                      <span className='text-muted-foreground'>
+                        {t('talent.competencyExt.unassessed')}
+                      </span>
+                    ) : (
+                      row.currentLevel
+                    )}
                   </TableCell>
                   <TableCell
                     className={cn(

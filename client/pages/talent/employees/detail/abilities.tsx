@@ -9,6 +9,11 @@ import {
 } from '@/components/talent/assessment-dialog';
 import { PracticeRecordsCard } from '@/components/talent/practice-records';
 import { AssessmentHistory } from '@/components/talent/assessment-history';
+import { useCompetencyView } from '@/components/talent/competency-types';
+import {
+  GapSummaryText,
+  TargetGapCards,
+} from '@/components/talent/competency-view';
 import { useGapRecommendations } from '@/components/talent/gap-recommendations';
 import { GapTable, RowActionButton } from '@/components/talent/gap-table';
 import { AbilityRadarCard } from '@/components/talent/growth';
@@ -35,14 +40,16 @@ interface CompetencyListItem {
   levels: { level: number; title: string; behaviors: string }[];
 }
 
-/** Tab "能力": requirements against current levels, assessing, and the assessment history. */
+/**
+ * Tab "能力": requirements against current levels (未评定 marked), the
+ * 目标岗位对标 blocks of active development targets (V3-08), assessing, and
+ * the assessment history.
+ */
 export default function EmployeeAbilitiesTab(): ReactElement {
   const { t } = useTranslation();
   const { detail, reload } = useOutletContext<DetailOutletContext>();
   const id = encodeURIComponent(detail.employee.id);
-  const gaps = useRemote<{ rows: GapRow[]; positionTitle: string | null }>(
-    `talent/employees/${id}/gaps`,
-  );
+  const gaps = useCompetencyView(detail.employee.id);
   const recommendations = useGapRecommendations(
     detail.employee.id,
     gaps.data?.rows,
@@ -86,18 +93,31 @@ export default function EmployeeAbilitiesTab(): ReactElement {
     setOpen(true);
   };
 
+  const assessAction = detail.can.assess
+    ? (row: GapRow) => (
+        <RowActionButton onClick={() => openFor(row)}>
+          {t('talent.assess.action')}
+        </RowActionButton>
+      )
+    : undefined;
+
   return (
     <div className='space-y-4'>
       <Card>
         <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
           <div>
             <CardTitle>{t('talent.me.gaps')}</CardTitle>
-            <CardDescription>
-              {gaps.data?.positionTitle
-                ? t('talent.me.gapsDescription', {
-                    position: gaps.data.positionTitle,
-                  })
-                : t('talent.me.noPosition')}
+            <CardDescription className='flex flex-wrap gap-x-3 gap-y-1'>
+              <span>
+                {gaps.data?.positionTitle
+                  ? t('talent.me.gapsDescription', {
+                      position: gaps.data.positionTitle,
+                    })
+                  : t('talent.me.noPosition')}
+              </span>
+              {gaps.data?.positionTitle ? (
+                <GapSummaryText summary={gaps.data.summary} />
+              ) : null}
             </CardDescription>
           </div>
           {detail.can.assess ? (
@@ -116,15 +136,7 @@ export default function EmployeeAbilitiesTab(): ReactElement {
             <GapTable
               rows={gaps.data.rows}
               extra={recommendations.extra}
-              action={
-                detail.can.assess
-                  ? (row) => (
-                      <RowActionButton onClick={() => openFor(row)}>
-                        {t('talent.assess.action')}
-                      </RowActionButton>
-                    )
-                  : undefined
-              }
+              action={assessAction}
             />
           ) : (
             <p className='text-sm text-muted-foreground'>
@@ -133,6 +145,10 @@ export default function EmployeeAbilitiesTab(): ReactElement {
           )}
         </CardContent>
       </Card>
+      <TargetGapCards
+        targets={gaps.data?.targets ?? []}
+        action={assessAction}
+      />
       <AbilityRadarCard rows={gaps.data?.rows} />
       {detail.can.viewAssessments ? (
         <Card>

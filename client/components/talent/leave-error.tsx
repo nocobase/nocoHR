@@ -47,6 +47,7 @@ export function LeaveError({
     'ATTENDANCE_NOT_INITIALIZED',
     'INVALID_INPUT',
     'IDEMPOTENCY_CONFLICT',
+    'CUSTOM_FIELD_INVALID',
   ] as const;
   const key = codes.find((item) => item === code);
   const message = key

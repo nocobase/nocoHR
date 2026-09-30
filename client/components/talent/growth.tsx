@@ -5,6 +5,8 @@ import {
   BriefcaseIcon,
   ClipboardCheckIcon,
   GaugeIcon,
+  // V4-12
+  ClipboardListIcon,
   PrinterIcon,
 } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -42,6 +44,8 @@ import {
 import { cn } from '@/lib/utils';
 
 import { CertificateStatusBadge } from './certificate-card.js';
+// V4-14
+import { LicensedCertificateGrants } from './licensed-certificate-grants.js';
 import { printCertificate } from './certificate-print.js';
 import type { Certificate } from './exam-types.js';
 import { BlockSkeleton, LoadError } from './states.js';
@@ -68,7 +72,8 @@ interface CertificateWall {
 }
 
 interface TimelineEntry {
-  kind: 'jobEvent' | 'course' | 'exam' | 'certificate' | 'assessment';
+  // V4-12: 'review' is 考核结果发布 (the cycle's name only).
+  kind: 'jobEvent' | 'course' | 'exam' | 'certificate' | 'assessment' | 'review';
   at: string;
   title: string;
   detail: string | null;
@@ -198,6 +203,10 @@ export function CertificateWallCard({
             ))}
           </div>
         )}
+        {/* V4-14: what the holder's own certificates allow, with the way in (licensed-certificate-grants.tsx). */}
+        <div className='mt-3 empty:hidden'>
+          <LicensedCertificateGrants employeeId={employeeId} />
+        </div>
       </CardContent>
     </Card>
   );
@@ -318,6 +327,8 @@ const TIMELINE_ICONS = {
   exam: ClipboardCheckIcon,
   certificate: AwardIcon,
   assessment: GaugeIcon,
+  // V4-12
+  review: ClipboardListIcon,
 } as const;
 
 /** 成长时间线: job changes, completed courses, passed exams, certificates and assessments, newest first. */
@@ -347,7 +358,7 @@ export function GrowthTimelineCard({
           </p>
         ) : (
           <ol className='relative space-y-4 border-l pl-5'>
-            {timeline.data.map((entry, index) => {
+            {timeline.data.map((entry) => {
               const Icon = TIMELINE_ICONS[entry.kind];
               const title =
                 entry.kind === 'jobEvent'
@@ -355,7 +366,8 @@ export function GrowthTimelineCard({
                   : entry.title;
               return (
                 <li
-                  key={`${entry.kind}-${entry.at}-${index}`}
+                  // Entries have no id; kind, time and title together identify one.
+                  key={`${entry.kind}-${entry.at}-${entry.title}-${entry.detail ?? ''}`}
                   className='relative'
                 >
                   <span className='absolute top-0.5 -left-[1.95rem] flex size-5 items-center justify-center rounded-full border bg-background'>

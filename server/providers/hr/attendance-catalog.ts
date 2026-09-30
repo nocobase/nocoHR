@@ -65,6 +65,8 @@ export const attendanceRuleSchema = z
     monthlyOvertimeAlertHours: z.number().int().min(0).max(744).default(36),
     minRestHours: z.number().int().min(0).max(72).default(11),
     maxConsecutiveNights: z.number().int().min(0).max(31).default(5),
+    /** 允许说明豁免: an approved 考勤异常说明 keeps that late / early day out of the monthly counts. */
+    exceptionExcusable: z.boolean().default(true),
     active: z.boolean().default(true),
   })
   .strict();

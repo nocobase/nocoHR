@@ -87,6 +87,12 @@ export type AIChatProviderProps = PropsWithChildren<{
   defaultEmployee?: string;
   defaultTasks?: AIEmployeeTask[];
   employeeTasks?: AIEmployeeTasks;
+  /**
+   * NocoHR: a greeting per employee username for this chat only. The HR
+   * assistant greets employees about contracts and leave; the 人事设置 drafting
+   * sheet talks to administrators, so it passes its own.
+   */
+  employeeGreetings?: Readonly<Record<string, string>>;
   webSearch?: boolean;
 }>;
 
@@ -103,6 +109,7 @@ export function AIChatProvider({
   defaultEmployee,
   defaultTasks = EMPTY_TASKS,
   employeeTasks = EMPTY_EMPLOYEE_TASKS,
+  employeeGreetings,
   webSearch = false,
   children,
 }: AIChatProviderProps) {
@@ -288,7 +295,15 @@ export function AIChatProvider({
       dispatch({ type: 'select-model', model: configuredModelKey });
     }
   }, [configuredModelKey, state.selectedModel]);
-  const currentEmployee = configuredEmployee ?? UNAVAILABLE_EMPLOYEE;
+  const baseEmployee = configuredEmployee ?? UNAVAILABLE_EMPLOYEE;
+  const greetingOverride = employeeGreetings?.[baseEmployee.username];
+  const currentEmployee = useMemo(
+    () =>
+      greetingOverride
+        ? { ...baseEmployee, greeting: greetingOverride }
+        : baseEmployee,
+    [baseEmployee, greetingOverride],
+  );
   const currentModel = configuredModel ?? UNAVAILABLE_MODEL;
   const canSend = Boolean(
     configuredEmployee &&

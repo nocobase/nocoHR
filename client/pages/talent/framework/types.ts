@@ -15,6 +15,12 @@ export interface Position {
   readonly grade: string | null;
   readonly responsibilities: string | null;
   readonly aiDraftedAt: string | null;
+  /** V3-08 岗位说明书: the uploaded file, its extracted text and the extraction state. */
+  readonly jdFileId?: string | null;
+  readonly jdFilename?: string | null;
+  readonly jdText?: string | null;
+  readonly jdStatus?: 'pending' | 'ready' | 'failed' | null;
+  readonly jdError?: string | null;
   readonly active: boolean;
   readonly sortOrder: number;
 }

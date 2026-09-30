@@ -3,28 +3,32 @@ import { defineDatabasePermission } from '@nocobase/app-plugin-authorization/ser
 import { label } from './shared.js';
 
 const employees = defineDatabasePermission((p) =>
-  p.collection('employees').read([
-    'id',
-    'employeeNo',
-    'name',
-    'departmentId',
-    'status',
-    'hireDate',
-    'leaveDate',
-  ]),
+  p
+    .collection('employees')
+    .read([
+      'id',
+      'employeeNo',
+      'name',
+      'departmentId',
+      'status',
+      'hireDate',
+      'leaveDate',
+    ]),
 );
 const shifts = defineDatabasePermission((p) =>
-  p.collection('shifts').read([
-    'id',
-    'code',
-    'title',
-    'startTime',
-    'endTime',
-    'breakMinutes',
-    'isNight',
-    'departmentIds',
-    'active',
-  ]),
+  p
+    .collection('shifts')
+    .read([
+      'id',
+      'code',
+      'title',
+      'startTime',
+      'endTime',
+      'breakMinutes',
+      'isNight',
+      'departmentIds',
+      'active',
+    ]),
 );
 const schedules = defineDatabasePermission((p) =>
   p
@@ -39,6 +43,7 @@ const schedules = defineDatabasePermission((p) =>
       'replacementSuggestion',
       'publishedBy',
       'publishedAt',
+      'publishedShiftId',
       'updatedAt',
     ]),
 );
@@ -52,6 +57,7 @@ const SCHEDULE_WRITE_FIELDS = [
   'replacementSuggestion',
   'publishedBy',
   'publishedAt',
+  'publishedShiftId',
   'createdAt',
   'updatedAt',
 ];
@@ -75,7 +81,9 @@ export const scheduleResource = defineCompositeResource(
           .grant('shifts', shifts)
           .grant(
             'schedules',
-            schedules.create(SCHEDULE_WRITE_FIELDS).update(SCHEDULE_WRITE_FIELDS),
+            schedules
+              .create(SCHEDULE_WRITE_FIELDS)
+              .update(SCHEDULE_WRITE_FIELDS),
           ),
       )
       .action('publish', (a) =>

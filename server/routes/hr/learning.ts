@@ -16,8 +16,16 @@ import {
   pathServiceToken,
   practiceServiceToken,
   sessionServiceToken,
+  // V4-13
+  talentReviewServicesToken,
 } from '../../providers/hr/tokens.js';
-import { actor, installErrorHandler, readJson, type HrEnv } from './shared.js';
+import {
+  actor,
+  installErrorHandler,
+  locale,
+  readJson,
+  type HrEnv,
+} from './shared.js';
 
 function contentDisposition(filename: string): string {
   const ascii = filename.replace(/[^\x20-\x7e]/gu, '_').replace(/["\\]/gu, '_');
@@ -144,6 +152,51 @@ export const learningApiRoutes: AppApiRouteContribution<Application> =
         ),
       }),
     );
+
+    // ---------- V1-04: versions, reviews and conflicts ----------
+    routes.post('/kb/documents/:id/versions', async (c) =>
+      c.json(
+        {
+          data: await knowledge.uploadVersion(
+            actor(c),
+            c.req.param('id'),
+            await readJson(c),
+          ),
+        },
+        201,
+      ),
+    );
+    routes.post('/kb/documents/:id/reviewed', async (c) =>
+      c.json({
+        data: await knowledge.markReviewed(
+          actor(c),
+          c.req.param('id'),
+          await readJson(c),
+        ),
+      }),
+    );
+    routes.get('/kb/conflicts', async (c) =>
+      c.json({
+        data: await knowledge.listConflicts(
+          actor(c),
+          c.req.query('status') || 'open',
+        ),
+      }),
+    );
+    routes.post('/kb/conflicts/:id/:decision', async (c) => {
+      const decision = c.req.param('decision');
+      if (decision !== 'resolve' && decision !== 'ignore')
+        throw new HrError('NOT_FOUND', 404);
+      const body = await readJson(c).catch(() => ({}));
+      return c.json({
+        data: await knowledge.handleConflict(
+          actor(c),
+          c.req.param('id'),
+          decision === 'resolve' ? 'resolved' : 'ignored',
+          isRecord(body) && typeof body.note === 'string' ? body.note : null,
+        ),
+      });
+    });
 
     // ---------- Courses ----------
     routes.get('/courses', async (c) =>
@@ -333,7 +386,15 @@ export const learningApiRoutes: AppApiRouteContribution<Application> =
       });
     });
     routes.get('/learning/courses/:id', async (c) =>
-      c.json({ data: await learning.openCourse(actor(c), c.req.param('id')) }),
+      c.json({
+        // V4-13: an English reader gets the confirmed translation (ids unchanged, so progress is the same).
+        data: await app.container
+          .resolve(talentReviewServicesToken)
+          .translations.localizeCourseView(
+            await learning.openCourse(actor(c), c.req.param('id')),
+            locale(c),
+          ),
+      }),
     );
     routes.post('/learning/progress', async (c) =>
       c.json({

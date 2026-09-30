@@ -11,6 +11,7 @@ import { lockAttendanceSettings } from './attendance-settings.js';
 import {
   attendanceConfigDefaults,
   attendanceConfigSchemas,
+  decodeSetting,
 } from './attendance-config.js';
 import { calculateAnnualLeave } from './annual-leave.js';
 import {
@@ -261,7 +262,7 @@ export function createLeaveService(
           'personnelSettings',
         ).findOne({ filter: { id: 'attendance.annualLeave' } });
         const bands = attendanceConfigSchemas.annualLeave.parse(
-          config?.value ?? attendanceConfigDefaults.annualLeave,
+          decodeSetting(config?.value) ?? attendanceConfigDefaults.annualLeave,
         ).bands;
         const balances = scoped(connection, policies, 'leaveBalances');
         const created: string[] = [];
@@ -328,6 +329,123 @@ export function createLeaveService(
           }
         }
         return { created, skippedEmployeeIds: skipped, needsCareerStartDate };
+      });
+    },
+    /**
+     * System initialization (入职事件、每年 1 月 1 日): the same rules as the
+     * HR action, for the given employees, without an actor. Existing balances
+     * are never touched. On 1 January the previous year's unused annual leave
+     * does not carry over unless HR adds it (no carryover rule is configured).
+     */
+    async initializeTrusted(input: {
+      year: number;
+      asOf: string;
+      employeeIds?: readonly string[];
+    }) {
+      return database.transaction(async (connection) => {
+        let query = connection.query
+          .selectFrom('employees')
+          .select(['id', 'status', 'hireDate', 'careerStartDate']);
+        if (input.employeeIds)
+          query = query.where('id', 'in', [...input.employeeIds]);
+        const employees = await query.execute();
+        const types = await connection.query
+          .selectFrom('leaveTypes')
+          .select(['id', 'balanceRule'])
+          .where('active', '=', true)
+          .execute();
+        const config = await connection.query
+          .selectFrom('personnelSettings')
+          .select(['value'])
+          .where('id', '=', 'attendance.annualLeave')
+          .executeTakeFirst();
+        let stored: unknown =
+          decodeSetting(config?.value) ?? attendanceConfigDefaults.annualLeave;
+        for (let i = 0; i < 2 && typeof stored === 'string'; i++)
+          stored = JSON.parse(stored);
+        const bands = attendanceConfigSchemas.annualLeave.parse(stored).bands;
+        let created = 0;
+        for (const employee of employees) {
+          const hire = employee.hireDate
+            ? str(employee.hireDate).slice(0, 10)
+            : null;
+          if (
+            !['active', 'probation'].includes(str(employee.status)) ||
+            !hire ||
+            hire > input.asOf
+          )
+            continue;
+          for (const type of types) {
+            if (
+              type.balanceRule !== 'annualBySeniority' &&
+              type.balanceRule !== 'earned'
+            )
+              continue;
+            const exists = await connection.query
+              .selectFrom('leaveBalances')
+              .select(['id'])
+              .where('employeeId', '=', str(employee.id))
+              .where('leaveTypeId', '=', str(type.id))
+              .where('year', '=', input.year)
+              .executeTakeFirst();
+            if (exists) continue;
+            const entitled =
+              type.balanceRule === 'annualBySeniority'
+                ? calculateAnnualLeave({
+                    asOf: input.asOf,
+                    hireDate: hire,
+                    careerStartDate: employee.careerStartDate
+                      ? str(employee.careerStartDate).slice(0, 10)
+                      : null,
+                    bands,
+                  }).entitled
+                : 0;
+            const stamp = new Date();
+            await connection.query
+              .insertInto('leaveBalances')
+              .values({
+                id: newId(),
+                employeeId: str(employee.id),
+                leaveTypeId: str(type.id),
+                year: input.year,
+                entitled,
+                carriedOver: 0,
+                used: 0,
+                pending: 0,
+                expiresAt: null,
+                adjustments: [],
+                createdAt: stamp,
+                updatedAt: stamp,
+              })
+              .execute();
+            created += 1;
+          }
+        }
+        return { created };
+      });
+    },
+
+    /** 结转失效: carried-over days past their expiry are cleared (used first: only the unused rest). */
+    async expireCarryover(asOf: string) {
+      return database.transaction(async (connection) => {
+        const rows = await connection.query
+          .selectFrom('leaveBalances')
+          .selectAll()
+          .where('expiresAt', '<', asOf)
+          .where('carriedOver', '>', 0)
+          .execute();
+        for (const row of rows) {
+          // Carried-over days are consumed first, so what is left of them is min(carried, available).
+          const used = Number(row.used) + Number(row.pending);
+          const remaining = Math.max(0, Number(row.carriedOver) - used);
+          const kept = Number(row.carriedOver) - remaining;
+          await connection.query
+            .updateTable('leaveBalances')
+            .set({ carriedOver: kept, updatedAt: new Date() })
+            .where('id', '=', str(row.id))
+            .execute();
+        }
+        return { expired: rows.length };
       });
     },
     async adjust(ctx: ActorContext, id: string, input: unknown) {

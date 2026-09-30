@@ -3,7 +3,7 @@ import { clientFileRepositoryManagerToken } from '@nocobase/app-plugin-file/clie
 import { useTranslation } from '@nocobase/i18n/client';
 import { FileIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
-import { useOutletContext } from 'react-router';
+import { Outlet, useOutletContext } from 'react-router';
 
 import { EmployeeBasics } from '@/components/talent/employee-info';
 import {
@@ -12,6 +12,11 @@ import {
 } from '@/components/talent/growth';
 import { LearningRecordsCard } from '@/components/talent/learning-records';
 import { errorMessage } from '@/components/talent/errors';
+import { CustomFieldValues } from '@/components/talent/custom-fields';
+import {
+  useCustomFieldDefinitions,
+  type CustomValues,
+} from '@/components/talent/custom-field-model';
 import { ProfileSections } from '@/components/talent/profile-sections';
 import { BlockSkeleton, LoadError } from '@/components/talent/states';
 import type { EmployeeProfile } from '@/components/talent/types';
@@ -69,7 +74,8 @@ const KEYS: Record<Kind, readonly string[]> = {
 export default function EmployeeProfileTab(): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
-  const { detail, departmentTitle } = useOutletContext<DetailOutletContext>();
+  const outlet = useOutletContext<DetailOutletContext>();
+  const { detail, departmentTitle } = outlet;
   const id = encodeURIComponent(detail.employee.id);
   const profile = useRemote<EmployeeProfile>(
     detail.can.viewProfile || detail.can.viewContacts
@@ -96,6 +102,8 @@ export default function EmployeeProfileTab(): ReactElement {
 
   return (
     <div className='space-y-4'>
+      {/* 更正任职信息 opens here as a dialog over this tab. */}
+      <Outlet context={outlet} />
       <Card>
         <CardHeader>
           <CardTitle>{t('talent.detail.basic')}</CardTitle>
@@ -108,6 +116,10 @@ export default function EmployeeProfileTab(): ReactElement {
           />
         </CardContent>
       </Card>
+      <CustomFieldsCard
+        values={detail.employee.customFields}
+        sensitive={detail.can.viewSensitive}
+      />
       <CertificateWallCard employeeId={detail.employee.id} />
       <div className='grid gap-4 lg:grid-cols-2'>
         <LearningRecordsCard employeeId={detail.employee.id} />
@@ -445,6 +457,37 @@ function Attachments({
             {t('talent.common.none')}
           </p>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** 界面追加字段 with the detail placement; a deactivated field still shows a stored value. */
+function CustomFieldsCard({
+  values,
+  sensitive,
+}: {
+  values: CustomValues | undefined;
+  /** Whether the viewer may read this record's sensitive fields; hidden ones are not listed at all. */
+  sensitive: boolean;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  const { definitions } = useCustomFieldDefinitions(
+    'employees',
+    'detail',
+    true,
+  );
+  const shown = definitions.filter(
+    (d) => (sensitive || !d.sensitive) && (d.active || values?.[d.key] != null),
+  );
+  if (!shown.length) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('customFields.sectionTitle')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <CustomFieldValues definitions={shown} values={values} />
       </CardContent>
     </Card>
   );

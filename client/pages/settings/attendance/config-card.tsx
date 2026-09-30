@@ -1,36 +1,30 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { useRef, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { useRemote } from '@/components/talent/use-remote';
 import { BlockSkeleton } from '@/components/talent/states';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Spinner } from '@/components/ui/spinner';
-import { toast } from '@/components/ui/toast';
+import { CardForm } from './card-form.js';
+import { useSave } from './use-save.js';
 import { SettingsError } from './feedback.js';
+import {
+  ApprovalForm,
+  LeaveUnitsForm,
+  OvertimeForm,
+  RotationsForm,
+} from './section-forms.js';
 import {
   SETTINGS_API,
   type Configuration,
@@ -94,111 +88,39 @@ function ConfigLoader({
         reload={reload}
       />
     );
+  if (section === 'rotations')
+    return (
+      <RotationsForm
+        initial={remote.data as Versioned<Configuration['rotations']>}
+        reload={reload}
+      />
+    );
+  if (section === 'leaveUnits')
+    return (
+      <LeaveUnitsForm
+        initial={remote.data as Versioned<Configuration['leaveUnits']>}
+        reload={reload}
+      />
+    );
+  if (section === 'overtime')
+    return (
+      <OvertimeForm
+        initial={remote.data as Versioned<Configuration['overtime']>}
+        reload={reload}
+      />
+    );
+  if (section === 'approval')
+    return (
+      <ApprovalForm
+        initial={remote.data as Versioned<Configuration['approval']>}
+        reload={reload}
+      />
+    );
   return (
     <CalendarForm
       initial={remote.data as Versioned<Configuration['calendar']>}
       reload={reload}
     />
-  );
-}
-
-function useSave<T>(section: Section, initial: Versioned<T>) {
-  const api = useApiClient();
-  const { t } = useTranslation();
-  const revisionRef = useRef(initial.revision);
-  const writingRef = useRef(false);
-  const [error, setError] = useState<unknown>();
-  const save = async (value: T): Promise<T | undefined> => {
-    if (writingRef.current) return;
-    writingRef.current = true;
-    setError(undefined);
-    try {
-      const response = await api.request<{ data: Versioned<T> }>({
-        path: `${SETTINGS_API}/config/${section}`,
-        method: 'PATCH',
-        json: { value, revision: revisionRef.current },
-      });
-      revisionRef.current = response.data.revision;
-      toast.add({
-        type: 'success',
-        title: t('attendance.leave.saved', {
-          name: t(`attendance.settings.${section}`),
-        }),
-      });
-      return response.data.value;
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      writingRef.current = false;
-    }
-  };
-  return { save, error };
-}
-
-function CardForm({
-  children,
-  submit,
-  pending,
-  reload,
-  error,
-}: {
-  children: ReactNode;
-  submit: () => Promise<void>;
-  pending: boolean;
-  reload: () => void;
-  error: unknown;
-}) {
-  const { t } = useTranslation();
-  const [confirm, setConfirm] = useState(false);
-  return (
-    <>
-      <form
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!pending) void submit();
-        }}
-      >
-        <CardContent className='space-y-4'>
-          {error ? <SettingsError error={error} /> : null}
-          <fieldset disabled={pending} className='space-y-4'>
-            {children}
-          </fieldset>
-        </CardContent>
-        <CardFooter className='justify-end gap-2 pt-4'>
-          <Button
-            type='button'
-            variant='outline'
-            disabled={pending}
-            onClick={() => setConfirm(true)}
-          >
-            {t('attendance.settings.reload')}
-          </Button>
-          <Button type='submit' variant='outline' disabled={pending}>
-            {pending ? <Spinner data-icon='inline-start' /> : null}
-            {t('actions.save')}
-          </Button>
-        </CardFooter>
-      </form>
-      <AlertDialog open={confirm} onOpenChange={setConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('attendance.settings.reloadTitle')}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('attendance.settings.reloadDescription')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction variant='destructive' onClick={reload}>
-              {t('attendance.settings.reload')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
   );
 }
 

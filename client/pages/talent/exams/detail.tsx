@@ -75,7 +75,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 
 import { DIFFICULTIES, QUESTION_TYPES } from '../questions/options.js';
+import { DEFAULT_ANTI_CHEAT } from './anti-cheat.js';
+import { AntiCheatCard } from './anti-cheat-card.js';
 import { CandidatesPanel, GradingPanel } from './grading.js';
+import { IntegrityPanel } from './integrity.js';
 import type { ExamsOutletContext } from './types.js';
 
 /** Routes `/talent/exams/new` and `/talent/exams/:examId`. */
@@ -140,6 +143,11 @@ function ExamBody({
     passScore: String(exam?.passScore ?? 80),
     showAnswersAfter: exam?.showAnswersAfter ?? 'afterPass',
   });
+  // V3-10 10B: 防作弊 and 简答题 AI 建议分.
+  const [antiCheat, setAntiCheat] = useState(
+    exam?.antiCheat ?? DEFAULT_ANTI_CHEAT,
+  );
+  const [aiGrading, setAiGrading] = useState(exam?.aiGrading ?? true);
   const [paper, setPaper] = useState<PaperRow[]>(
     () =>
       exam?.questions.map((q) => ({
@@ -193,7 +201,7 @@ function ExamBody({
         .catch(() => undefined);
     }, 300);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps -- rulesKey stands for rules.
   }, [rulesKey, settings.paperMode, canEdit, api]);
 
   const setField = (key: keyof typeof settings, value: string) => {
@@ -210,6 +218,8 @@ function ExamBody({
         durationMinutes: Number(settings.durationMinutes),
         maxAttempts: Number(settings.maxAttempts),
         passScore: Number(settings.passScore),
+        antiCheat,
+        aiGrading,
         questions:
           settings.paperMode === 'fixed'
             ? paper.map((p) => ({ questionId: p.questionId, score: p.score }))
@@ -388,6 +398,16 @@ function ExamBody({
                 ) : null}
               </TabsTrigger>
             ) : null}
+            {exam.can.reviewIntegrity ? (
+              <TabsTrigger value='integrity'>
+                {t('talent.examIntegrity.tab')}
+                {exam.flagged ? (
+                  <Badge variant='destructive' className='ml-1'>
+                    {exam.flagged}
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
+            ) : null}
             {exam.can.grade ? (
               <TabsTrigger value='candidates'>
                 {t('talent.exams.tabs.candidates')}
@@ -400,6 +420,12 @@ function ExamBody({
 
       {tab === 'grading' && exam ? (
         <GradingPanel examId={exam.id} onGraded={onChanged} />
+      ) : tab === 'integrity' && exam ? (
+        <IntegrityPanel
+          examId={exam.id}
+          canVoid={exam.can.voidAttempt}
+          onChanged={onChanged}
+        />
       ) : tab === 'candidates' && exam ? (
         <CandidatesPanel examId={exam.id} canReset={exam.can.resetAttempts} />
       ) : (
@@ -532,6 +558,20 @@ function ExamBody({
               </FieldGroup>
             </CardContent>
           </Card>
+
+          <AntiCheatCard
+            value={antiCheat}
+            aiGrading={aiGrading}
+            disabled={!canEdit}
+            onChange={(value) => {
+              setAntiCheat(value);
+              setDirty(true);
+            }}
+            onAiGradingChange={(value) => {
+              setAiGrading(value);
+              setDirty(true);
+            }}
+          />
 
           <Card>
             <CardHeader className='flex flex-row items-center justify-between gap-2'>
@@ -714,6 +754,7 @@ function ExamBody({
                           setDirty(true);
                         };
                         return (
+                          // eslint-disable-next-line @eslint-react/no-array-index-key -- rules have no id; their position is their identity.
                           <TableRow key={index}>
                             <TableCell>
                               <NativeSelect

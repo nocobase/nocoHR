@@ -13,7 +13,13 @@ import {
   ShieldCheckIcon,
 } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router';
+import {
+  Link,
+  useNavigate,
+  useOutletContext,
+  useParams,
+  useSearchParams,
+} from 'react-router';
 
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
@@ -25,6 +31,10 @@ import {
 } from '@/components/talent/certificate-card';
 import { printCertificate } from '@/components/talent/certificate-print';
 import { errorMessage } from '@/components/talent/errors';
+import {
+  examDeviceHeaders,
+  rememberDevice,
+} from '@/components/talent/exam-device';
 import type {
   Certificate,
   CertificationDetail,
@@ -36,6 +46,10 @@ import {
 } from '@/components/talent/states';
 import { useLookups } from '@/components/talent/use-lookups';
 import { useRemote } from '@/components/talent/use-remote';
+// V4-13
+import { CertificationPracticalsCard } from '@/components/talent/talent-review-cert-practicals';
+// V4-14
+import { LicensedCertificateGrants } from '@/components/talent/licensed-certificate-grants';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -67,6 +81,7 @@ import { toast } from '@/components/ui/toast';
 
 import { DEMO_PAGES } from '../../demo/pages.js';
 import { CertificationDialog } from './certification-dialog.js';
+import { QualificationDossier } from './dossier.js';
 import type { CertificationsOutletContext } from './types.js';
 
 /** Route `/talent/certifications/:certificationId`. */
@@ -118,10 +133,15 @@ function Body({
   // Any enabled certification may be sat; starting here also returns to an attempt already in progress.
   async function startExam(examId: string): Promise<void> {
     try {
-      const result = await api.request<{ data: { id: string } }>({
+      const result = await api.request<{
+        data: { id: string; examId: string; deviceToken: string | null };
+      }>({
         path: `talent/my-exams/${encodeURIComponent(examId)}/start`,
         method: 'POST',
+        headers: examDeviceHeaders(examId),
       });
+      // V3-10 单设备作答: this browser keeps the attempt's device token.
+      rememberDevice(result.data);
       void navigate(
         `/talent/my-exams/attempts/${encodeURIComponent(result.data.id)}`,
       );
@@ -166,6 +186,9 @@ function Body({
   }
 
   const mine = detail.mine;
+  // V3-10 任职准备材料, opened from the workbench item or notice.
+  const [params] = useSearchParams();
+  const dossierId = params.get('dossier');
   return (
     <>
       <PageHeader
@@ -205,6 +228,12 @@ function Body({
       {detail.description ? (
         <p className='text-sm text-muted-foreground'>{detail.description}</p>
       ) : null}
+      {dossierId ? <QualificationDossier certificateId={dossierId} /> : null}
+      {/* V4-13 实操要求 (发证与复审续发). */}
+      <CertificationPracticalsCard
+        certificationId={detail.id}
+        canManage={detail.can.manage}
+      />
       <div className='grid gap-4 lg:grid-cols-2'>
         <Card>
           <CardHeader>
@@ -297,9 +326,10 @@ function Body({
               {mine.certificate ? (
                 <div className='space-y-3'>
                   <CertificateCard certificate={mine.certificate} />
+                  {/* V4-14: 可操作 and 到期后将不能使用 with the way into the page, for the holder (licensed-certificate-grants.tsx). */}
                   {mine.certificate.status === 'valid' ||
                   mine.certificate.status === 'expiring' ? (
-                    <DemoPageLinks pages={detail.grantedPages} />
+                    <LicensedCertificateGrants certificationId={detail.id} />
                   ) : null}
                 </div>
               ) : (

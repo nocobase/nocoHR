@@ -162,6 +162,55 @@ function GradeCard({
                 ) : null}
               </div>
             </div>
+            {item.aiSuggestion ? (
+              // V3-10 考官: the suggestion and why; the instructor adopts it or changes it, then submits.
+              <div className='space-y-1 rounded-md border border-dashed bg-muted/40 p-3 text-sm'>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <span className='font-medium'>
+                    {t('talent.examiner.suggested', {
+                      score: item.aiSuggestion.score,
+                      max: item.score,
+                    })}
+                  </span>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    onClick={() =>
+                      setScores((s) => ({
+                        ...s,
+                        [item.questionId]: {
+                          score: String(item.aiSuggestion!.score),
+                          comment:
+                            s[item.questionId]?.comment ??
+                            item.aiSuggestion!.rationale,
+                        },
+                      }))
+                    }
+                  >
+                    {t('talent.examiner.adopt')}
+                  </Button>
+                </div>
+                {item.aiSuggestion.matchedPoints.length ? (
+                  <p>
+                    <span className='text-muted-foreground'>
+                      {t('talent.examiner.matched')}
+                    </span>{' '}
+                    {item.aiSuggestion.matchedPoints.join('；')}
+                  </p>
+                ) : null}
+                {item.aiSuggestion.missingPoints.length ? (
+                  <p>
+                    <span className='text-muted-foreground'>
+                      {t('talent.examiner.missing')}
+                    </span>{' '}
+                    {item.aiSuggestion.missingPoints.join('；')}
+                  </p>
+                ) : null}
+                <p className='whitespace-pre-wrap text-muted-foreground'>
+                  {item.aiSuggestion.rationale}
+                </p>
+              </div>
+            ) : null}
             <div className='grid gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]'>
               <Field>
                 <FieldLabel htmlFor={`score-${attempt.id}-${item.questionId}`}>

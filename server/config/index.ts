@@ -19,6 +19,8 @@ import snowflake from './snowflake.js';
 import ai from './ai.js';
 import workflow from './workflow.js';
 import talent from './talent.js';
+// V3-11
+import talentProfile from './talent-profile.js';
 
 const defaultConfigs: AppConfigFactory<{
   auth: ReturnType<typeof auth>;
@@ -38,6 +40,7 @@ const defaultConfigs: AppConfigFactory<{
   ai: ReturnType<typeof ai>;
   workflow: ReturnType<typeof workflow>;
   talent: ReturnType<typeof talent>;
+  talentProfile: ReturnType<typeof talentProfile>;
 }> = defaultAppConfigs({
   auth,
   authorization,
@@ -56,6 +59,7 @@ const defaultConfigs: AppConfigFactory<{
   ai,
   workflow,
   talent,
+  talentProfile,
 });
 
 export default defaultConfigs;

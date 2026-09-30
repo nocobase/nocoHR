@@ -53,6 +53,12 @@ interface ImportRow {
   errors: string[];
   action: 'create' | 'update' | 'skip';
   newPosition: string | null;
+  /** V1-03: the employee follows the office suite; department, position and manager columns are skipped. */
+  syncManaged?: boolean;
+  /** 界面追加字段 columns of the file, sent back unchanged on confirm. */
+  customFields?: Record<string, string>;
+  /** Which added field failed on this row. */
+  customFieldErrors?: { key: string; label: string; code: string }[];
 }
 
 interface ImportPreview {
@@ -318,7 +324,17 @@ export default function ImportEmployeesPage(): ReactElement {
                           {row.errors.length ? (
                             <span className='text-destructive'>
                               {row.errors
-                                .map((code) => t(`talent.errors.${code}`))
+                                .map((code) =>
+                                  code === 'CUSTOM_FIELD_INVALID' &&
+                                  row.customFieldErrors?.length
+                                    ? row.customFieldErrors
+                                        .map(
+                                          (e) =>
+                                            `${e.label}：${t(`talent.errors.${e.code}`)}`,
+                                        )
+                                        .join('；')
+                                    : t(`talent.errors.${code}`),
+                                )
                                 .join('；')}
                             </span>
                           ) : (
@@ -332,6 +348,11 @@ export default function ImportEmployeesPage(): ReactElement {
                               {t(`talent.import.action.${row.action}`)}
                             </Badge>
                           )}
+                          {row.syncManaged ? (
+                            <p className='mt-1 text-xs text-muted-foreground'>
+                              {t('talent.import.syncManaged')}
+                            </p>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}

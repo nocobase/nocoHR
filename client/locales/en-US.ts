@@ -1,6 +1,35 @@
+import { coreHrAdditions } from './modules/core-hr-additions.js';
+// V3-10
+import { examAdditions } from './modules/exam-additions.js';
+// V3-11
+import { profileAdditions } from './modules/profile-additions.js';
+// V2-05 (realigned)
+import { attendanceAdditions } from './modules/attendance-additions.js';
+// V2-07
+import { recruitingEn } from './modules/recruiting.js';
+// V4-12
+import { performanceAdditions } from './modules/performance.js';
+// V4-13
+import { talentReviewAdditions } from './modules/talent-review.js';
+// V4-14
+import { licensedAdditions } from './modules/licensed.js';
 import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
+  // V1-02 additions (client/locales/modules/core-hr-additions.ts).
+  ...coreHrAdditions.en.top,
+  // V3-10: 变动影响清单 · 证书 items, added to the V1-02 checklist wording.
+  checklists: {
+    ...coreHrAdditions.en.top.checklists,
+    items: {
+      ...coreHrAdditions.en.top.checklists.items,
+      ...examAdditions.en.checklistItems,
+      // V4-14
+      ...licensedAdditions.en.checklistItems,
+    },
+  },
+  // V2-05 (realigned): 考勤异常说明、追问、顶班邀请 (client/locales/modules/attendance-additions.ts).
+  attendanceV2: attendanceAdditions.en.attendanceV2,
   attendance: {
     records: 'Attendance records',
     mine: {
@@ -17,7 +46,8 @@ const enUS = {
     },
     approvals: {
       title: 'Approvals',
-      description: 'Review leave requests waiting for your decision.',
+      description:
+        'Review leave, missing-punch, overtime and shift-swap requests waiting for your decision.',
       empty: 'No pending approvals',
       emptyDescription: 'Requests assigned to you will appear here.',
       detail: 'Leave request details',
@@ -73,6 +103,26 @@ const enUS = {
       noEmployeesDescription:
         'Choose another department or adjust the date range.',
       errors: {
+        DOCUMENT_NO_ACTIVE_EXISTS:
+          'An enabled document already uses this number. Upload a new version of it instead.',
+        DOCUMENT_VERSION_EXISTS:
+          'This version already exists for the document number.',
+        DOCUMENT_SUPERSEDED:
+          'This version has been replaced; open the current version.',
+        DOCUMENT_VERSION_PENDING:
+          'A new version is still being processed. Wait for it to finish, or retry it if it failed.',
+        DOCUMENT_VERSION_REQUIRED: 'Enter the version.',
+        DOCUMENT_NO_REQUIRED: 'Enter the document number.',
+        CONFLICT_NOTE_REQUIRED: 'Enter why the conflict is ignored.',
+        CONFLICT_NOT_FOUND:
+          'The conflict does not exist or you cannot open it.',
+        AI_ENTRY_EMPLOYEE_UNKNOWN:
+          'A row names an AI employee that does not exist.',
+        AI_ENTRY_NO_FALLBACK:
+          'Keep at least one enabled row available to everyone, for questions no other row takes.',
+        AI_ENTRY_NO_ROUTE: 'No AI employee is available to you. Contact HR.',
+        IM_BAD_SIGNATURE: 'The message signature is invalid.',
+        SETTINGS_CONFLICT: 'Someone else saved first. Reload and try again.',
         INVALID_DATE_RANGE: 'Enter a valid date range of at most 31 days.',
         SCHEDULE_BLOCKED: 'Blocking schedule conflicts must be fixed first.',
         SCHEDULE_NOT_READY:
@@ -83,6 +133,551 @@ const enUS = {
         LEAVE_CONFLICT:
           'The employee has pending or approved leave on this date.',
         EMPLOYEE_NOT_ACTIVE: 'The employee cannot be scheduled on this date.',
+      },
+    },
+    // V2-05 考勤与假期: permission labels, schedules, attendance, requests and my attendance.
+    recordActions: {
+      title: 'Attendance records',
+      view: 'View',
+      import: 'Import punches',
+      recompute: 'Recompute',
+      lock: 'Lock summaries',
+      unlock: 'Unlock summaries',
+      summaries: 'Monthly attendance summaries',
+    },
+    adjustmentActions: {
+      title: 'Attendance requests',
+      request: 'Request',
+      approve: 'Approve',
+    },
+    units: {
+      day: 'days',
+      hour: 'hours',
+      hoursValue: '{{value}} h',
+    },
+    shifts: {
+      rest: 'Rest',
+      night: 'Night shift',
+    },
+    recordStatus: {
+      normal: 'Normal',
+      late: 'Late',
+      earlyLeave: 'Left early',
+      missingPunch: 'Missing punch',
+      absent: 'Absent',
+      leave: 'On leave',
+      rest: 'Rest',
+    },
+    summaryStatus: {
+      draft: 'To confirm',
+      confirmed: 'Confirmed',
+      locked: 'Locked',
+    },
+    overtimeTypes: {
+      workday: 'Workday',
+      restDay: 'Rest day',
+      holiday: 'Public holiday',
+    },
+    filters: {
+      department: 'Department',
+      allDepartments: 'All departments',
+      chooseDepartment: 'Choose a department',
+      from: 'From',
+      to: 'To',
+      month: 'Month',
+      search: 'Employee',
+      searchPlaceholder: 'Name or employee number',
+      apply: 'Apply',
+      status: 'Status',
+      allStatuses: 'All statuses',
+    },
+    checks: {
+      format: '{{rule}}: {{message}}',
+      levels: {
+        block: 'Blocked',
+        warn: 'Warning',
+      },
+      rules: {
+        leaveConflict: 'Leave',
+        employmentDate: 'Employment dates',
+        departmentScope: 'Department',
+        shiftScope: 'Shift',
+        minRestHours: 'Rest time',
+        consecutiveNights: 'Consecutive nights',
+        monthlyOvertime: 'Monthly overtime',
+        monthLocked: 'Locked month',
+        configuration: 'Configuration',
+        employeeScope: 'Employee',
+      },
+      messages: {
+        LEAVE_CONFLICT: 'the employee has pending or approved leave that day',
+        EMPLOYEE_NOT_ACTIVE:
+          'the employee is not employed on this date (before joining or after leaving)',
+        SHIFT_NOT_APPLICABLE:
+          "this shift is not available in the employee's department",
+        SHIFT_NOT_FOUND: 'the shift does not exist or is disabled',
+        INSUFFICIENT_REST:
+          'the rest between this shift and the neighbouring one is below the minimum',
+        CONSECUTIVE_NIGHTS:
+          'more consecutive night shifts than the rule allows',
+        OVERTIME_FORECAST:
+          "this month's forecast overtime would exceed the alert threshold",
+        MONTH_LOCKED: "this month's attendance is locked",
+        EMPLOYEE_NOT_FOUND: 'the employee is not in your scheduling scope',
+      },
+    },
+    errors: {
+      ...attendanceAdditions.en.errors,
+      SCHEDULE_BLOCKED:
+        'Some cells break a blocking rule and nothing was saved. They are marked in red.',
+      SCHEDULE_WARNING_CONFIRMATION:
+        'Some cells have warnings. Confirm them to save.',
+      SCHEDULE_CONFLICT:
+        'Someone else saved this schedule after you loaded it. Nothing was saved.',
+      INVALID_DATE_RANGE: 'Enter a valid date range within the allowed length.',
+      ROTATION_TEMPLATE_NOT_FOUND:
+        'No rotation template has this key. Ask HR for the configured templates.',
+      ROTATION_SHIFT_MISSING:
+        'A shift of this template is missing or disabled. Ask HR to check the template.',
+      LEAVE_CONFLICT: 'The employee has pending or approved leave that day.',
+      EMPLOYEE_NOT_ACTIVE: 'The employee is not active on this date.',
+      SHIFT_NOT_APPLICABLE:
+        "This shift is not available in the employee's department.",
+      SHIFT_NOT_FOUND: 'The shift does not exist or is disabled.',
+      INSUFFICIENT_REST: 'The rest between shifts is below the minimum.',
+      CONSECUTIVE_NIGHTS: 'Too many consecutive night shifts.',
+      OVERTIME_FORECAST: 'Forecast overtime exceeds the monthly threshold.',
+      MONTH_LOCKED: "This month's attendance is locked. Ask HR to unlock it.",
+      EMPLOYEE_NOT_FOUND: 'The employee was not found in your scope.',
+      IMPORT_HAS_ERRORS:
+        'The file has rows with errors. Fix them, or import only the valid rows.',
+      IMPORT_FILE_INVALID:
+        'The file could not be read. Upload an .xlsx export.',
+      IMPORT_FILE_REQUIRED: 'Choose a file to import.',
+      SCOPE_TOO_LARGE: 'Too many records. Narrow the department or dates.',
+      SUMMARY_STATE_CONFLICT:
+        'The summary changed meanwhile. Reload and try again.',
+      SUMMARY_OBJECTION_OPEN:
+        'An objection is still open. Handle it before confirming or locking.',
+      SUMMARY_CONFIRMATION_CLOSED:
+        'The confirmation period has ended. Contact HR about corrections.',
+      MISSING_PUNCH_LIMIT:
+        'You have used this month’s {{limit}} missing-punch requests.',
+      NO_SHIFT_ON_DATE: 'There is no published shift on this date.',
+      PUNCH_OUTSIDE_SHIFT: 'The punch time is too far from the shift.',
+      PUNCH_IN_FUTURE: 'The punch time cannot be in the future.',
+      INVALID_COUNTERPARTY: 'Choose an active colleague other than yourself.',
+      COUNTERPARTY_NO_ACCOUNT:
+        'This colleague has no account and cannot agree to a swap.',
+      SWAP_NOTHING_TO_SWAP:
+        'Both days are rest days; there is nothing to swap.',
+      ADJUSTMENT_PENDING_EXISTS:
+        'A request of this type for this date is already pending.',
+      APPROVER_NOT_CONFIGURED:
+        'No approver is configured for your department. Contact HR.',
+      EMPLOYEE_NOT_LINKED:
+        'Your account is not linked to an employee record. Contact HR.',
+      NOT_CURRENT_APPROVER:
+        'This step is not yours to decide (any more). Reload to see its state.',
+      CONFLICT: 'The request changed meanwhile. Reload and try again.',
+      REQUEST_STATE_CONFLICT:
+        'The request is no longer pending. Reload to see its state.',
+      SWAP_SCHEDULE_CHANGED:
+        'One of the two schedules changed after the request. Reload; the request may need to be submitted again.',
+      SETTINGS_CONFLICT:
+        'Someone else changed this setting. Reload and save again.',
+    },
+    scheduling: {
+      title: 'Schedules',
+      description:
+        'Assign shifts per employee and day. Every save is checked; publishing notifies the employees.',
+      employee: 'Employee',
+      rangeHint: 'At most {{days}} days at a time.',
+      chooseTitle: 'Choose a department',
+      chooseDescription: 'Pick a department and dates to open its schedule.',
+      gridTitle: '{{from}} – {{to}}',
+      pendingEdits: '{{count}} unsaved changes',
+      draftCount: '{{count}} draft cells not yet published',
+      cellLabel: '{{name}}, {{date}}',
+      unsaved: 'Unsaved',
+      draft: 'Draft',
+      validate: 'Check',
+      saveCount: 'Save ({{count}})',
+      savedCount: '{{count}} cells saved.',
+      publish: 'Publish',
+      publishTitle: 'Publish {{count}} draft cells?',
+      publishDescription:
+        'Drafts from {{from}} to {{to}} become the employees’ published schedule and they are notified. Warnings you saw count as confirmed; a blocking rule still stops the publication.',
+      publishedCount: '{{count}} cells published.',
+      saveBeforePublish: 'Save your changes before publishing.',
+      validateOk: 'All changed cells pass.',
+      validateWarn: 'Some changed cells have warnings.',
+      validateBlocked: 'Some changed cells break a blocking rule.',
+      warningTitle: 'Save with warnings?',
+      warningDescription:
+        'These cells can be saved, but check them first. Saving records that you saw the warnings.',
+      backToEdit: 'Back to editing',
+      saveAnyway: 'Save anyway',
+      conflictHint:
+        'Reload to see their version. Your unsaved changes will be discarded.',
+      reloadDiscard: 'Reload and discard my changes',
+      truncated:
+        'Only the first 500 employees or 10,000 cells are shown. Narrow the search.',
+      issues: 'Checks',
+      issuesDescription:
+        'Blocked cells cannot be saved; warnings can be saved after confirmation.',
+      legend: {
+        block: 'Blocked',
+        warn: 'Warning',
+        unsaved: 'Unsaved change',
+        night: 'Night shift',
+      },
+      rotation: {
+        open: 'Apply rotation',
+        title: 'Apply a rotation template',
+        description:
+          'Fills the grid with the template’s shifts as unsaved changes. Review them, then save as usual.',
+        template: 'Template',
+        other: 'Other (enter a key)',
+        key: 'Template key',
+        employees: 'Employees ({{count}})',
+        stagger:
+          'Start each employee one step apart so every shift stays covered',
+        apply: 'Fill the grid',
+        applied: '{{count}} cells filled. Save to keep them.',
+        templates: {
+          'three-shift-weekly': 'Three shifts · weekly rotation',
+          'two-shift-weekly': 'Two shifts · weekly rotation',
+        },
+      },
+      cover: {
+        open: 'Find cover',
+        openSuggested: 'Cover suggestions ({{count}})',
+        title: 'Find cover',
+        description:
+          '{{name}} is on leave on {{date}} ({{shift}}). Picking someone fills their cell with this shift and makes it a rest day for {{name}}; save to check and keep it.',
+        suggested: 'Suggested by the HR assistant',
+        candidates: 'Available colleagues',
+        none: 'No colleague is free with enough rest that day.',
+        rest: 'Rest before / after: {{before}} / {{after}} h',
+        load: 'This month: {{hours}} h overtime, {{nights}} nights',
+        pick: 'Assign',
+        picked: 'Cover filled in. Save to check and keep it.',
+      },
+    },
+    board: {
+      title: 'Attendance',
+      description:
+        'Daily results, monthly summaries and the exceptions to follow up.',
+      tabs: {
+        daily: 'Daily',
+        monthly: 'Monthly',
+        issues: 'Exceptions',
+      },
+      import: 'Import punches',
+      recompute: 'Recompute',
+      recomputeDescription:
+        'Recompute the records of a date range (at most {{days}} days) after rules or punches change. Locked months are skipped.',
+      recomputeConfirm: 'Recompute',
+      recomputed:
+        '{{computed}} days recomputed; {{locked}} skipped in locked months.',
+      rangeInvalid: 'Choose a valid range of at most {{days}} days.',
+      noRecords: 'No attendance records in this range.',
+      noSummaries: 'No summaries for this month yet.',
+      truncated: 'Only the first 20,000 records are shown.',
+      columns: {
+        employee: 'Employee',
+        date: 'Date',
+        status: 'Status',
+        punches: 'In / out',
+        lateEarly: 'Late / early (min)',
+        worked: 'Worked (h)',
+        overtime: 'Overtime (h)',
+        days: 'Worked / scheduled',
+        exceptions: 'Exceptions',
+        leaveDays: 'Leave (days)',
+        overtimeHours: 'Overtime (h)',
+        nights: 'Nights',
+        objection: 'Objection',
+        actions: 'Actions',
+      },
+      exceptionsValue:
+        'Late {{late}} · early {{early}} · missing {{missing}} · absent {{absent}}',
+      objectionOpen: 'Objection open',
+      objectionHandled: 'Objection handled',
+      resultLabel: 'Result: {{result}}',
+      selectAll: 'Select all summaries on this page',
+      selectRow: 'Select {{name}}',
+      moreFor: 'More actions for {{name}}',
+      lockSelected: 'Lock selected ({{count}})',
+      lockResult: '{{locked}} locked, {{refused}} refused.',
+      refusedItem: '{{name}}: {{reason}}',
+      actions: {
+        handle: 'Handle objection',
+        confirm: 'Confirm for the employee',
+        unlock: 'Unlock',
+      },
+      done: {
+        handle: 'Objection of {{name}} handled; the summary was recomputed.',
+        confirm: 'Summary of {{name}} confirmed.',
+        unlock: 'Summary of {{name}} unlocked.',
+      },
+      dialogs: {
+        handle: {
+          title: 'Handle the objection of {{name}} ({{month}})',
+          description:
+            'Write the result the employee will see. The summary is recomputed from the current records.',
+          label: 'Result',
+        },
+        confirm: {
+          title: 'Confirm the summary of {{name}} ({{month}})?',
+          description:
+            'This employee has no account, so HR confirms the month for them.',
+          label: 'Note',
+        },
+        unlock: {
+          title: 'Unlock the summary of {{name}} ({{month}})?',
+          description:
+            'Payroll may already use this summary. The reason is kept in the lock log.',
+          label: 'Reason',
+        },
+      },
+      tasks: {
+        menu: 'Run scheduled task',
+        hint: 'Runs now, exactly as scheduled',
+        pull: 'Pull office-suite punches',
+        compute: "Compute yesterday's attendance",
+        daily: 'Daily 09:00 review and reminders',
+        monthly: "Monthly (1st): generate last month's summaries",
+        yearly: 'Yearly (1 Jan): initialize leave balances',
+        done: '{{task}} finished',
+      },
+      issues: {
+        none: 'Nothing to follow up.',
+        anomalies: 'Attendance exceptions',
+        anomaliesDescription:
+          'Late, early, missing punches and absences not yet explained.',
+        lateMinutes: '{{minutes}} min late',
+        openRequests: 'Open requests',
+        openRequestsDescription: 'Leave and attendance requests still pending.',
+        overtime: 'Overtime near the limit',
+        overtimeDescription:
+          'Approved overtime approaching the monthly alert threshold.',
+        overtimeValue: '{{hours}} / {{limit}} h',
+        summaries: 'Summaries not confirmed',
+        summariesDescription:
+          'Monthly summaries still to confirm, or with an open objection.',
+      },
+    },
+    import: {
+      title: 'Import punches',
+      description:
+        'Upload a time-clock export. Rows are matched by employee number and previewed before anything is imported.',
+      file: 'Punch file',
+      columns:
+        'Columns: 工号 (employee number), 姓名 (name), 打卡时间 (punch time).',
+      demoFile: 'Download device export file',
+      counts: '{{valid}} valid rows, {{invalid}} with errors',
+      row: 'Row',
+      employeeNo: 'Employee no.',
+      name: 'Name',
+      at: 'Punch time',
+      result: 'Check',
+      ok: 'OK',
+      submit: 'Import',
+      skipInvalid: 'Skip {{count}} error rows and import',
+      done: '{{imported}} punches imported, {{computed}} days computed, {{skippedLocked}} skipped in locked months.',
+      errors: {
+        EMPLOYEE_NO_REQUIRED: 'Employee number missing',
+        PUNCH_TIME_INVALID: 'Invalid punch time',
+        EMPLOYEE_NOT_FOUND: 'Employee number not found',
+        NAME_MISMATCH: 'Name does not match',
+        DUPLICATE_PUNCH: 'Duplicate punch',
+      },
+    },
+    adjustments: {
+      types: {
+        leave: 'Leave',
+        missingPunch: 'Missing punch',
+        overtime: 'Overtime',
+        shiftSwap: 'Shift swap',
+        exception: 'Exception',
+      },
+      status: {
+        draft: 'Draft',
+        pending: 'Pending',
+        approved: 'Approved',
+        rejected: 'Rejected',
+        cancelled: 'Withdrawn',
+      },
+      stepKinds: {
+        counterparty: 'Colleague agrees',
+        departmentHead: 'Department head',
+        hrAdmin: 'HR',
+        extra: 'Additional approver',
+      },
+      stepStatus: {
+        pending: 'Waiting for decision',
+        waiting: 'Waiting for the previous step',
+        approved: 'Approved',
+        rejected: 'Rejected',
+        inactive: 'Not needed',
+      },
+      fields: {
+        employee: 'Applicant',
+        date: 'Date',
+        myDate: 'My date',
+        summary: 'Request',
+        status: 'Status',
+        createdAt: 'Submitted',
+        punchAt: 'Punch time',
+        punchTime: 'Actual punch time',
+        overtimeRange: 'Overtime',
+        startTime: 'Start',
+        endTime: 'End',
+        hours: 'Hours',
+        overtimeType: 'Overtime type',
+        counterpart: 'Colleague',
+        counterpartDate: "Colleague's date",
+        myShift: "Applicant's shift",
+        theirShift: "Colleague's shift",
+        reason: 'Reason',
+      },
+      summary: {
+        missingPunch: 'Punch at {{time}}',
+        overtime: '{{start}}–{{end}}, {{hours}} h',
+        shiftSwap: 'Swap with a colleague ({{date}})',
+        exception: '{{anomaly}} {{minutes}} min, explained',
+      },
+      employeeLabel: '{{name}} ({{number}})',
+      range: '{{start}} – {{end}}',
+      unknown: 'Not available',
+      chain: 'Approval chain',
+      noChain: 'This request has no approval steps.',
+      step: 'Step {{number}} · {{kind}}',
+      scopeToggle: 'Show all requests in my scope',
+      emptyTodo: 'Nothing waiting for you',
+      emptyScope: 'No requests in your scope',
+      emptyDescription: 'Requests appear here when they reach you.',
+      detailTitle: 'Attendance request',
+      detailDescription:
+        'Check the details and the approval chain before deciding.',
+      cannotDecide: 'This request does not need your decision now.',
+      comment: 'Comment',
+      decided: 'Decision recorded.',
+      reload: 'Reload',
+      actions: {
+        approve: 'Approve',
+        reject: 'Reject',
+        agree: 'Agree',
+        decline: 'Decline',
+      },
+      confirm: {
+        approveTitle: 'Approve the {{type}} request of {{name}}?',
+        approveDescription:
+          'Your decision is recorded. The request takes effect after the last step approves.',
+        rejectTitle: 'Reject the {{type}} request of {{name}}?',
+        rejectDescription:
+          'Rejecting ends the request; the employee has to submit a new one.',
+        agreeTitle: 'Agree to swap shifts with {{name}}?',
+        agreeDescription:
+          'After you agree, the department head decides. The two published shifts are exchanged on approval.',
+        declineTitle: 'Decline the swap with {{name}}?',
+        declineDescription:
+          'Declining ends the request; nothing changes in either schedule.',
+      },
+    },
+    my: {
+      description:
+        'Your published schedule, daily attendance, the monthly summary, leave, and requests for missing punches, overtime and shift swaps.',
+      schedule: 'My schedule',
+      records: 'My attendance',
+      requests: 'My requests',
+      consents: 'Swaps waiting for my consent',
+      leave: 'Leave',
+      noRecords: 'No attendance records this month yet.',
+      noRequests: 'No requests yet.',
+      punches: 'In {{in}} · out {{out}}',
+      lateBy: '{{minutes}} min late',
+      earlyBy: '{{minutes}} min early',
+      missingPunchUsage:
+        'Missing-punch requests this month: {{used}} / {{limit}}',
+      swapFrom: '{{name}} asks to swap: {{date}} ↔ {{other}}',
+      submit: 'Submit',
+      submitted: '{{type}} request submitted.',
+      cancel: 'Withdraw',
+      cancelTitle: 'Withdraw this request?',
+      cancelDescription: 'The approvers will no longer see it.',
+      keep: 'Keep it',
+      cancelled: 'Request withdrawn.',
+      calendar: {
+        shiftOn: '{{date}}: {{shift}} {{time}}',
+        restOn: '{{date}}: rest',
+        noneOn: '{{date}}: not scheduled',
+      },
+      summary: {
+        title: 'Monthly summary · {{month}}',
+        none: 'The summary for this month has not been generated yet.',
+        locked: 'Locked for payroll. Contact HR about corrections.',
+        confirmHint: 'Please confirm or object within {{days}} days.',
+        confirm: 'Confirm',
+        object: 'Raise an objection',
+        confirmTitle: 'Confirm your attendance for {{month}}?',
+        confirmDescription: 'Confirming accepts these figures for payroll.',
+        objectionTitle: 'Object to your attendance for {{month}}',
+        objectionDescription:
+          'Tell HR what is wrong. HR answers and the summary is recomputed.',
+        note: 'What is wrong',
+        confirmed: 'Summary confirmed.',
+        objected: 'Objection sent to HR.',
+        objectionOpen: 'Objection waiting for HR',
+        objectionHandled: 'Objection handled',
+        result: 'HR: {{result}}',
+        fields: {
+          scheduledDays: 'Scheduled',
+          workedDays: 'Worked',
+          late: 'Late',
+          early: 'Early',
+          missing: 'Missing',
+          absent: 'Absent',
+          leaveDays: 'Leave (d)',
+          overtimeHours: 'Overtime (h)',
+          nights: 'Nights',
+        },
+      },
+      dialogs: {
+        missingPunch: {
+          title: 'Missing punch',
+          description:
+            'Enter the time you actually punched. Your department head approves it and the day is recomputed.',
+        },
+        overtime: {
+          title: 'Overtime',
+          description:
+            'Enter when you worked. The hours and the overtime type (workday, rest day or holiday) are set by the system.',
+        },
+        shiftSwap: {
+          title: 'Shift swap',
+          description:
+            'Your colleague agrees first, then your department head approves. The shifts are exchanged on approval.',
+        },
+        exception: {
+          title: 'Exception explanation',
+          description:
+            'Explain why you were late or left early. Once your department head approves, the day is marked Explained.',
+        },
+        noShift: 'No published shift on this date.',
+        restDay: 'Rest day.',
+        shiftLine: 'Shift: {{shift}} {{start}}–{{end}}',
+        nextDay: 'Counted as {{date}} (the shift ends after midnight).',
+        overtimeHours: '{{hours}} hours',
+        overtimeOvernight: '{{hours}} hours, ending the next day',
+        otherDay: "Swap with the colleague's shift on another day",
+        choosePeer: 'Choose a colleague',
+        noPeers: 'No colleague in your department can swap',
+        peer: '{{name}} ({{number}}) · {{shift}}',
+        peerUnscheduled: 'not scheduled',
+        peerHint: 'Shifts shown are for {{date}}.',
       },
     },
     leave: {
@@ -313,6 +908,8 @@ const enUS = {
         INVALID_INPUT: 'Some values are invalid. Check the form and try again.',
         IDEMPOTENCY_CONFLICT:
           'This request was already used with different values. Reload and verify the audit history.',
+        CUSTOM_FIELD_INVALID:
+          'Some added fields are empty or not valid: correct the marked fields.',
       },
       invalid: 'Enter a valid value within the allowed range.',
       invalidDelta:
@@ -347,7 +944,7 @@ const enUS = {
         'Years and days must increase in order. Changes apply to subsequent initialization, not existing balances.',
       limits: 'Approval, correction and reminder limits',
       limitsDescription:
-        'Leave exceeding the threshold requires HR approval; fixed-per-event leave always does. Changes affect new submissions. Attendance automation is not yet connected.',
+        'Leave exceeding the threshold requires HR approval; fixed-per-event leave always does. Changes affect new submissions and later attendance computations.',
       pendingScope:
         'Rotation templates, approval-chain configuration and attendance automation are still being implemented.',
       newShift: 'New shift',
@@ -411,6 +1008,17 @@ const enUS = {
         days: 'Annual leave days',
         holidays: 'Statutory holidays',
         adjustedWorkdays: 'Adjusted workdays',
+        rotationTitle: 'Title',
+        rotationKey: 'Key',
+        shiftCodes: 'Shifts in rotation order',
+        periodDays: 'Period (days, 1–31)',
+        workDays: 'Work days per period',
+        hourStep: 'Hour step (hours, up to 8)',
+        standardDayHours: 'Standard day (hours, up to 24)',
+        windowStart: 'Work window start',
+        windowEnd: 'Work window end',
+        approver: 'Approver',
+        requestTypes: 'Request types',
       },
       enums: {
         standard: 'Standard',
@@ -440,6 +1048,67 @@ const enUS = {
       shifts: 'Shifts',
       rules: 'Attendance rules',
       schedules: 'Schedules',
+      // V2-05: rotation templates, partial-day leave, overtime forecast, extra approval levels and the HR assistant.
+      rotations: 'Rotation templates',
+      rotationsDescription:
+        'Schedulers apply these to fill a department’s grid. Each period works the given days on one shift, then rests; the next period moves to the next shift.',
+      rotationsEmpty: 'No rotation templates yet.',
+      addRotation: 'Add template',
+      addShift: 'Add a shift',
+      removeShift: 'Remove {{shift}}',
+      rotationErrors: {
+        invalidKey:
+          'The key starts with a letter and uses up to 40 letters, digits, "_" or "-".',
+        duplicateKey: 'Another template already uses this key.',
+        invalidTitle: 'Enter a title of at most 100 characters.',
+        invalidShifts: 'Choose 1 to 10 shifts.',
+        invalidPeriod: 'The period is 1 to 31 days.',
+        invalidWorkDays: 'Work days are between 1 and the period.',
+      },
+      leaveUnits: 'Half-day and hourly leave',
+      leaveUnitsDescription:
+        'A half day splits the work window at its midpoint; hours round up to the step; hours become days at the standard day length. The window applies to days without a shift.',
+      invalidWindow: 'Enter a valid window whose end is after its start.',
+      overtime: 'Monthly overtime forecast',
+      overtimeDescription:
+        'Standard hours: each day’s scheduled time beyond the standard day. Comprehensive hours: the month’s total beyond workdays × the standard day. Flexible hours: no forecast.',
+      approval: 'Additional approval levels',
+      approvalDescription:
+        'Adds one approver after the default chain for the chosen request types of a department and its sub-departments.',
+      approvalEmpty: 'No additional levels.',
+      addApproval: 'Add level',
+      approvalInvalid:
+        'Choose a department, an approver and at least one type.',
+      usersUnavailable:
+        'The user list is not available to you; existing approvers are kept.',
+      automations: {
+        title: 'HR assistant · attendance work',
+        description:
+          'What the HR assistant does on its own for attendance. Owners, run times and run records are on the AI automations page.',
+        noOwner: 'No owner set; this work is skipped until one is set.',
+        runs: 'Owners and run records',
+        enabled: '{{name}} turned on.',
+        disabled: '{{name}} turned off.',
+        items: {
+          hrAssistant: {
+            replacementSuggest: {
+              title: 'Cover suggestions',
+              description:
+                'When approved leave conflicts with a published shift, suggest up to three colleagues who can cover, with reasons.',
+            },
+            attendanceAnomaly: {
+              title: 'Attendance exception follow-up',
+              description:
+                'After the daily 09:00 review, ask employees about late arrivals and missing punches, and remind heads when there is no answer.',
+            },
+            monthEndCheck: {
+              title: 'Month-end attendance check',
+              description:
+                'After the monthly summaries are generated, send HR a checklist of what still needs follow-up, grouped by department.',
+            },
+          },
+        },
+      },
     },
   },
   workbench: {
@@ -492,7 +1161,76 @@ const enUS = {
     recipient: 'My received items',
     wait: 'Refreshing or saving, please wait',
   },
+  // V3-09 Learning handled by a job event
+  jobEventLearning: {
+    title: 'Learning',
+    pending: 'The event is not processed yet; what it changes in learning appears here once it is.',
+    none: 'This change did not affect any learning task.',
+    assigned: 'Assigned automatically',
+    due: 'Due {{date}}',
+    completedSteps: 'Counted as completed: {{titles}}',
+    attachedSteps: 'Existing tasks attached to the path: {{titles}}',
+    cancelled: 'Cancelled',
+    reason: {
+      manual: 'Cancelled by hand',
+      offboard: 'Left the company',
+      jobChange: 'Job change',
+      parentCancelled: 'Path cancelled',
+    },
+    plan: 'Learning plan',
+    planItems: '{{count}} items',
+    planStatus: {
+      draft: 'To review',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      expired: 'Expired',
+    },
+  },
+  // V3-09 Settings · Learning rules
+  learningSettings: {
+    title: 'Learning rules',
+    description:
+      'Rules for learning reminders, how long learning plans stay open, offline check-in and video lessons. The AI employees’ switches, owners and thresholds are set in AI employee tasks.',
+    rules: {
+      title: 'Reminders and deadlines',
+      description:
+        'Once saved, the next daily run, check-ins and new video lessons follow the new rules.',
+      dueSoonDays: 'Reminder days before due',
+      dueSoonDaysHint:
+        'Tasks due within this many days are reminded once by the daily run. Default {{value}} days.',
+      planExpiryDays: 'Days a learning plan stays open',
+      planExpiryDaysHint:
+        'A draft plan nobody approved within this many days expires. Default {{value}} days.',
+      checkInOpensMinutes: 'Check-in opens (minutes before start)',
+      checkInOpensMinutesHint:
+        'How many minutes before an offline session starts people can scan to check in, until it ends. Default {{value}} minutes.',
+      minWatchPercent: 'Share of a video to watch (%)',
+      minWatchPercentHint:
+        'The default for new video lessons; each lesson can change it. Default {{value}}%.',
+      onboardingBackfillDays: 'No onboarding path for backfilled hires (days)',
+      onboardingBackfillDaysHint:
+        'An onboarding effective more than this many days before it is processed (importing or backfilling someone already at work) assigns no onboarding path. Default {{value}} days.',
+    },
+    invalidRange: 'Enter a whole number from {{min}} to {{max}}',
+    saved: 'Learning rules saved',
+    saving: 'Saving…',
+    conflict:
+      'Another administrator just changed the learning rules. Reload before editing.',
+    forbidden: 'Only HR administrators can change the learning rules.',
+    failed: 'Saving failed. Try again later.',
+    reload: 'Reload',
+  },
   personnelSettings: {
+    ...coreHrAdditions.en.personnelSettings,
+    knowledge: {
+      title: 'Policy review',
+      description:
+        'When review reminders start, how often overdue reminders repeat, and the default review cycle.',
+      reviewNoticeDays: 'Remind this many days before review',
+      overdueIntervalDays: 'Repeat overdue reminders every (days)',
+      defaultReviewMonths: 'Default review cycle (months)',
+      invalid: 'Enter a whole number from 1 to {{max}}.',
+    },
     title: 'Personnel settings',
     description: 'Configure HR reminders and onboarding probation rules.',
     reminders: {
@@ -516,6 +1254,93 @@ const enUS = {
     invalidWindows:
       'Enter 1–12 unique whole numbers from 0 to 365, separated by commas.',
     invalidMonths: 'Enter a whole number from 0 to 6.',
+    dailyTime: 'Daily run time',
+    dailyTimeHint:
+      'At this time (application time zone) every day, due actions take effect, reminders go out and the HR assistant prepares its reviews.',
+    invalidTime: 'Enter hours and minutes, such as 09:00.',
+    approvalChain: {
+      title: 'Approval chain',
+      description:
+        'Add approval levels for a department and its sub-departments by action type. Actions already submitted keep their chain.',
+    },
+    mergeAdjacent: 'Merge adjacent levels with the same approver',
+    ruleOrder: 'Order',
+    ruleName: 'Level name',
+    ruleNamePlaceholder: 'For example: Plant director approval',
+    ruleDepartment: 'Department (with sub-departments)',
+    ruleTypes: 'Action types',
+    ruleApprover: 'Approver',
+    rulePosition: 'Inserted',
+    ruleEnabled: 'Enabled',
+    ruleEnabledFor: 'Enable "{{name}}"',
+    ruleMenu: 'Actions for "{{name}}"',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    deleteRule: 'Delete',
+    deleteRuleTitle: 'Delete rule "{{name}}"?',
+    deleteRuleDescription:
+      'The rule leaves the draft; it takes effect when you save.',
+    rulesEmpty: 'No levels added yet',
+    rulesEmptyDescription:
+      'Every department uses the default two levels: department head, then HR.',
+    addRule: 'Add rule',
+    editRule: 'Edit rule',
+    ruleDialogDescription:
+      'Changes the draft in this card only; save the card to apply them.',
+    ruleDepartmentRequired: 'Choose a department.',
+    ruleTypesRequired: 'Choose at least one action type.',
+    ruleNameRequired: 'Enter a level name.',
+    ruleNameTooLong: 'Use at most 60 characters.',
+    ruleApproverRequired: 'Choose the approver.',
+    approverType: {
+      departmentHead: 'Head of a department',
+      user: 'A specific user',
+      permissionSet: 'Anyone holding a permission set',
+    },
+    approverDepartment: 'Department',
+    approverUserLabel: 'User',
+    approverSetLabel: 'Permission set',
+    approverHeadOf: 'Head of {{department}}',
+    approverUser: 'A specific user',
+    approverSet: 'Anyone holding "{{set}}"',
+    position: {
+      afterFirst: 'After the first level',
+      afterHr: 'After the HR level',
+    },
+    preview: {
+      title: 'Approval chain preview',
+      description:
+        'See who approves an action type for a department under the saved configuration.',
+      actionType: 'Action type',
+      savedOnly:
+        'The approval chain has unsaved changes; the preview uses the saved configuration.',
+      idle: 'Choose a department and an action type to see the chain.',
+    },
+    selfService: {
+      title: 'Employee self-service',
+      description:
+        'The fields employees may ask to change. Department, position, status and ID number are never offered.',
+      note: 'Requests still wait for HR review before they reach the record.',
+    },
+    gradeOrder: {
+      title: 'Grade order',
+      description:
+        'Grades of each job family from lowest to highest. A promotion stays in the family and goes to a higher grade.',
+      placeholder: 'For example: S1, S2, S3, S4',
+      invalid: 'Use at most 32 characters per grade and no duplicates.',
+      none: 'No job families yet.',
+    },
+    jobInfo: {
+      title: 'Job information',
+      description:
+        'Other ways to change department, position and status. Switches apply immediately.',
+      importMayChangeJob: 'Imports may change job information',
+      importMayChangeJobDescription:
+        'When on, an Excel import may change department and position, recorded as an import event. When off, such rows are errors in the preview.',
+      allowCorrection: 'Allow "Correct job information"',
+      allowCorrectionDescription:
+        'For HR to fix data-entry mistakes: requires a reason, skips approval, and is recorded as a correction event.',
+    },
     discardTitle: 'Discard unsaved settings?',
     discardDescription:
       'Unsaved edits will be lost and the latest settings loaded.',
@@ -649,6 +1474,22 @@ const enUS = {
     signingOut: 'Signing out…',
   },
   navigation: {
+    ...coreHrAdditions.en.navigation,
+    // V3-10
+    ...examAdditions.en.navigation,
+    // V3-11
+    ...profileAdditions.en.navigation,
+    // V4-12
+    ...performanceAdditions.en.navigation,
+    // V4-13
+    ...talentReviewAdditions.en.navigation,
+    // V4-14
+    ...licensedAdditions.en.navigation,
+    talentSelfService: 'Self-service',
+    aiEntry: 'AI entry',
+    imMock: 'Mock channel (development only)',
+    orgSync: 'Organization sync',
+    talentJobEvents: 'Job events',
     hr: 'HR',
     talentDevelopment: 'Talent development',
     examsCenter: 'Exams and certification',
@@ -659,7 +1500,7 @@ const enUS = {
     talentLearningPlans: 'Learning plans',
     talentPractice: 'Practice',
     talentCheckIn: 'Check in',
-    demoBatchRecord: 'Machine start log (demo)',
+    demoBatchRecord: 'Equipment start-up sign-off',
     aiAutomations: 'AI employee tasks',
     talentMyExams: 'My exams',
     talentCertifications: 'Certifications',
@@ -667,6 +1508,7 @@ const enUS = {
     talentExams: 'Exams',
     talentTrainingReports: 'Training report',
     tabs: {
+      selfService: 'Self-service',
       label: 'Learner shortcuts',
       learn: 'Learn',
       exams: 'Exams',
@@ -721,7 +1563,7 @@ const enUS = {
     batch: {
       description:
         'Shows "certified to start": only people holding a valid CNC operator certificate can log the start of a work-order operation. Every entry keeps the number of the certificate held at that moment.',
-      noticeTitle: 'Demonstration page',
+      noticeTitle: 'Certified to operate',
       notice:
         'Logging a start comes from the permission set assigned to the certification. When the certificate expires or is revoked, the button stops working without anyone touching permissions.',
       batch: 'Work order {{no}}',
@@ -732,8 +1574,8 @@ const enUS = {
       },
       machine: 'Machine {{no}}',
       signFilling: 'Log start',
-      signed: 'Demo: start logged',
-      notSignable: 'Not part of the demonstration',
+      signed: 'Start logged',
+      notSignable: 'No sign-off for this operation',
       cannotSign:
         'You do not hold a valid CNC operator certificate, so you cannot log a start.',
       signoffs: 'Start log',
@@ -758,6 +1600,10 @@ const enUS = {
     description:
       'What each AI employee does without being asked. Switch it on or off, choose its owner and when it runs, start it now, and review what it produced.',
     employees: {
+      // V3-11
+      ...profileAdditions.en.aiAutomationEmployees,
+      // V4-12
+      ...performanceAdditions.en.aiAutomationEmployees,
       hrAssistant: 'HR assistant',
       learningCoach: 'Learning coach',
       practiceCoach: 'Practice coach',
@@ -767,10 +1613,41 @@ const enUS = {
       certificationSteward: 'Certification steward',
     },
     tasks: {
+      // V2-05: the HR assistant's attendance work.
+      'hrAssistant.replacementSuggest': {
+        title: 'Cover suggestions',
+        description:
+          'When approved leave conflicts with a published shift, suggests up to three colleagues who can cover, with reasons. The schedule itself is not changed.',
+      },
+      'hrAssistant.attendanceAnomaly': {
+        title: 'Attendance exception follow-up',
+        description:
+          'After the daily 09:00 review, asks employees about late arrivals and missing punches and drafts the correction for them to submit; reminds heads when there is no answer.',
+      },
+      'hrAssistant.monthEndCheck': {
+        title: 'Month-end attendance check',
+        description:
+          'After the monthly summaries are generated, sends HR a checklist of exceptions, open requests, overtime near the limit and unconfirmed summaries, grouped by department.',
+      },
       'hrAssistant.importCheck': {
         title: 'Import health check',
         description:
           'After every Excel import, checks for duplicate employees, manager loops, departments without a head, missing managers or positions and similar position titles, and sends the importer a report with suggestions. It changes nothing.',
+      },
+      'hrAssistant.extractAttachment': {
+        title: 'Attachment recognition',
+        description:
+          'After HR attaches an ID card, diploma or contract scan, reads it and turns the fields that differ from the record into a pending change request for review. Never edits the record. Needs a model that can read that kind of attachment.',
+      },
+      'hrAssistant.probationPrep': {
+        title: 'Probation review preparation',
+        description:
+          'When a probation ends within the reminder window, summarizes hire date, position, job changes during probation and open items — each copy with its recipient’s permissions — for the department head and the owner, with a pre-filled regularization form. Never raises the action.',
+      },
+      'hrAssistant.renewalPrep': {
+        title: 'Renewal preparation',
+        description:
+          'When a contract enters the largest reminder window, summarizes its history, tenure and what HR should check, with a link to renew. Never renews.',
       },
       'learningCoach.gapPlans': {
         title: 'Learning plans for gaps',
@@ -781,6 +1658,17 @@ const enUS = {
         title: 'Progress reminders',
         description:
           'Reminds people whose course is falling behind, at most every 3 days; after two reminders close to the due date, tells their head once.',
+      },
+      // V3-09
+      'learningCoach.jobEventPlans': {
+        title: 'Learning plans after a job change',
+        description:
+          'After an onboarding, transfer or promotion is processed, drafts a plan for the new position’s required competencies below the requirement that the onboarding path does not cover, for the new department head to approve; once per change.',
+      },
+      'learningCoach.developmentTargetPlans': {
+        title: 'Learning plans for a target position',
+        description:
+          'Once every required competency of a development target is assessed, drafts a plan for the benchmark gaps for the department head to approve; competencies without a course are reported to the instructors; drafted again only when the gaps change.',
       },
       'practiceCoach.draftScenarioOnPublish': {
         title: 'Scenario draft after publishing',
@@ -832,6 +1720,16 @@ const enUS = {
         description:
           'When a renewal exam runs out of attempts, assigns the required and weak-area courses.',
       },
+      // V3-10
+      ...examAdditions.en.automationTasks,
+      // V3-11
+      ...profileAdditions.en.automationTasks,
+      // V4-12
+      ...performanceAdditions.en.automationTasks,
+      // V4-13
+      ...talentReviewAdditions.en.automationTasks,
+      // V4-14
+      ...licensedAdditions.en.automationTasks,
     },
     schedule: {
       daily: 'Daily at {{hour}}:00',
@@ -850,6 +1748,8 @@ const enUS = {
       '7': 'Sunday',
     },
     fields: {
+      // V3-11
+      ...profileAdditions.en.aiAutomationFields,
       perTypeLimit: 'Items listed per problem type',
       editDistance: 'Similar titles: edit distance at most',
       synonyms: 'Synonym groups',
@@ -929,6 +1829,106 @@ const enUS = {
   },
   // NocoHR talent platform.
   talent: {
+    // V3-10 (client/locales/modules/exam-additions.ts).
+    ...examAdditions.en.talent,
+    // V3-11
+    ...profileAdditions.en.talent,
+    // V3-08 能力体系: gaps, 目标岗位对标, 拟任人员, 岗位说明书, 导入能力评定.
+    competencyExt: {
+      unassessed: 'Not assessed',
+      summary: 'Mandatory gaps {{mandatory}} · total gap {{total}}',
+      summaryUnassessed: '{{count}} mandatory not assessed',
+      inactiveOnly: 'Disabled only',
+      deactivatedInUse:
+        'Still referenced by {{count}} confirmed requirements. They and past assessments are kept; new requirements and assessments can no longer use it.',
+      targets: {
+        title: 'Target position comparison',
+        description: 'Against the confirmed requirements of {{position}}.',
+        descriptionReason:
+          'Against the confirmed requirements of {{position}} ({{reason}}).',
+        noRequirements: 'The target position has no confirmed requirements yet.',
+      },
+      actionGap: {
+        title: 'Mandatory competencies of the new position',
+        description:
+          'For reference only: current gaps against the confirmed mandatory requirements. It does not block submitting or approving.',
+        levelsHidden:
+          'You cannot see this employee’s assessments, so only the requirements are listed.',
+        none: 'The new position has no confirmed mandatory requirements.',
+      },
+      jd: {
+        title: 'Job description',
+        description:
+          'Upload the job description (Word, PDF or text). Its text is extracted in the background and the framework advisor uses it as the primary source.',
+        upload: 'Upload',
+        replace: 'Replace',
+        uploaded: 'Job description uploaded; extracting text',
+        none: 'No job description uploaded.',
+        failed: 'The text could not be extracted.',
+        preview: 'Extracted text',
+        expand: 'Show all',
+        collapse: 'Show less',
+        status: {
+          pending: 'Extracting',
+          ready: 'Extracted',
+          failed: 'Extraction failed',
+        },
+      },
+      candidates: {
+        tab: 'Candidates ({{count}})',
+        title: 'Candidates',
+        description:
+          'People being prepared for this position, smallest gap first. Setting a target changes nobody’s position, permissions or pay; appointment still goes through a transfer or promotion.',
+        add: 'Add candidate',
+        addDescription:
+          'Set {{position}} as a development target. Mandatory competencies not yet assessed become an assessment to-do for the department head.',
+        employee: 'Employee',
+        currentPosition: 'Current position',
+        createdBy: 'Set by',
+        gap: 'Gap (mandatory / total)',
+        gapValue: '{{mandatory}} / {{total}}',
+        active: 'Active',
+        cancel: 'Cancel',
+        cancelled: 'Target cancelled',
+        empty: 'No candidates for this position.',
+        reason: 'Reason',
+        reasonPlaceholder: 'For example: new position, succession',
+        added: 'Candidate added',
+        addedWithTodo: 'Candidate added; an assessment to-do was sent to the department head',
+      },
+      import: {
+        open: 'Import assessments',
+        title: 'Import competency assessments',
+        description:
+          'Columns: employee number, competency code, level, evidence, assessment date. Every row is checked first; a file with any problem is not imported. Importing adds records and never changes existing ones.',
+        choose: 'Choose Excel file',
+        chooseAgain: 'Choose another file',
+        template: 'Download template',
+        templateName: 'competency-assessment-template.xlsx',
+        summaryErrors: '{{valid}} rows ready, {{invalid}} rows with problems. Fix them and choose the file again.',
+        summaryValid: 'All {{valid}} rows are ready to import.',
+        row: 'Row',
+        employee: 'Employee',
+        level: 'Level',
+        result: 'Check',
+        importDay: 'Import day',
+        ok: 'Ready',
+        commit: 'Import',
+        done: '{{count}} assessments imported',
+        errors: {
+          employeeNotFound: 'Employee number not found',
+          self: 'You cannot assess yourself',
+          competencyNotFound: 'Competency code not found',
+          competencyInactive: 'Competency is disabled',
+          competencyDraft: 'Competency is still a draft',
+          levelInvalid: 'Level must be a whole number from 0',
+          levelAboveMax: 'Level exceeds the competency’s maximum',
+          dateInvalid: 'Assessment date is not a valid date',
+          dateInFuture: 'Assessment date is in the future',
+          evidenceTooLong: 'Evidence is too long',
+        },
+      },
+    },
     positions: {
       title: 'Positions',
       description:
@@ -1584,6 +2584,8 @@ const enUS = {
         exam: 'Exam passed',
         certificate: 'Certified',
         assessment: 'Assessed',
+        // V4-12
+        review: 'Review result published',
       },
     },
     trainingReport: {
@@ -1804,7 +2806,7 @@ const enUS = {
         question: 'Question',
         askCount: 'Times asked',
         lastAskedAt: 'Last asked',
-        askedBy: 'First asked by',
+        askedBy: 'Department',
       },
       resolve: 'Mark resolved',
       ignore: 'Ignore',
@@ -2055,6 +3057,9 @@ const enUS = {
       rejected: 'Rejected',
       auto: 'Passed automatically',
     },
+    approvalVia: {
+      feishuCard: 'via Feishu card',
+    },
     contractStatus: {
       active: 'Active',
       expired: 'Expired',
@@ -2076,6 +3081,7 @@ const enUS = {
       partTime: 'Part-time',
       intern: 'Intern',
       outsourced: 'Outsourced',
+      dispatched: 'Dispatched',
     },
     gender: {
       male: 'Male',
@@ -2119,9 +3125,68 @@ const enUS = {
       idCard: 'ID scan',
       contract: 'Contract',
       other: 'Other',
+      // V2-07: moved from recruiting when the onboarding takes effect.
+      resume: 'Resume',
+      consent: 'Personal information consent',
     },
     errors: {
+      // V3-08
+      COMPETENCY_IN_USE:
+        'A confirmed requirement still references this competency, so the draft cannot be discarded.',
+      TARGET_IS_CURRENT_POSITION: 'The target position is the employee’s current position.',
+      TARGET_EXISTS: 'This employee already has this target position.',
+      TARGET_NOT_FOUND: 'Development target not found.',
+      TARGET_NOT_ACTIVE: 'This development target is no longer active.',
+      TARGET_EMPLOYEE_REQUIRED: 'Choose an employee.',
+      TARGET_POSITION_REQUIRED: 'Choose a target position.',
+      IMPORT_FILE_UNREADABLE: 'The file could not be read as Excel.',
+      IMPORT_FILE_EMPTY: 'The file has no rows.',
+      IMPORT_HEADER_INVALID:
+        'The header must include 工号, 能力项编码 and 等级. Download the template.',
+      JD_FILE_REQUIRED: 'Upload the job description file first.',
+      INVALID_FILE: 'Choose one file.',
+      BODY_TOO_LARGE: 'The file is too large.',
+      ...coreHrAdditions.en.errors,
+      // V3-10
+      ...examAdditions.en.errors,
+      // V3-11
+      ...profileAdditions.en.errors,
+      // V4-12
+      ...performanceAdditions.en.errors,
+      // V4-13
+      ...talentReviewAdditions.en.errors,
+      // V4-14
+      ...licensedAdditions.en.errors,
       generic: 'Something went wrong. Please try again.',
+      ORG_SYNC_SOURCE_UNAVAILABLE:
+        'The office suite cannot be reached. Check the connection settings and try again.',
+      ORG_SYNC_ISSUE_NOT_FOUND:
+        'This pending item no longer exists. Reload the list; the latest sync may have settled it.',
+      ORG_SYNC_ISSUE_NOT_OPEN: 'This pending item has already been handled.',
+      ORG_SYNC_ISSUE_HAS_ACTION:
+        'A personnel action for this pending item is already in progress. Finish or withdraw it first.',
+      ORG_SYNC_ISSUE_NO_ACTION:
+        'This kind of pending item does not raise a personnel action.',
+      ORG_SYNC_IGNORE_REASON_REQUIRED: 'Enter why this item can be ignored.',
+      ORG_SYNC_ALREADY_BOUND:
+        'This department or employee is already bound to the office suite.',
+      ORG_SYNC_ASSIGN_NOT_CANDIDATE: 'Choose one of the listed candidates.',
+      ORG_SYNC_NOT_BOUND:
+        'This employee is not bound to a member of the office suite.',
+      ORG_SYNC_EMPLOYEE_LEFT: 'This employee has left.',
+      ORG_SYNC_ACCOUNT_EMAIL_REQUIRED:
+        'The member has no email in the office suite. Enter one.',
+      ORG_MASTER_OPEN_ACTIONS:
+        'Finish or withdraw these transfer, promotion and offboarding actions before switching.',
+      ACTION_TYPE_SYNC_MANAGED:
+        'Transfers, promotions and departures come from the office suite while it is the data master.',
+      EMPLOYEE_SYNC_MANAGED:
+        'Department, position, manager and status are synced from the office suite and cannot be edited here.',
+      POSITION_ALIAS_EXISTS: 'This job title already has a mapping.',
+      JOB_EVENT_NOT_FOUND:
+        'This job event does not exist or you cannot see it.',
+      JOB_EVENT_ALREADY_PROCESSED: 'This job event has already been processed.',
+      ORG_SYNC_RUN_NOT_FOUND: 'This sync run does not exist.',
       EMPLOYEE_POSITION_INACTIVE:
         'This position is disabled and cannot be chosen.',
       EMPLOYEE_MANAGER_CYCLE: 'This manager would create a loop: {{names}}.',
@@ -2313,6 +3378,21 @@ const enUS = {
       EMPLOYEE_ALREADY_LEFT: 'This employee has already left.',
       EMPLOYEE_CAREER_DATE_INVALID:
         'Career start date cannot be later than hire date.',
+      ACTION_PROMOTE_NOT_HIGHER:
+        'A promotion goes to a higher grade in the same job family. Raise a transfer instead.',
+      EMPLOYEE_CORRECTION_NOTE_REQUIRED: 'Give the reason for the correction.',
+      EMPLOYEE_CORRECTION_DISABLED:
+        'Correcting job information is switched off in personnel settings.',
+      EMPLOYEE_CORRECTION_NO_CHANGE:
+        'Nothing in department, position or status changes.',
+      IMPORT_JOB_CHANGE_DISABLED:
+        'Job information can only change through a personnel action',
+      SETTINGS_DEPARTMENT_NOT_FOUND:
+        'A department in the rules no longer exists.',
+      SETTINGS_PERMISSION_SET_NOT_FOUND:
+        'A permission set in the rules no longer exists.',
+      SETTINGS_JOB_FAMILY_NOT_FOUND:
+        'A job family in the grade order no longer exists.',
       EMPLOYEE_CORE_FIELDS_LOCKED:
         'Department, position and status change through personnel actions.',
       EMPLOYEE_DEPARTMENT_NOT_FOUND: 'The department does not exist.',
@@ -2426,10 +3506,30 @@ const enUS = {
       title: 'Assess {{name}}',
     },
     events: {
+      source: {
+        sync: 'Sync',
+        action: 'Personnel action',
+        manual: 'Correction',
+        import: 'Import',
+      },
+      note: 'Reason: {{note}}',
+      openAction: 'View action',
       change: '{{from}} → {{to}}',
       empty: 'No job events yet.',
     },
     me: {
+      askAssistant: 'Ask the HR assistant',
+      assistant: {
+        title: 'Ask the HR assistant',
+        description:
+          'Answers about your own record, contract and probation only. Ask HR about company policies.',
+        placeholder: 'Ask about your contract or probation…',
+        examples: {
+          contract: 'When does my contract end?',
+          probation: 'When does my probation end?',
+          events: 'What job changes do I have on record?',
+        },
+      },
       title: 'My profile',
       description:
         'Your record, the requirements of your position and how you measure up.',
@@ -2446,6 +3546,10 @@ const enUS = {
       noRequirements: 'No confirmed requirements for this position yet.',
       assessments: 'Assessment history',
       contracts: 'My contracts',
+      payslips: 'Payslips',
+      payslipsDescription:
+        'Monthly payslips; opening them asks for your password again.',
+      openPayslips: 'View payslips',
       events: 'My job events',
       change: {
         open: 'Request a change',
@@ -2490,6 +3594,7 @@ const enUS = {
       quick: {
         noPosition: 'No position',
         noManager: 'No manager',
+        hasGaps: 'Has competency gaps',
       },
       linkedSet: '{{count}} linked employees',
       batchFilter: 'Import {{batch}}',
@@ -2514,10 +3619,13 @@ const enUS = {
       gapCount: 'Gaps',
       import: 'Import',
       exportRoster: 'Export roster',
+      importAssessments: 'Import assessments',
       pendingChanges: 'Pending changes ({{count}})',
       tenureValue: '{{years}}y {{months}}m',
       coreLocked:
         'Department and position now change through personnel actions.',
+      syncManaged:
+        'Department, position, manager and status are synced from the office suite.',
     },
     import: {
       doneDetail:
@@ -2529,6 +3637,8 @@ const enUS = {
       familyFor: 'Job family for {{title}}',
       chooseFamily: 'Choose a job family',
       willCreate: 'New',
+      syncManaged:
+        'Follows the office suite: the department, position and manager columns are skipped.',
       position: 'Position',
       title: 'Import employees',
       description:
@@ -2555,7 +3665,53 @@ const enUS = {
         skip: 'Skip',
       },
     },
+    chain: {
+      previewTitle: 'Approval chain preview',
+      previewIdle: 'Choose the type and the person to see the chain.',
+      previewFailed:
+        'The approval chain preview could not load ({{reason}}). You can still submit.',
+      extraLevel: 'Added approval',
+      auto: 'Passed: the applicant approves this level',
+      merged: 'Same approver, merged',
+      noApprover: 'No approver found; HR approves',
+      selfEscalated: 'About the approver; goes to the next head up',
+      anyHrAdmin: 'Any HR administrator',
+    },
+    correctJob: {
+      title: 'Correct job information of "{{name}}"',
+      description:
+        'Fixes a data-entry mistake without approval. Use a personnel action for real transfers and departures.',
+      note: 'Reason',
+      notePlaceholder: 'For example: wrong department at hire',
+      noteHint: 'The reason is kept in the job history.',
+      noteRequired: 'Enter the reason for the correction.',
+      noteTooLong: 'Use at most 2000 characters.',
+      departmentRequired: 'Choose a department.',
+      leaveDateRequired: 'Enter the leave date.',
+      leaveNote:
+        'Setting the status to left also terminates the contract in force. The record is kept.',
+      done: 'Corrected the job information of "{{name}}"',
+      notFound:
+        'This employee does not exist or was deleted. Close this and go back to the list.',
+      unavailable:
+        'This employee cannot be corrected now: they left, you lack permission, or the feature is switched off.',
+    },
     changes: {
+      source: {
+        self: 'Employee request',
+        assistant: 'Employee request via the HR assistant',
+        feishuCard: 'Employee request via Feishu card',
+        ai: 'Read by the HR assistant',
+      },
+      aiHint:
+        'The HR assistant found these fields on the attachment differing from the record. Tick the ones to adopt; edit them first if needed.',
+      viewAttachment: 'View attachment',
+      adopt: 'Adopt {{field}}',
+      confidence: 'Confidence {{percent}}%',
+      currentValue: 'On record',
+      readValue: 'Read',
+      readValueFor: 'Value read for {{field}}',
+      snippet: 'Source text: {{text}}',
       title: 'Pending profile changes',
       description:
         'Compare each field with the current value, then approve or reject.',
@@ -2566,6 +3722,11 @@ const enUS = {
       approved: 'Request approved and profile updated',
       rejected: 'Request rejected',
       fields: {
+        idNumber: 'ID number',
+        birthDate: 'Date of birth',
+        gender: 'Gender',
+        education: 'Education',
+        contract: 'Contract',
         mobile: 'Mobile',
         email: 'Email',
         address: 'Address',
@@ -2575,6 +3736,7 @@ const enUS = {
       },
     },
     detail: {
+      correctJob: 'Correct job information',
       delete: 'Delete',
       deleteTitle: 'Delete {{name}}?',
       deleteDescription:
@@ -2586,11 +3748,18 @@ const enUS = {
         label: 'Employee sections',
         profile: 'Profile',
         abilities: 'Competencies',
+        performance: 'Performance',
+        portrait: 'Portrait',
         contracts: 'Contracts',
         events: 'Job events',
       },
       editTitle: 'Edit {{name}}',
       editDescription: 'Changes apply immediately.',
+      syncBound: 'Bound to {{provider}}',
+      syncUnbound: 'Not bound to the office suite',
+      syncLock: 'Sync lock',
+      syncLockedOn: 'Sync locked for “{{name}}”',
+      syncLockedOff: 'Sync unlocked for “{{name}}”',
       markLeave: 'Mark as left',
       leaveTitle: 'Mark {{name}} as left?',
       leaveDescription:
@@ -2598,6 +3767,7 @@ const enUS = {
       leaveDone: '{{name}} was marked as left',
       linkUser: 'Link user',
       relinkUser: 'Change linked user',
+      accountFromProvider: 'Create login with {{provider}}',
       linkTitle: 'Link a login user to {{name}}',
       currentUser: 'Currently linked to {{name}}.',
       noUser: 'No login user is linked yet.',
@@ -2694,6 +3864,12 @@ const enUS = {
         'Employee {{employee}} was assessed at level {{level}}',
     },
     actions: {
+      prefillStale:
+        'The pre-filled employee has left, finished probation or is outside your scope. Choose again.',
+      leaveReasonRequired: 'Choose a leave reason.',
+      prefillingFromSync: 'Filling in from the office suite…',
+      prefilledFromSync:
+        'Filled in from the office suite. Check the details before submitting.',
       title: 'Personnel actions',
       description:
         'Onboarding, regularization, transfers, promotions and offboarding, with two-level approval.',
@@ -2755,6 +3931,8 @@ const enUS = {
       },
     },
     contracts: {
+      renewMissing:
+        'The contract to renew is no longer in force or does not exist, so renewal was not opened.',
       title: 'Contracts',
       description:
         'Sign, renew and terminate employment contracts, and archive the signed scans.',
@@ -2856,7 +4034,715 @@ const enUS = {
       inactiveAncestor: 'Inactive through {{title}}',
     },
   },
+  orgSync: {
+    title: 'Organization sync',
+    description:
+      'Keep departments and people in step with the office suite, and work through what the sync could not settle.',
+    tabs: {
+      label: 'Organization sync sections',
+      connection: 'Connection',
+      runs: 'Sync runs',
+      issues: 'Pending items',
+      aliases: 'Job title mappings',
+    },
+    provider: {
+      feishu: 'Feishu',
+      dingtalk: 'DingTalk',
+      wecom: 'WeCom',
+    },
+    mode: {
+      full: 'Full',
+      incremental: 'Incremental',
+    },
+    runStatus: {
+      running: 'Running',
+      succeeded: 'Succeeded',
+      partial: 'Partly done',
+      failed: 'Failed',
+    },
+    run: {
+      action: 'Sync now',
+      running: 'Syncing…',
+      done: 'Sync finished',
+      partial: 'Sync finished with items to review',
+      failed: 'Sync failed',
+      summary:
+        '{{created}} new, {{updated}} updated, {{deactivated}} deactivated; {{issues}} pending items.',
+    },
+    settings: {
+      title: 'Sync settings',
+      description:
+        'Which office suite to read, which part of its directory, and when the daily full sync runs.',
+      provider: 'Office suite',
+      providerUnavailable: '{{name}} (not available yet)',
+      providerNote: 'Only Feishu is available in this version.',
+      fullSyncTime: 'Daily full sync at',
+      fullSyncTimeHint:
+        'Changes in the directory are also synced within 5 minutes.',
+      timeInvalid: 'Enter a time such as 02:00.',
+      scope: 'Root departments in scope',
+      scopePlaceholder: 'Directory department IDs, separated by commas',
+      scopeHint:
+        'Departments under these, and their members, are synced. Leave empty to sync the whole directory.',
+      syncDepartmentTree: 'Create and update departments from the directory',
+      probationMonths: 'Probation for synced new hires (months)',
+      probationHint:
+        'When the office suite is the data master, people it adds start with this probation.',
+      saved: 'Sync settings saved',
+      conflict:
+        'Someone else saved these settings first. Reload to see their version; your edits will be discarded.',
+      reload: 'Reload',
+    },
+    source: {
+      title: 'Data source',
+      description:
+        'Whether the connection is ready. Credentials are kept in the deployment configuration and never shown here.',
+      kind: 'Source',
+      mock: 'Simulated source (development only)',
+      live: 'Office suite API',
+      none: 'Not connected',
+      credentials: 'Credentials',
+      configured: 'Configured',
+      notConfigured: 'Not configured',
+      lastRun: 'Last sync',
+      neverRun: 'Not synced yet',
+    },
+    master: {
+      title: 'Data master',
+      description:
+        'Which side decides departments, positions, managers and employment status.',
+      current: 'Current data master:',
+      value: {
+        nocohr: 'NocoHR',
+        external: '{{provider}}',
+      },
+      short: {
+        nocohr: 'NocoHR',
+        external: 'Office suite',
+      },
+      explain: {
+        nocohr:
+          'Changes go through personnel actions in NocoHR. The sync binds people and departments; differences from {{provider}} become pending items.',
+        external:
+          'Transfers, promotions and departures come from {{provider}} and are written by the sync as job events. Onboarding and regularization actions stay available.',
+      },
+      changed: 'Last switched by {{name}} on {{time}}',
+      switch: 'Switch to {{master}}',
+      confirmTitle: 'Switch the data master to {{master}}?',
+      impact: {
+        external:
+          'Transfers, promotions and departures will then come from {{provider}}: the sync changes employees directly and records job events. Transfer, promotion and offboarding actions can no longer be raised in NocoHR. No employee data changes at the moment of switching.',
+        nocohr:
+          'The sync stops writing departments, positions, managers and status. Differences from {{provider}} will be listed as pending items for HR to handle with personnel actions. No employee data changes at the moment of switching.',
+      },
+      openActionsHint:
+        'Pending or approved transfer, promotion and offboarding actions must be finished or withdrawn first.',
+      blockingAction: '{{type}} · {{status}}',
+      confirm: 'Switch',
+      switched: 'Data master is now {{master}}',
+    },
+    runs: {
+      time: 'Time',
+      provider: 'Source',
+      mode: 'Full / incremental',
+      master: 'Data master',
+      status: 'Status',
+      created: 'New',
+      updated: 'Updated',
+      deactivated: 'Deactivated',
+      events: 'Job events',
+      issues: 'Pending items',
+      empty: 'No sync runs yet',
+      emptyDescription: 'Use Sync now to run the first full sync.',
+      detailTitle: 'Sync run',
+      detailDescription: 'Statistics and the items this run found.',
+      notFound:
+        'This sync run does not exist or has been deleted. Close the panel to return to the list.',
+      error: 'Reason: {{error}}',
+      stats: 'Statistics',
+      itemsTitle: 'Items found',
+      noItems: 'This run found nothing to review.',
+    },
+    stats: {
+      departmentsCreated: 'Departments created',
+      departmentsUpdated: 'Departments updated',
+      departmentsDeactivated: 'Departments deactivated',
+      membersCreated: 'Employees created',
+      membersUpdated: 'Employees updated',
+      membersDeactivated: 'Employees deactivated',
+      bound: 'Newly bound',
+      jobEvents: 'Job events',
+      issues: 'Pending items',
+    },
+    issueStatus: {
+      open: 'Open',
+      inProgress: 'In progress',
+      resolved: 'Resolved',
+      ignored: 'Ignored',
+    },
+    issueType: {
+      unmappedTitle: {
+        title: 'Unmapped job title',
+        description:
+          'The job title has no confirmed mapping to a NocoHR position. Add a mapping or confirm a draft, then reprocess.',
+      },
+      unknownParentDepartment: {
+        title: 'Unknown parent department',
+        description:
+          'The department’s parent is outside the sync scope or cannot be found. Set the parent or adjust the scope.',
+      },
+      departmentRemoved: {
+        title: 'Department removed',
+        description:
+          'The office suite deleted this department while NocoHR still has it. Disable it in Organization, or ignore.',
+      },
+      departmentAmbiguous: {
+        title: 'Ambiguous department',
+        description:
+          'More than one NocoHR department matches by name and path. Choose the right one in Organization.',
+      },
+      duplicateMatch: {
+        title: 'Duplicate match',
+        description:
+          'One member matches several employees, or several members match one employee. Bind them by hand or merge the duplicates.',
+      },
+      managerOutOfScope: {
+        title: 'Manager out of scope',
+        description:
+          'The direct manager is outside the sync scope or not bound. Adjust the scope, or ignore.',
+      },
+      noAccount: {
+        title: 'No login account',
+        description:
+          'The employee is bound but has no NocoHR account. Link a login user, or ignore.',
+      },
+      lockedChange: {
+        title: 'Change to a locked employee',
+        description:
+          'The office suite changed an employee whose sync is locked. Unlock to let the sync apply it, or ignore.',
+      },
+      newMember: {
+        title: 'New member',
+        description:
+          'Someone in the office suite is not in NocoHR yet. Draft an onboarding action, or ignore people outside the company.',
+      },
+      deactivatedMember: {
+        title: 'Deactivated member',
+        description:
+          'The office suite deactivated someone who is still employed in NocoHR. Raise an offboarding action.',
+      },
+      orgMismatch: {
+        title: 'Department or position differs',
+        description:
+          'A bound employee’s department or position differs from the office suite. Raise a transfer or promotion.',
+      },
+      managerMismatch: {
+        title: 'Manager differs',
+        description:
+          'The direct manager differs from the office suite. Adopt the office suite’s manager, or ignore.',
+      },
+      departmentManagerMismatch: {
+        title: 'Department head differs',
+        description:
+          'The department head differs from the office suite. Change it in Organization, or ignore.',
+      },
+      contractPending: {
+        title: 'Contract still active',
+        description:
+          'The sync recorded a departure but the employee still has an active contract. Terminate it and add the leave reason.',
+      },
+    },
+    issueField: {
+      nocohrSide: 'NocoHR',
+      title: 'Job title',
+      department: 'Department',
+      position: 'Position',
+      path: 'Path',
+      candidates: 'Candidates',
+      members: 'Members',
+      inService: 'Employees in it',
+      removed: 'Deleted',
+      manager: 'Manager',
+      head: 'Department head',
+      account: 'Login account',
+      noAccount: 'None',
+      employeeNo: 'Employee no.',
+      mobile: 'Mobile',
+      email: 'Email',
+      unmapped: 'Not mapped',
+      state: 'Status',
+      employed: 'Employed',
+      deactivatedAt: 'Deactivated on {{date}}',
+      contract: 'Contract no.',
+    },
+    issues: {
+      type: 'Type',
+      status: 'Status',
+      department: 'Department',
+      allTypes: 'All types',
+      allStatuses: 'Open and in progress',
+      allDepartments: 'All departments',
+      clearFilters: 'Clear filters',
+      empty: 'Nothing to handle',
+      emptyDescription:
+        'Everything the last sync found has been handled. New items appear here after the next sync.',
+      noMatch: 'No items match these filters',
+      onboard: 'Draft onboarding action',
+      transfer: 'Raise transfer',
+      promote: 'Raise promotion',
+      suggested: 'Suggested',
+      offboard: 'Raise offboarding',
+      adoptManager: 'Adopt the manager from {{provider}}',
+      adopted: 'Manager updated for “{{name}}”',
+      unlock: 'Unlock sync',
+      unlocked: 'Sync unlocked for “{{name}}”',
+      addAlias: 'Add mapping',
+      openEmployee: 'Open employee',
+      openContracts: 'Open contracts',
+      openDepartments: 'Open organization',
+      ignore: 'Ignore',
+      ignoreTitle: 'Ignore “{{name}}”',
+      ignoreConfirm: 'Ignore',
+      ignored: 'Ignored “{{name}}”',
+      reason: 'Reason',
+      reasonRequired: 'Enter why this item can be ignored.',
+      viewAction: 'View personnel action',
+      aiTitle: 'HR assistant',
+      aiSuggestion: 'Suggestion: {{text}}',
+    },
+    // V1-03 realigned: 手工指定, 开通账号 and 问人事助理 on the pending items.
+    assign: {
+      placeholder: 'Choose…',
+      required: 'Choose one.',
+      submit: 'Save',
+      done: 'Settled “{{name}}”',
+      departmentAmbiguous: {
+        action: 'Choose the department',
+        title: 'Which department is “{{name}}”?',
+        description:
+          'Several NocoHR departments match its name and path. The one you choose is bound to it; the next sync updates it like any other.',
+        label: 'NocoHR department',
+      },
+      unknownParentDepartment: {
+        action: 'Choose the parent',
+        title: 'Where does “{{name}}” belong?',
+        description:
+          'Its parent is outside the sync scope. The department is created under the one you choose and bound to the office suite.',
+        label: 'Parent department',
+      },
+      duplicateMatch: {
+        action: 'Choose the binding',
+        title: 'Bind “{{name}}”',
+        description:
+          'The sync did not bind anyone because the match was not unique. Choose the binding to keep; the others stay unbound.',
+        label: 'Bind to',
+      },
+    },
+    account: {
+      action: 'Create login account',
+      title: 'Create a login account for “{{name}}”',
+      description:
+        'The account is linked to this employee at once and signs in through {{provider}}. No password is shown.',
+      email: 'Email',
+      emailHint:
+        'Leave empty to use the email in {{provider}}. Enter one only if the member has none there.',
+      submit: 'Create and link',
+      done: 'Login account created for “{{name}}”',
+    },
+    assistant: {
+      action: 'Ask the HR assistant',
+      askItem: 'Ask the HR assistant',
+      title: 'HR assistant',
+      description:
+        'Ask about the pending items of this sync. It explains and drafts mappings for you to confirm; it does not handle items or change employees.',
+      aboutIssue:
+        'Asking about one item: {{type}}. It explains and suggests; you decide and handle it.',
+      placeholder: 'Ask about the sync, e.g. what to do with this person',
+      examples: {
+        handle: 'What should I do with this item?',
+        why: 'Why did the sync not handle this?',
+        summary: 'Summarize the pending items by priority',
+        mappings: 'Which job titles still need a mapping?',
+      },
+    },
+    aliasSource: {
+      manual: 'Manual',
+      ai: 'AI',
+      import: 'Import',
+    },
+    aliasStatus: {
+      draft: 'To confirm',
+      confirmed: 'Confirmed',
+    },
+    aliases: {
+      description:
+        'Office-suite job titles and the NocoHR positions they mean. Only confirmed mappings are used by the sync.',
+      create: 'New mapping',
+      reprocess: 'Reprocess with new mappings',
+      externalTitle: 'Office-suite job title',
+      provider: 'Source',
+      position: 'NocoHR position',
+      source: 'Created by',
+      status: 'Status',
+      headcount: 'People',
+      draftReason: 'Why: {{reason}}',
+      empty: 'No job title mappings yet',
+      emptyDescription:
+        'Add one, or let the HR assistant draft them after a sync.',
+      selectAll: 'Select all mappings',
+      select: 'Select “{{title}}”',
+      selected: '{{count}} selected',
+      confirm: 'Confirm',
+      confirmSelected: 'Confirm drafts ({{count}})',
+      removeSelected: 'Delete selected ({{count}})',
+      editConfirm: 'Change and confirm',
+      edit: 'Change position',
+      discard: 'Discard',
+      remove: 'Delete',
+      discardTitle: 'Discard the mapping “{{title}}”?',
+      removeTitle: 'Delete the mapping “{{title}}”?',
+      removeManyTitle: 'Delete {{count}} mappings?',
+      removeDescription:
+        'The sync stops using them. Employees keep their current positions. This cannot be undone.',
+      removed: 'Mappings deleted: {{count}}',
+      confirmed: 'Mappings confirmed: {{count}}',
+      confirmedOne: 'Confirmed the mapping “{{title}}”',
+      createTitle: 'New mapping',
+      editTitle: 'Change position',
+      editConfirmTitle: 'Change and confirm',
+      dialogDescription:
+        'Map an office-suite job title to one enabled NocoHR position.',
+      createSubmit: 'Create',
+      saveConfirm: 'Save and confirm',
+      createdToast: 'Created the mapping “{{title}}”',
+      saved: 'Saved the mapping “{{title}}”',
+      titleRequired: 'Enter the job title as the office suite shows it.',
+      positionRequired: 'Choose a position.',
+      notFound:
+        'This mapping does not exist or has been deleted. Close the dialog to return to the list.',
+    },
+  },
+  jobEvents: {
+    title: 'Job events',
+    description:
+      'Every change of department, position or employment, from personnel actions, the sync, imports and corrections.',
+    employee: 'Employee',
+    type: 'Type',
+    change: 'Change',
+    effectiveDate: 'Effective date',
+    source: 'Source',
+    processing: 'Processing',
+    department: 'Department (with sub-departments)',
+    from: 'From',
+    to: 'To',
+    failedOnly: 'Failed only',
+    allTypes: 'All types',
+    allSources: 'All sources',
+    allDepartments: 'All departments',
+    clearFilters: 'Clear filters',
+    empty: 'No job events yet',
+    emptyDescription:
+      'Events appear when personnel actions take effect, the sync changes someone, or employees are imported.',
+    noMatch: 'No job events match these filters',
+    cap: 'Only the first {{count}} events are shown. Use the filters to narrow the results.',
+    processed: 'Processed',
+    failed: 'Failed',
+    pending: 'Waiting',
+    failedReason: 'Reason: {{reason}}',
+    retry: 'Retry',
+    retried: 'Processed the event for “{{name}}”',
+    retryFailed: 'Processing failed again',
+    openRun: 'View sync run',
+    detailTitle: 'Job event',
+    detailDescription: 'Where the change came from and how it was processed.',
+    before: 'Before',
+    after: 'After',
+    processedAt: 'Processed at',
+    note: 'Note',
+    notFound:
+      'This job event does not exist or you cannot see it. Close the panel to return to the list.',
+  },
+  aiEntry: {
+    chat: {
+      title: 'What would you like to ask?',
+      hint: 'Your question goes to the AI employee that handles it. Answers use only what you may see.',
+      examples: 'You can ask about',
+      placeholder: 'Type a question…',
+      send: 'Ask',
+      routing: 'Finding who can answer…',
+      answeredBy: 'Answered by {{name}}',
+      handTo: 'Ask {{name}} instead',
+      newQuestion: 'New question',
+      followUp: 'Ask a follow-up…',
+    },
+    panel: {
+      button: 'AI assistant',
+      title: 'AI assistant',
+      description: 'Ask about policies, your own record and more.',
+    },
+    settings: {
+      description:
+        'Which AI employee answers each kind of question, what documents it may search, and the office-suite bots.',
+      saved: 'Saved the {{section}}',
+    },
+    routes: {
+      title: 'routing table',
+      cardDescription:
+        'A question goes to the first matching row the user may use. Rows are tried in order; the last enabled row everyone may use answers everything else.',
+      description: 'Question type',
+      descriptionPlaceholder:
+        'For example: policies, rules and work requirements',
+      descriptionRequired: 'Describe the kind of question.',
+      descriptionTooLong: 'Use at most 200 characters.',
+      employee: 'Answered by',
+      employeeRequired: 'Choose an AI employee.',
+      permissionSets: 'Available to',
+      permissionSetsHint:
+        'Leave all unchecked to make the row available to everyone.',
+      everyone: 'Everyone',
+      keywords: 'Keywords',
+      keywordsPlaceholder: 'For example: 年假、津贴、安全',
+      keywordsHint:
+        'Used when no model is available: a question containing one of these goes to this row. Separate with commas or 、.',
+      keywordsInvalid: 'Use at most 40 keywords of up to 20 characters each.',
+      enabled: 'Enabled',
+      enabledFor: 'Enable “{{name}}”',
+      menu: 'Actions for “{{name}}”',
+      add: 'Add row',
+      addSubmit: 'Add',
+      apply: 'Apply',
+      edit: 'Edit row',
+      dialogDescription:
+        'Changes only this card’s draft; click the card’s Save to apply them.',
+      delete: 'Delete',
+      deleteTitle: 'Delete the row “{{name}}”?',
+      deleteDescription:
+        'The row is removed from the draft; click Save to apply.',
+      empty: 'No routing rows',
+      emptyDescription: 'Add at least one enabled row available to everyone.',
+      orderHint:
+        'Routing never widens access: the chosen AI employee still works with the user’s own tools and data.',
+    },
+    scopes: {
+      title: 'knowledge scope',
+      description:
+        'Limit the documents an AI employee may search, by number or category. Users still see only documents visible to them.',
+      docNos: 'Document numbers',
+      docNosPlaceholder: 'For example: HR-POL-0001, SAF-0105',
+      categories: 'Categories',
+      hint: 'Leave both empty for no limit.',
+      none: 'No AI employee searches documents.',
+    },
+    bots: {
+      title: 'Office-suite bots',
+      description:
+        'Employees can ask the bot in a private chat; group chats get a reminder to ask privately.',
+      notConfigured: 'Not configured',
+      credentials:
+        'Bot credentials are entered by an administrator in the plugin or channel settings, and are never shown here.',
+      signature:
+        'Callbacks are accepted only with a valid signature; the signing secret is a deployment setting.',
+      openMock: 'Open the mock channel (development only)',
+    },
+    mock: {
+      description:
+        'Development only: send a bot message as a directory member and see how the AI entry replies.',
+      composeTitle: 'Send a message',
+      composeDescription:
+        'The message is handled as a Feishu callback would be, without a signature.',
+      sender: 'Sender (directory member ID)',
+      presets: {
+        'fs-u-wanglei': '王磊',
+        'fs-u-limin': '李敏',
+        'fs-u-tangning': '唐宁 (not linked)',
+        'fs-u-mgr-east': '周宏',
+        'fs-u-mgr-njl': '陈静',
+        'fs-u-hr01': '林晓',
+      },
+      chatType: 'Chat type',
+      p2p: 'Private chat',
+      group: 'Group chat (@bot)',
+      groupHint:
+        'In a group chat the bot only asks people to message it privately.',
+      message: 'Message',
+      send: 'Send',
+      conversation: 'Conversation',
+      empty: 'No messages yet',
+      emptyDescription: 'Messages you send and the bot’s replies appear here.',
+      notHandled: 'Not passed to an AI employee',
+      noReply: 'No reply',
+      inbox: 'Inbox',
+      inboxDescription:
+        'What the bot sent this member: notifications and cards, each card in its latest state. Buttons are pressed as this member.',
+      refresh: 'Refresh',
+      inboxEmpty: 'Nothing sent yet',
+      inboxEmptyDescription:
+        'Approval cards, self-service cards and pushed notifications appear here.',
+      cardOpen: 'Waiting',
+      cardHandled: 'Handled',
+      comment: 'Comment',
+    },
+    selfService: {
+      title: 'Self-service cards',
+      description:
+        'The order of the cards on the Self-service page, and which are shown. A shown card still appears only to people who may open its page.',
+      up: 'Move “{{name}}” up',
+      down: 'Move “{{name}}” down',
+      show: 'Show “{{name}}”',
+      save: 'Save',
+      conflict: 'Someone else changed these cards. The latest version is loaded.',
+    },
+  },
+  notificationSettings: {
+    title: 'Notification settings',
+    description:
+      'HR notifications always reach your NocoHR inbox. You can also receive them in the office apps you are linked to.',
+    inbox: 'NocoHR inbox',
+    alwaysOn: 'Always on',
+    channels: { feishu: 'Feishu', dingtalk: 'DingTalk', wecom: 'WeCom' },
+    toggle: 'Receive in {{name}}',
+    saved: 'Notification settings saved',
+    noneBound: 'Your account is not linked to an office app.',
+  },
+  knowledgeService: {
+    clearFilters: 'Clear filters',
+    fields: {
+      docNo: 'Document number',
+      version: 'Version',
+      effectiveDate: 'Effective date',
+      lastReviewedAt: 'Last reviewed',
+    },
+    review: {
+      filter: 'Review status',
+      all: 'All review states',
+      dueSoon: 'Due within 30 days',
+      overdue: 'Overdue',
+      mark: 'Mark reviewed',
+      markTitle: 'Mark “{{title}}” reviewed',
+      markDescription:
+        'Records that the document was reviewed without changes and stops its reminders.',
+      nextDate: 'Next review date',
+      nextDateHint:
+        'Leave empty to use the default review cycle from HR settings.',
+      marked: 'Marked “{{title}}” reviewed',
+    },
+    version: {
+      upload: 'Upload new version',
+      uploadTitle: 'Upload a new version',
+      uploadDescription:
+        'The new version of “{{title}}” keeps its tags, visibility and owner. It replaces this version once its text is extracted.',
+      unavailable:
+        'The document could not be loaded. Close the dialog and try again.',
+      submit: 'Upload',
+      uploaded: 'Uploaded {{version}}; extracting text',
+      versionPlaceholder: 'For example: V1.1',
+      docNoHint: 'This document has no number yet; versions are linked by it.',
+      inheritHint: 'Defaults to the current version’s next review date.',
+      supersededBy: 'Replaced by {{version}}',
+      supersededHint: 'This version no longer answers questions. ',
+      openCurrent: 'Open the current version',
+      chain: 'Versions',
+      unnumbered: 'No version',
+      superseded: 'Replaced',
+      current: 'Current',
+      changes: 'Changes from the previous version',
+      changesDescription:
+        '{{count}} changed sections, previous text beside the new text.',
+      noChanges: 'No section changed from the previous version.',
+      before: 'Previous version',
+      after: 'This version',
+    },
+    changeType: {
+      added: 'Added',
+      modified: 'Changed',
+      removed: 'Removed',
+    },
+    conflicts: {
+      tab: 'Document conflicts',
+      status: {
+        open: 'Open',
+        all: 'All',
+        resolved: 'Resolved',
+        ignored: 'Ignored',
+      },
+      empty: 'No conflicts',
+      emptyDescription:
+        'When two documents say different things about the same matter, the knowledge assistant lists them here.',
+      found: 'Found {{date}}',
+      handled: 'Handled by {{name}}',
+      resolve: 'Mark resolved',
+      ignore: 'Ignore',
+      resolveTitle: 'Mark the conflict resolved',
+      ignoreTitle: 'Ignore the conflict',
+      note: 'Note',
+      resolvePlaceholder: 'Optional: how the documents were aligned',
+      ignorePlaceholder: 'Why the two passages do not conflict',
+      noteRequired: 'Enter why the conflict is ignored.',
+      done: {
+        resolve: 'Conflict marked resolved',
+        ignore: 'Conflict ignored',
+      },
+    },
+    gaps: {
+      channel: 'Channel',
+    },
+    channels: {
+      app: 'NocoHR',
+      feishu: 'Feishu',
+      dingtalk: 'DingTalk',
+      wecom: 'WeCom',
+    },
+  },
+  selfServicePage: {
+    description: 'Everything you can do for yourself, in one place.',
+    empty: 'No self-service available',
+    emptyDescription: 'Ask HR to give you access to your profile.',
+    cards: {
+      profileChange: {
+        title: 'Request a profile change',
+        description:
+          'Update your phone, address, education and more; HR reviews the request.',
+      },
+      contracts: {
+        title: 'My contracts',
+        description: 'Your employment contracts and their dates.',
+      },
+      events: {
+        title: 'My job history',
+        description: 'Onboarding, transfers, promotions and other changes.',
+      },
+      orgChart: {
+        title: 'Organization chart',
+        description: 'Departments, heads and colleagues.',
+      },
+      assistant: {
+        title: 'Ask the HR assistant',
+        description: 'Questions about your own record, contract and probation.',
+      },
+      leave: {
+        title: 'Request leave',
+        description: 'Submit a leave request for approval.',
+      },
+      missingPunch: {
+        title: 'Missing punch',
+        description: 'Forgot to punch? Request a correction.',
+      },
+      overtime: {
+        title: 'Overtime',
+        description: 'Record overtime for approval.',
+      },
+      shiftSwap: {
+        title: 'Shift swap',
+        description: 'Swap a shift with a colleague.',
+      },
+    },
+  },
   collections: {
+    // V3-11
+    ...profileAdditions.en.collections,
+    // V3-08
+    developmentTargets: 'Development targets',
+    documentConflicts: 'Document conflicts',
     learningPaths: 'Learning paths',
     learningPathSteps: 'Learning path steps',
     trainingSessions: 'Training sessions',
@@ -2868,7 +4754,7 @@ const enUS = {
     aiAutomationSettings: 'AI automation settings',
     aiTaskRuns: 'AI run records',
     aiTaskRunItems: 'AI draft outcomes',
-    demoBatchSignoffs: 'Machine start log (demo)',
+    demoBatchSignoffs: 'Start-up log',
     kbDocuments: 'Knowledge documents',
     kbDocumentCompetencies: 'Document competencies',
     kbDocumentDepartments: 'Document departments',
@@ -2904,11 +4790,27 @@ const enUS = {
     employmentContracts: 'Employment contracts',
     personnelActions: 'Personnel actions',
     jobEvents: 'Job events',
+    orgSyncRuns: 'Sync runs',
+    positionAliases: 'Job title mappings',
     profileChangeRequests: 'Profile change requests',
   },
   authz: {
+    // V3-08
+    developmentTarget: {
+      title: 'Development targets',
+    },
+    aiAssistant: {
+      title: 'AI entry',
+    },
+    documentConflict: {
+      title: 'Document conflicts',
+      resolve: 'Resolve',
+      ignore: 'Ignore',
+    },
     hrAssistant: {
       title: 'HR assistant',
+      use: 'Ask about my own record',
+      extract: 'Recognize attachments',
     },
     learningPath: {
       title: 'Learning paths',
@@ -2948,12 +4850,14 @@ const enUS = {
       use: 'Use',
     },
     demoBatch: {
-      title: 'Machine start log (demo)',
+      title: 'Equipment start-up sign-off',
       signFilling: 'Log start',
     },
     kbDocument: {
       title: 'Knowledge documents',
       manage: 'Upload and maintain',
+      uploadVersion: 'Upload new version',
+      markReviewed: 'Mark reviewed',
     },
     knowledgeGap: {
       title: 'Knowledge gaps',
@@ -2999,6 +4903,8 @@ const enUS = {
       publish: 'Publish',
       grade: 'Grade',
       resetAttempts: 'Reset attempts',
+      // V3-10
+      ...examAdditions.en.authzExam,
     },
     examTaking: {
       title: 'Taking exams',
@@ -3023,20 +4929,28 @@ const enUS = {
       title: 'Certification steward',
       use: 'Use',
     },
+    // V3-10
+    ...examAdditions.en.authz,
+    // V3-11
+    ...profileAdditions.en.authz,
     section: {
       talent: 'Talent development',
       talentAdmin: 'Talent development',
     },
     group: {
+      // V3-11
+      ...profileAdditions.en.authzGroup,
       training: 'Training operations',
       learning: 'Knowledge and learning',
       exams: 'Exams and certification',
-      demo: 'Demonstration',
+      // V4-14: the certificate-granted business operations.
+      demo: 'Certified operations',
       framework: 'Framework',
       people: 'People',
       hrCore: 'Core HR',
     },
     actions: {
+      use: 'Use',
       delete: 'Delete',
       configure: 'Configure proactive work',
       view: 'View',
@@ -3054,8 +4968,11 @@ const enUS = {
       import: 'Import',
       linkUser: 'Link login user',
       markLeave: 'Mark as left',
+      correctJob: 'Correct job information',
     },
     assessment: {
+      // V3-08
+      import: 'Import',
       title: 'Competency assessments',
     },
     framework: {
@@ -3092,6 +5009,19 @@ const enUS = {
     hrReport: {
       title: 'HR reports',
     },
+    jobEvent: {
+      title: 'Job events',
+      retry: 'Retry processing',
+    },
+    orgSync: {
+      title: 'Organization sync',
+      run: 'Sync now',
+      switchMaster: 'Switch data master',
+      resolveIssues: 'Handle pending items',
+    },
+    positionAlias: {
+      title: 'Job title mappings',
+    },
     orgChart: {
       title: 'Organization chart',
     },
@@ -3118,6 +5048,8 @@ const enUS = {
     settingsTitle: 'Organization',
     disabled: 'Disabled',
     seed: {
+      // V3-08
+      sales: 'Sales',
       root: 'Qiheng Precision',
       hr: 'Human Resources',
       quality: 'Quality',
@@ -3134,11 +5066,539 @@ const enUS = {
     positionSubjectTitle: 'Positions',
   },
   permissionSets: {
+    // V3-11
+    ...profileAdditions.en.permissionSets,
+    // V4-13
+    ...talentReviewAdditions.en.permissionSets,
+    // V4-14
+    ...licensedAdditions.en.permissionSets,
     hrInstructor: 'Instructor',
-    cncOperator: 'CNC machine start (demo)',
+    cncOperator: 'Equipment start-up sign-off',
     hrAdmin: 'HR administrator',
     hrManager: 'Department manager',
     hrEmployee: 'Employee',
+  },
+  // V2-06 薪酬与社保
+  // V2-07 用工计划与招聘入职 (client/locales/modules/recruiting.ts).
+  recruiting: recruitingEn,
+  // V4-12 绩效 (client/locales/modules/performance.ts).
+  performance: performanceAdditions.en.performance,
+  // V4-13 人才盘点与其他 (client/locales/modules/talent-review.ts).
+  talentReview: talentReviewAdditions.en.talentReview,
+  // V4-14 行业方案 · 持证上岗 (client/locales/modules/licensed.ts).
+  licensed: licensedAdditions.en.licensed,
+  // V4-14: the authorization plugin's subject-type refusal names the certification-only rule.
+  overrides: licensedAdditions.en.overrides,
+  payroll: {
+    navigation: {
+      salaries: 'Salary files',
+      payroll: 'Payroll',
+      socialInsurance: 'Social insurance',
+      myPayslips: 'My payslips',
+    },
+    common: {
+      allDepartments: 'All departments',
+      cancel: 'Cancel',
+      choose: 'Choose…',
+      comment: 'Comment',
+      create: 'Create',
+      department: 'Department',
+      edit: 'Edit',
+      employeeNo: 'Employee no.',
+      name: 'Name',
+      row: 'Row',
+      save: 'Save',
+      saved: 'Saved',
+      search: 'Search name or number',
+    },
+    status: {
+      draft: 'Draft',
+      calculated: 'Calculated',
+      reviewing: 'Under review',
+      pendingApproval: 'Pending approval',
+      approved: 'Approved',
+      published: 'Published',
+      closed: 'Closed',
+      pending: 'Pending',
+      waiting: 'Waiting',
+      rejected: 'Rejected',
+      active: 'Active',
+      stopped: 'Stopped',
+      uploaded: 'Uploaded',
+      reconciled: 'Reconciled',
+      confirmed: 'Confirmed',
+      disputed: 'Disputed',
+    },
+    approval: {
+      level: 'Level {{level}}',
+    },
+    kind: {
+      earning: 'Earning',
+      deduction: 'Deduction',
+      reference: 'Reference',
+    },
+    calc: {
+      fixed: 'From the salary file',
+      formula: 'Formula',
+      manual: 'Entered by hand this month',
+      imported: 'Imported this month',
+    },
+    source: {
+      salary: 'Salary file',
+      computed: 'Computed',
+      attendance: 'Locked attendance summary',
+      import: 'Imported this month',
+      param: 'Structure parameter',
+      item: 'An earlier item',
+    },
+    payslip: {
+      title: 'Payslip',
+      items: 'Items',
+      references: 'Reference items',
+      calc: 'Calculation',
+      formula: 'Formula',
+      expression: 'With values',
+      manual: 'Manual',
+      gross: 'Gross pay',
+      socialEmployee: 'Social insurance',
+      housingFundEmployee: 'Housing fund',
+      tax: 'Income tax',
+      net: 'Net pay',
+    },
+    cycles: {
+      title: 'Payroll',
+      description: 'Monthly payroll cycles: prerequisites, imports, calculation, anomaly check, approval and payslips.',
+      tabs: {
+        cycles: 'Cycles',
+        vendorBills: 'Vendor bills',
+      },
+      create: 'New cycle',
+      createDescription: 'One cycle per month; it pays everyone with a salary file.',
+      month: 'Month',
+      status: 'Status',
+      payslips: 'Payslips',
+      issues: 'Anomalies',
+      totalNet: 'Total net',
+      empty: 'No payroll cycles yet',
+      emptyDescription: 'Create the cycle of a month to start.',
+    },
+    cycle: {
+      title: 'Payroll {{month}}',
+      breadcrumb: 'Cycle',
+      calculate: 'Calculate',
+      submit: 'Submit for approval',
+      approve: 'Approve',
+      reject: 'Reject',
+      publish: 'Publish payslips',
+      calculatedAt: 'Calculated',
+      submittedAt: 'Submitted',
+      publishedAt: 'Published',
+      approverView: 'You see this cycle to approve it.',
+      tabs: {
+        overview: 'Progress',
+        imports: 'Imports',
+        sheet: 'Payroll sheet',
+        anomalies: 'Anomalies',
+        exports: 'Files',
+      },
+      done: {
+        calculate: 'Calculated; the HR assistant is checking it',
+        submit: 'Submitted for approval',
+        decide: 'Decision saved',
+        publish: 'Payslips published',
+      },
+      checks: {
+        attendance: 'Attendance of {{count}} employees locked',
+        attendanceReady: 'Every summary is locked.',
+        unlocked: '{{department}}: {{count}} not locked ({{names}})',
+        files: 'Salary files',
+        filesMissing: 'Without a file, not paid: {{names}}',
+        insurance: 'Insurance enrolments',
+        insuranceMissing: 'Not insured this month: {{names}}',
+        deductions: 'Special deductions',
+        deductionsCount: '{{count}} employees have entries this year.',
+        imports: 'Imported items',
+        importProgress: '{{title}}: {{imported}} of {{applicable}} imported',
+        ok: 'All set.',
+      },
+    },
+    imports: {
+      none: 'No imported items in the structures in use.',
+      template: 'Template',
+      upload: 'Upload a workbook',
+      locked: 'Imports are closed once the cycle is submitted.',
+      summary: '{{items}}: {{valid}} rows valid, {{errors}} with problems',
+      values: 'Values',
+      problems: 'Problems',
+      confirm: 'Import',
+      confirmSkip: 'Import the valid rows',
+      done: '{{count}} rows imported; calculate again',
+      history: 'Import records',
+      record: '{{at}} · {{items}} · {{rows}} rows, {{errors}} with problems · {{source}}',
+      errors: {
+        EMPLOYEE_NO_REQUIRED: 'Employee number missing',
+        EMPLOYEE_NOT_FOUND: 'No employee with this number',
+        EMPLOYEE_OUT_OF_SCOPE: 'Not in this cycle',
+        ITEM_NOT_APPLICABLE: 'Item does not apply to this employee',
+        VALUE_INVALID: 'Not a number',
+      },
+    },
+    sheet: {
+      addManual: 'Add a manual item',
+      manualDescription: 'A correction for this month; a positive amount is paid, a negative one deducted.',
+      manualInvalid: 'Choose an employee and enter a non-zero amount and a reason.',
+      manualAdded: 'Manual item added; calculate again',
+      manualTitle: 'Manual items',
+      amount: 'Amount',
+      reason: 'Reason',
+      export: 'Export sheet',
+      empty: 'No payslips yet. Calculate the cycle.',
+      flags: 'Notes',
+      notCalculated: 'Not calculated',
+      issues: '{{count}} anomalies',
+      manual: '{{count}} manual',
+    },
+    anomalies: {
+      notCalculated: 'The cycle has not been calculated yet.',
+      checking: 'The HR assistant is checking the latest calculation…',
+      checked: 'Checked {{at}}: {{total}} anomalies, {{added}} new, {{removed}} resolved.',
+      none: 'No anomalies found.',
+      source: {
+        ai: 'HR assistant',
+        rule: 'Rule-based note',
+      },
+      types: {
+        netChange: 'Net pay changed beyond the threshold',
+        belowMinimumWage: 'Below the minimum wage',
+        manualLarge: 'Large manual item',
+        importMissing: 'Imported value missing',
+        importSpike: 'Imported value far above recent months',
+        prorationMismatch: 'Prorated days differ from the record',
+        baseOutOfRange: 'Insurance base outside the plan',
+        overtimeNoPay: 'Overtime without an overtime item',
+        paramMismatch: 'Parameter differs between structures',
+      },
+    },
+    exports: {
+      notReady: 'The files are available once the payslips are published.',
+      kinds: {
+        bank: 'Bank payment file',
+        tax: 'Tax declaration details',
+        accounting: 'Accounting summary',
+        vendorBill: 'Vendor bill reconciliation',
+        insuranceChanges: 'Insurance changes',
+      },
+      log: {
+        generated: '{{kind}} generated {{at}}',
+        downloaded: '{{kind}} downloaded {{at}}',
+      },
+    },
+    bills: {
+      title: 'Vendor bill',
+      upload: 'Upload a vendor bill',
+      uploadDescription: 'Columns: 工号, 姓名, 工时, 金额. Lines are matched by employee number and reconciled against locked attendance.',
+      vendor: 'Vendor',
+      choose: 'Choose a file',
+      metaRequired: 'Enter the vendor and the month first.',
+      unmatched: 'Rows with unknown employee numbers: {{rows}}',
+      billedHours: 'Billed hours',
+      attendanceHours: 'Attendance hours',
+      diffHours: 'Difference',
+      match: 'Match',
+      matched: 'Matched',
+      confirmUpload: 'Upload and reconcile',
+      uploaded: 'Bill uploaded and reconciled',
+      empty: 'No vendor bills yet',
+      detailDescription: 'Hours by person against locked attendance.',
+      totals: 'Billed {{billed}} h, attendance {{attendance}} h, difference {{diff}} h in {{people}} people',
+      noNotes: 'No reconciliation notes yet.',
+      result: 'Result',
+      amount: 'Billed amount',
+      export: 'Export for the vendor',
+      confirm: 'Confirm',
+      dispute: 'Mark disputed',
+      confirmDone: 'Bill confirmed',
+      disputeDone: 'Bill marked disputed',
+      reasons: {
+        notMatched: 'Unknown employee number',
+        diff: 'Hours differ',
+        notInAttendance: 'No locked attendance',
+        ok: 'Matches',
+      },
+    },
+    salaries: {
+      title: 'Salary files',
+      description: 'Each employee’s file in force, salary adjustments and their approval, and new hires waiting for a file.',
+      tabs: {
+        files: 'Files',
+        adjustments: 'Adjustments',
+        pending: 'Waiting for a file',
+      },
+      newAdjustment: 'Request an adjustment',
+      newAdjustmentDescription: 'The new salary applies from the effective month once approved.',
+      base: 'Base salary',
+      allowances: 'Allowances',
+      allowance: {
+        post: 'Post allowance',
+      },
+      structure: 'Salary structure',
+      effectiveMonth: 'Effective month',
+      effectiveFrom: 'From {{month}}',
+      bank: 'Bank account',
+      bankName: 'Bank',
+      accountNo: 'Account number',
+      lastAdjustment: 'Latest adjustment',
+      noPending: 'Everyone on the books has a file.',
+      hired: 'joined {{date}}',
+      createFile: 'Create the file',
+      noAdjustments: 'No salary adjustments',
+      change: 'Base salary {{before}} → {{after}}',
+      outOfRange: 'Outside the range {{min}} – {{max}}',
+      decided: {
+        approve: 'Adjustment approved',
+        reject: 'Adjustment rejected',
+      },
+      history: 'File history',
+      sources: {
+        import: 'Initial import',
+        adjustment: 'Adjustment',
+        manual: 'New hire',
+      },
+      fileInvalid: 'Enter the effective month and a base salary.',
+      fileCreated: 'Salary file created',
+      adjustmentInvalid: 'Choose the employee, month and structure, and enter the salary and a reason.',
+      adjustmentSubmitted: 'Adjustment submitted for approval',
+      currentFile: 'Now: base {{base}}, {{structure}}',
+      relatedAction: 'Raised from a personnel action; it stays linked to it.',
+      submitAdjustment: 'Submit for approval',
+    },
+    insurance: {
+      title: 'Social insurance',
+      description: 'City plans, enrolments, starts and stops to confirm, special deductions and the yearly base adjustment.',
+      tabs: {
+        plans: 'Plans',
+        enrolments: 'Enrolments',
+        changes: 'Starts and stops',
+        deductions: 'Special deductions',
+        base: 'Yearly base adjustment',
+      },
+      noPlans: 'No plans yet',
+      open: 'open',
+      item: 'Item',
+      employerRate: 'Employer',
+      employeeRate: 'Employee',
+      baseRange: 'Base range',
+      codes: {
+        pension: 'Pension',
+        medical: 'Medical',
+        unemployment: 'Unemployment',
+        injury: 'Work injury',
+        maternity: 'Maternity',
+        housingFund: 'Housing fund',
+      },
+      city: 'City',
+      socialBase: 'Social base',
+      housingFundBase: 'Housing fund base',
+      period: 'Months',
+      clamped: 'Saved; the base was clamped to the plan’s range',
+      confirm: 'Confirm',
+      confirmed: 'Confirmed',
+      exportChanges: 'Export the list',
+      pending: 'Waiting for confirmation',
+      started: 'Started this month',
+      stopped: 'Stopped this month',
+      none: 'None',
+      startFrom: 'insured from {{month}}',
+      stopFrom: 'stops after {{month}}',
+    },
+    deductions: {
+      type: 'Type',
+      monthlyAmount: 'Monthly amount',
+      startMonth: 'From',
+      add: 'Add',
+      empty: 'No special deductions this year',
+      types: {
+        children: 'Children’s education',
+        continuingEducation: 'Continuing education',
+        housingLoan: 'Housing loan interest',
+        housingRent: 'Housing rent',
+        elderly: 'Elderly support',
+        infantCare: 'Infant care',
+        seriousIllness: 'Serious illness',
+      },
+    },
+    base: {
+      year: 'Year',
+      generate: 'Generate suggestions',
+      apply: 'Confirm and write',
+      empty: 'No suggestions yet',
+      average: 'Last year’s average gross',
+      current: 'Current base',
+      suggested: 'Suggested base',
+      clamped: '(clamped)',
+      status: {
+        pending: 'To confirm',
+        applied: 'Written',
+      },
+    },
+    mine: {
+      title: 'My payslips',
+      description: 'Your own published payslips and insurance. Verify your identity to see the amounts.',
+      ask: 'Ask the HR assistant',
+      empty: 'No payslip has been published yet.',
+      verifyTitle: 'Verify your identity',
+      verifyDescription: 'Enter your password again. The verification lasts 30 minutes.',
+      password: 'Password',
+      verify: 'Verify',
+      payslipOf: 'Payslip {{month}}',
+      expandHint: 'Open an item to see how it was calculated.',
+      insurance: 'Social insurance',
+      noInsurance: 'No active enrolment.',
+      insuredIn: 'Insured in {{city}}; social base {{social}}, housing fund base {{housing}}',
+      feedback: 'Think something is wrong? Tell the payroll specialist through 我的档案.',
+    },
+    settings: {
+      title: 'Payroll settings',
+      description: 'Salary structures and the payroll rules; changes reach the cycles not yet submitted.',
+      structures: 'Salary structures',
+      structuresDescription: 'Items, formulas and parameters; saving checks the formulas and runs a trial.',
+      itemCount: '{{count}} items',
+      active: 'Active',
+      inactive: 'Inactive',
+      newStructure: 'New structure',
+      rules: 'Rules',
+      rulesDescription: 'Thresholds, approval levels and defaults. Check the tax table with finance before going live.',
+      monthlyDeduction: 'Monthly basic deduction',
+      netChangePercent: 'Net change threshold (%)',
+      manualItemAmount: 'Manual item threshold',
+      importSpikeFactor: 'Import spike factor',
+      baseAdjustMonth: 'Base adjustment month',
+      cutoffDay: 'Insured this month up to day',
+      minimumWage: 'Minimum wage by city',
+      minimumWageHint: 'city:amount, separated by commas',
+      approvalLevels: 'Approval levels',
+      approvalLevelsHint: 'title:permission set, in order, separated by commas',
+      billAiEmployee: 'AI employee after a bill upload',
+      billAiEmployeeHint: 'The username of an AI employee created in AI settings with the two vendor-bill tools; leave empty to notify only.',
+      taxTable: 'Withholding table',
+      taxTableHint: 'Cumulative taxable income · rate · quick deduction',
+      above: 'Above',
+    },
+    structure: {
+      breadcrumb: 'Salary structure',
+      description: 'Items run in this order; a formula may read only whitelisted variables and earlier items.',
+      save: 'Save and trial',
+      saved: 'Structure saved; the trial is below',
+      name: 'Name',
+      payDays: 'Pay days per month',
+      note: 'Change note',
+      appliesTo: 'Default for departments',
+      items: 'Items',
+      code: 'Code',
+      itemTitle: 'Title',
+      kind: 'Kind',
+      insertVariable: 'Insert a variable',
+      unit: 'Unit',
+      taxable: 'Taxable',
+      inSocialBase: 'Counts towards the insurance base',
+      up: 'Move up',
+      down: 'Move down',
+      remove: 'Remove',
+      departments: 'Only for departments (empty: everyone)',
+      addItem: 'Add an item',
+      params: 'Parameters',
+      value: 'Value',
+      addParam: 'Add a parameter',
+      trial: 'Trial: {{name}}, {{month}}',
+      changeLog: 'Change log',
+    },
+    errors: {
+      PAYROLL_MONTH_INVALID: 'Enter a month such as 2026-10.',
+      STRUCTURE_NOT_FOUND: 'The salary structure does not exist.',
+      PAYROLL_ATTENDANCE_NOT_LOCKED: 'Attendance is not locked for: {{departments}}.',
+      PAYROLL_CYCLE_EXISTS: 'This month already has a cycle.',
+      PAYROLL_CYCLE_LOCKED: 'The cycle is submitted or approved and can no longer change.',
+      PAYROLL_RECALCULATE_REQUIRED: 'Calculate again before submitting.',
+      PAYROLL_NEGATIVE_NET: 'Net pay is negative for: {{names}}.',
+      PAYROLL_NOT_PENDING: 'Nothing is waiting for approval.',
+      PAYROLL_SELF_APPROVAL: 'You cannot approve what you submitted.',
+      PAYROLL_COMMENT_REQUIRED: 'Enter a comment to reject.',
+      PAYROLL_NOT_APPROVED: 'Approve the cycle before publishing.',
+      PAYROLL_NOT_PUBLISHED: 'The files are available after publishing.',
+      IMPORT_HAS_ERRORS: 'Some rows have problems; import the valid rows or fix the file.',
+      IMPORT_ITEMS_UNKNOWN: 'No column matches an imported item of this cycle.',
+      IMPORT_FILE_INVALID: 'The file is not a readable workbook.',
+      IMPORT_FILE_EMPTY: 'The file has no rows.',
+      FORMULA_UNKNOWN_VARIABLE: 'Item {{item}}: {{detail}} is not an allowed variable.',
+      FORMULA_UNKNOWN_PARAM: 'Item {{item}}: parameter {{detail}} is not defined.',
+      FORMULA_UNKNOWN_IMPORT: 'Item {{item}}: {{detail}} is not an imported item.',
+      FORMULA_ITEM_ORDER: 'Item {{item}}: {{detail}} must come after the item it reads.',
+      FORMULA_SYNTAX: 'Item {{item}}: the formula cannot be read.',
+      FORMULA_EMPTY: 'Item {{item}}: enter a formula.',
+      STRUCTURE_ITEM_INVALID: 'Item codes must be unique letters and digits.',
+      STRUCTURE_PARAM_INVALID: 'Parameter codes must be unique letters and digits.',
+      SALARY_MONTH_TAKEN: 'A file already starts in this month.',
+      SALARY_STRUCTURE_REQUIRED: 'Choose a salary structure.',
+      SALARY_FILE_REQUIRED: 'The employee has no salary file yet.',
+      PAYSLIP_VERIFY_REQUIRED: 'Verify your identity first.',
+      PAYSLIP_VERIFY_FAILED: 'The password is not correct.',
+      PAYSLIP_VERIFY_LOCKED: 'Too many attempts; try again in 15 minutes.',
+      BILL_ATTENDANCE_NOT_LOCKED: 'Attendance is not locked yet for: {{names}}.',
+      ENROLMENT_ACTIVE_EXISTS: 'The employee is already insured.',
+      PLAN_NOT_FOUND: 'No plan for this city and month.',
+    },
+    authz: {
+      group: 'Payroll',
+      actions: {
+        view: 'View',
+        manage: 'Manage',
+        configure: 'Configure AI work',
+      },
+      salary: {
+        title: 'Salary files',
+        manage: 'Maintain files',
+        adjust: 'Request adjustments',
+        approveAdjustment: 'Approve adjustments',
+      },
+      payroll: {
+        title: 'Payroll',
+        import: 'Import',
+        calculate: 'Calculate',
+        submit: 'Submit',
+        approve: 'Approve',
+        publish: 'Publish',
+        export: 'Export',
+      },
+      socialInsurance: {
+        title: 'Social insurance',
+      },
+      settings: {
+        title: 'Payroll settings',
+      },
+      myPayslip: {
+        title: 'My payslips',
+      },
+      vendorBill: {
+        title: 'Vendor bills',
+        upload: 'Upload',
+        confirm: 'Confirm',
+      },
+    },
+    collections: {
+      salaryStructures: 'Salary structures',
+      employeeSalaries: 'Salary files',
+      salaryAdjustments: 'Salary adjustments',
+      socialInsurancePlans: 'Insurance plans',
+      employeeSocialInsurances: 'Enrolments',
+      employeeTaxDeductions: 'Special deductions',
+      payrollCycles: 'Payroll cycles',
+      payslips: 'Payslips',
+      laborVendorBills: 'Vendor bills',
+    },
+    permissionSets: {
+      hrPayroll: 'Payroll specialist',
+      hrPayrollApprover: 'Payroll approver',
+    },
   },
 };
 

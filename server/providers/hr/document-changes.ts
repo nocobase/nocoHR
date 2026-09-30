@@ -95,8 +95,9 @@ export function touchesChange(content: string, change: SectionChange): boolean {
   );
 }
 
+// 元 and 起 (V1-04): allowances and quality thresholds are the kind of number documents disagree on.
 const QUANTITY =
-  /(\d+(?:\.\d+)?)\s*(分钟|小时|天|日|周|个月|月|年|次|%|℃|°C|支|人|件|批|mm|cm|m|kg|g|ml|mL|L)/gu;
+  /(\d+(?:\.\d+)?)\s*(分钟|小时|天|日|周|个月|月|年|次|%|℃|°C|支|人|件|批|元|起|mm|cm|m|kg|g|ml|mL|L)/gu;
 
 export interface Quantity {
   readonly value: string;
