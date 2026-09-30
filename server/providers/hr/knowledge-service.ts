@@ -650,7 +650,7 @@ export function createKnowledgeService(
       rows = rows.filter(
         (row) =>
           !row.translationOfId &&
-          String(row.reviewStatus ?? 'confirmed') !== 'draft',
+          (row.reviewStatus ?? 'confirmed') !== 'draft',
       );
       if (filters.competencyId) {
         const tagged = await database
@@ -1062,7 +1062,7 @@ export function createKnowledgeService(
         (row) =>
           !row.supersededById &&
           // V4-13: a draft (an AI-drafted FAQ not yet confirmed) never answers; translations are not searched.
-          String(row.reviewStatus ?? 'confirmed') !== 'draft' &&
+          (row.reviewStatus ?? 'confirmed') !== 'draft' &&
           !row.translationOfId &&
           (!scope.docNos.length ||
             scope.docNos.includes(str(row.docNo ?? ''))) &&

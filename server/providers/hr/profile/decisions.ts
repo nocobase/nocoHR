@@ -120,7 +120,7 @@ export function createDecisionService(deps: ProfileDeps, reads: ProfileReads) {
     const values = json<Record<string, unknown>>(row.customFields, {});
     const defs = await deps
       .customFields()
-      .list('businessSignals' as never)
+      .list('businessSignals')
       .catch(() => []);
     for (const def of defs)
       if (

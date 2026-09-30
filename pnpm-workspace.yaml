@@ -4,6 +4,7 @@
 allowBuilds:
   better-sqlite3: true
   esbuild: true
+  msgpackr-extract: set this to true or false
   oracledb: true
   tesseract.js: false
 
@@ -43,3 +44,9 @@ minimumReleaseAgeExclude:
   - micromark@4.0.3
   - uint8array-extras@1.6.0
   - ws@8.22.0
+  - '@nocobase/app-cli@1.0.0-beta.10'
+  - '@nocobase/app-plugin-ai-employee@1.0.0-beta.27'
+  - '@nocobase/app-plugin-scheduler@0.1.0-beta.10'
+  - '@nocobase/app-server@1.0.0-beta.30'
+  - '@nocobase/app-skills@0.1.0-beta.20'
+  - '@nocobase/jobs@0.1.0-beta.0'
