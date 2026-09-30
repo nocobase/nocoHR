@@ -1,8 +1,4 @@
 import { useTranslation } from '@nocobase/i18n/client';
-import {
-  GuestAuthentication,
-  RequiredAuthentication,
-} from '@nocobase/app-plugin-authentication/client';
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
 import { lazy, Suspense, useMemo, type ReactElement } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router';
@@ -11,6 +7,7 @@ import { Loading } from '@/components/loading';
 import { EMPTY_ARRAY } from '@/lib/constants';
 
 import { AppLayout } from '../layouts/app-layout.js';
+import { GuestOnly, RequireSignIn } from './authentication-gates.js';
 import { renderRouteTree } from './route-tree.js';
 import { StandalonePageLayout } from './standalone-page-layout.js';
 
@@ -75,9 +72,10 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
     <Routes>
       <Route
         element={
-          <RequiredAuthentication>
+          // Carries the requested location to /login and back; see authentication-gates.tsx.
+          <RequireSignIn>
             <Outlet />
-          </RequiredAuthentication>
+          </RequireSignIn>
         }
       >
         <Route element={<AppLayout routes={routeGroups.required} />}>
@@ -126,9 +124,9 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
 
       <Route
         element={
-          <GuestAuthentication>
+          <GuestOnly>
             <Outlet />
-          </GuestAuthentication>
+          </GuestOnly>
         }
       >
         <Route element={<StandalonePageLayout />}>
