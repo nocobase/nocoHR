@@ -130,7 +130,10 @@ import { payrollServicesToken } from './tokens.js';
 // V2-06 邮件往来
 import type { MailConfig } from '../../config/business-mail.js';
 import { createBillingMailHandler } from './mail/billing.js';
+import { mailProviderRegistryToken } from '@nocobase/app-plugin-mail/server';
+
 import { createAuditMail } from './mail/audit.js';
+import { localMailProvider } from './mail/local-provider.js';
 import { createRecruitingMailHandler } from './mail/recruiting.js';
 import { extractResumeText, readIdentity } from './recruiting/resume-text.js';
 import { createMailService } from './mail/service.js';
@@ -515,6 +518,9 @@ export default class HrProvider extends ServiceProvider<Application> {
   private registerMail(): void {
     const container = this.app.container;
     const production = process.env.NODE_ENV === 'production';
+    // 本地文件邮箱: the Mail plugin provider used for development, tests and the demo (never in production).
+    if (!production)
+      container.resolve(mailProviderRegistryToken).register(localMailProvider);
     container.singleton(mailSettingsToken, () =>
       createMailSettingsService(container.resolve(databaseManagerToken)),
     );
