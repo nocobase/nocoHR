@@ -1,40 +1,23 @@
 import {
   defineAppConfig,
-  envBoolean,
-  envInteger,
   envString,
   type AppConfigFactory,
 } from '@nocobase/app-server/config';
 
 /**
  * Business mailboxes (总纲 邮件约定, V2-06), configuration section
- * `businessMail` (environment `BUSINESS_MAIL_<PURPOSE>_*`): the `mail` section
- * and `MAIL_*` variables belong to the Mail plugin. Where each mailbox's mail is read
- * from. Only credentials and connection details live here — set them through
- * the environment (`.env.local` in development, the deployment's secret store
- * in production), never in a committed file. What the mailboxes are used for
- * (sender domains, attachment types, retention, the sending channel) is the
- * 设置 / 邮件 page's data.
+ * `businessMail` (environment `BUSINESS_MAIL_<PURPOSE>_ADDRESS`; the `mail`
+ * section and `MAIL_*` variables belong to the Mail plugin).
  *
- * `adapter`:
- * - `mock` reads `storage/mail/inbox/<purpose>/*.eml` and writes sent mail to
- *   `storage/mail/outbox/`; it is refused in production.
- * - `imap` reads the mailbox's INBOX over IMAP.
- * - `none` turns the mailbox off.
- *
- * Sending always goes through the notification plugin's email channel named
- * on 设置 / 邮件; `address` is the reply address, and replies come back to
- * `<local>+<threadKey>@<domain>`, so the mail server must deliver plus
- * addresses to the same mailbox.
+ * Since 2026-10-05 the mailboxes are Mail plugin accounts: how a mailbox is
+ * reached (IMAP/SMTP, Gmail, Microsoft 365) and its credentials are the
+ * plugin's (`mail.providers`, the account connection), and which account
+ * serves which purpose is the 设置 / 邮件 page's data. What stays here is each
+ * purpose's address, which development, tests and the demo use to connect a
+ * 本地文件邮箱 account for it automatically.
  */
 export interface MailboxConfig {
-  readonly adapter: 'mock' | 'imap' | 'none';
   readonly address: string;
-  readonly imapHost: string;
-  readonly imapPort: number;
-  readonly imapSecure: boolean;
-  readonly imapUser: string;
-  readonly imapPassword: string;
 }
 
 export interface MailConfig {
@@ -46,36 +29,18 @@ export interface MailConfig {
 
 const PURPOSES = ['billing', 'recruiting', 'audit', 'hr'] as const;
 
-const mailboxDefaults = (purpose: string): MailboxConfig => ({
-  adapter: 'mock',
-  address: `${purpose}@qiheng.test`,
-  imapHost: '',
-  imapPort: 993,
-  imapSecure: true,
-  imapUser: '',
-  imapPassword: '',
-});
-
 const businessMail: AppConfigFactory<MailConfig> = defineAppConfig({
   defaults: {
-    billing: mailboxDefaults('billing'),
-    recruiting: mailboxDefaults('recruiting'),
-    audit: mailboxDefaults('audit'),
-    hr: mailboxDefaults('hr'),
+    billing: { address: 'billing@qiheng.test' },
+    recruiting: { address: 'recruiting@qiheng.test' },
+    audit: { address: 'audit@qiheng.test' },
+    hr: { address: 'hr@qiheng.test' },
   },
   env: Object.fromEntries(
-    PURPOSES.flatMap((purpose) => {
-      const prefix = `BUSINESS_MAIL_${purpose.toUpperCase()}`;
-      return [
-        [`${prefix}_ADAPTER`, envString(`${purpose}.adapter`)],
-        [`${prefix}_ADDRESS`, envString(`${purpose}.address`)],
-        [`${prefix}_IMAP_HOST`, envString(`${purpose}.imapHost`)],
-        [`${prefix}_IMAP_PORT`, envInteger(`${purpose}.imapPort`)],
-        [`${prefix}_IMAP_SECURE`, envBoolean(`${purpose}.imapSecure`)],
-        [`${prefix}_IMAP_USER`, envString(`${purpose}.imapUser`)],
-        [`${prefix}_IMAP_PASSWORD`, envString(`${purpose}.imapPassword`)],
-      ];
-    }),
+    PURPOSES.map((purpose) => [
+      `BUSINESS_MAIL_${purpose.toUpperCase()}_ADDRESS`,
+      envString(`${purpose}.address`),
+    ]),
   ),
 });
 

@@ -94,7 +94,7 @@ const en = {
       empty: 'No messages.',
       noMailbox: 'You have no business mailbox.',
       mockNotice:
-        'Development mailbox: messages are read from storage/mail/inbox and sent ones are written to storage/mail/outbox. Nothing reaches a real address.',
+        'Local mailbox (development): messages are read from storage/mail/local/<address>/inbox and sent ones are written to storage/mail/outbox. Nothing reaches a real address.',
       from: 'From',
       to: 'To',
       status: {
@@ -180,7 +180,14 @@ const en = {
       mailbox: 'Mailbox',
       address: 'Address',
       adapter: 'Source',
-      adapters: { mock: 'Development mailbox', imap: 'IMAP', none: 'Off' },
+      // The Mail plugin provider type of the bound account; none: no account bound.
+      adapters: {
+        'local-files': 'Local mailbox (development)',
+        'imap-smtp': 'IMAP/SMTP',
+        gmail: 'Gmail',
+        microsoft: 'Microsoft 365',
+        none: 'No mailbox account',
+      },
       enabled: 'On',
       senderDomains: 'Sender domains',
       senderDomainsHint: 'Comma separated. Empty: any sender.',
@@ -640,7 +647,7 @@ const zh: Shape = {
       empty: '没有邮件。',
       noMailbox: '你没有可查看的业务邮箱。',
       mockNotice:
-        '开发环境的模拟邮箱：来信从 storage/mail/inbox 读取，发出的邮件写入 storage/mail/outbox，不会发到真实地址。',
+        '本地文件邮箱（开发环境）：来信从 storage/mail/local/<邮箱地址>/inbox 读取，发出的邮件写入 storage/mail/outbox，不会发到真实地址。',
       from: '发件人',
       to: '收件人',
       status: {
@@ -724,7 +731,13 @@ const zh: Shape = {
       mailbox: '邮箱',
       address: '地址',
       adapter: '接入方式',
-      adapters: { mock: '开发环境模拟邮箱', imap: 'IMAP', none: '关闭' },
+      adapters: {
+        'local-files': '本地文件邮箱（开发）',
+        'imap-smtp': 'IMAP/SMTP',
+        gmail: 'Gmail',
+        microsoft: 'Microsoft 365',
+        none: '未绑定邮箱账户',
+      },
       enabled: '启用',
       senderDomains: '允许的发件人域名',
       senderDomainsHint: '用逗号分隔；留空表示不限。',

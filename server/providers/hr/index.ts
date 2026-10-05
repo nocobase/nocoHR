@@ -130,7 +130,10 @@ import { payrollServicesToken } from './tokens.js';
 // V2-06 邮件往来
 import type { MailConfig } from '../../config/business-mail.js';
 import { createBillingMailHandler } from './mail/billing.js';
-import { mailProviderRegistryToken } from '@nocobase/app-plugin-mail/server';
+import {
+  mailProviderRegistryToken,
+  mailServiceToken as pluginMailServiceToken,
+} from '@nocobase/app-plugin-mail/server';
 
 import { createAuditMail } from './mail/audit.js';
 import { localMailProvider } from './mail/local-provider.js';
@@ -529,36 +532,38 @@ export default class HrProvider extends ServiceProvider<Application> {
         database: container.resolve(databaseManagerToken),
         settings: container.resolve(mailSettingsToken),
         config: () => this.mailConfig(),
-        storageDir: () => this.app.paths.storage(),
         drive: () => container.resolve(driveManagerToken),
         production,
-        sendEmail: async (input) => {
-          if (!container.has(notificationServiceToken))
-            return 'channelNotConfigured';
-          try {
-            await container.resolve(notificationServiceToken).send({
-              idempotencyKey: input.idempotencyKey,
-              source: { type: 'hr.mail', referenceId: input.idempotencyKey },
-              messages: {
-                [input.channel]: {
-                  to: input.to,
-                  replyTo: input.replyTo,
-                  subject: input.subject,
-                  text: input.text,
-                },
-              },
-            });
-            return 'sent';
-          } catch (error) {
-            const code = str(
-              (error as { code?: unknown }).code ??
-                (error as Error).message ??
-                '',
-            );
-            return /CHANNEL|UNKNOWN|DISABLED|NOT_FOUND/iu.test(code)
-              ? 'channelNotConfigured'
-              : 'failed';
+        mail: () => container.resolve(pluginMailServiceToken),
+        localProvider: production ? null : 'local',
+        // A mailbox connected automatically belongs to the owner of its sorting task, else a holder of its role.
+        defaultOwner: async (purpose) => {
+          const task = {
+            billing: 'hrAssistant.mailSortBilling',
+            recruiting: 'recruitingAssistant.mailSortRecruiting',
+            audit: 'certificationSteward.mailSortAudit',
+            hr: null,
+          }[purpose];
+          if (task) {
+            const owner = await container
+              .resolve(databaseManagerToken)
+              .query()
+              .selectFrom('aiAutomationSettings')
+              .select(['ownerUserId'])
+              .where('id', '=', task)
+              .executeTakeFirst();
+            if (owner?.ownerUserId) return str(owner.ownerUserId);
           }
+          const role = {
+            billing: 'hr.payroll',
+            recruiting: 'hr.recruiter',
+            audit: 'hr.admin',
+            hr: 'hr.admin',
+          }[purpose];
+          const holders = await container
+            .resolve(hrCoreServiceToken)
+            .holdersOf(role);
+          return holders[0] ?? null;
         },
         notify: this.notifier(),
         log: (fields, message) =>

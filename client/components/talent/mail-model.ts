@@ -49,7 +49,9 @@ export interface Mailbox {
   readonly purpose: MailPurpose;
   readonly address: string;
   readonly enabled: boolean;
-  readonly adapter: 'mock' | 'imap' | 'none';
+  /** The Mail plugin provider type of the bound account, or none. */
+  readonly adapter:
+    'local-files' | 'imap-smtp' | 'gmail' | 'microsoft' | 'none';
   readonly canSend: boolean;
   readonly unmatched: number;
 }

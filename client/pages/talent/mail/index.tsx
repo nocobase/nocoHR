@@ -211,7 +211,7 @@ export default function MailPage(): ReactElement {
               ))}
             </ToggleGroup>
           </div>
-          {mailbox.adapter === 'mock' ? (
+          {mailbox.adapter === 'local-files' ? (
             <Alert>
               <InboxIcon />
               <AlertDescription>{t('mail.mockNotice')}</AlertDescription>

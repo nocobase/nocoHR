@@ -361,15 +361,14 @@ export const localMailProvider: MailProviderDefinition<LocalMailProviderConfig> 
             `Date: ${new Date().toUTCString()}`,
             'MIME-Version: 1.0',
           ];
-          const body = Buffer.from(input.message.text, 'utf8')
-            .toString('base64')
-            .replace(/.{1,76}/gu, '$&\r\n');
+          // The text stays readable in the outbox file (8bit), as a mail client would show it.
+          const body = input.message.text;
           let content: string;
           if (!input.message.attachments.length)
             content = [
               ...lines,
               'Content-Type: text/plain; charset=utf-8',
-              'Content-Transfer-Encoding: base64',
+              'Content-Transfer-Encoding: 8bit',
               '',
               body,
             ].join('\r\n');
@@ -377,7 +376,7 @@ export const localMailProvider: MailProviderDefinition<LocalMailProviderConfig> 
             const parts: string[] = [
               `--${boundary}`,
               'Content-Type: text/plain; charset=utf-8',
-              'Content-Transfer-Encoding: base64',
+              'Content-Transfer-Encoding: 8bit',
               '',
               body,
             ];

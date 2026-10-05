@@ -52,7 +52,8 @@ interface Loaded {
   connections: {
     purpose: MailPurpose;
     address: string;
-    adapter: 'mock' | 'imap' | 'none';
+    /** The Mail plugin provider type of the bound account, or none. */
+    adapter: 'local-files' | 'imap-smtp' | 'gmail' | 'microsoft' | 'none';
     configured: boolean;
   }[];
 }

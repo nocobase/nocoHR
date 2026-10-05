@@ -18,6 +18,7 @@ import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { simpleParser } from 'mailparser';
 import * as XLSX from 'xlsx';
 
 import { composeMail, XLSX_TYPE } from '../../database/seed-data/demo-mail.ts';
@@ -119,8 +120,30 @@ async function eventually<T>(
   return last;
 }
 
-const inbox = () => path.join(directory, 'storage', 'mail', 'inbox', 'billing');
+const inbox = () =>
+  path.join(
+    directory,
+    'storage',
+    'mail',
+    'local',
+    'billing@qiheng.test',
+    'inbox',
+  );
 const outbox = () => path.join(directory, 'storage', 'mail', 'outbox');
+
+/** Sent mail goes out through the Mail plugin's outbox job: wait for the files. */
+async function sentFiles(count: number): Promise<string[]> {
+  return eventually(
+    async () => {
+      try {
+        return readdirSync(outbox()).sort();
+      } catch {
+        return [] as string[];
+      }
+    },
+    (files) => files.length >= count,
+  );
+}
 
 function drop(name: string, eml: string) {
   mkdirSync(inbox(), { recursive: true });
@@ -364,11 +387,15 @@ describe('对账邮箱 (V2-06)', () => {
     );
     expect(sent.status).toBe(200);
     expect(sent.json.data.status).toBe('sent');
-    const files = readdirSync(outbox());
+    const files = await sentFiles(1);
     expect(files).toHaveLength(1);
-    const written = readFileSync(path.join(outbox(), files[0]!), 'utf8');
-    expect(written).toContain(`Reply-To: billing+${threadKey}@qiheng.test`);
-    expect(written).toContain('另：请在本周内回复。');
+    const written = await simpleParser(
+      readFileSync(path.join(outbox(), files[0]!)),
+    );
+    // In the vendor's conversation: it answers their message and keeps the thread's tag.
+    expect(written.inReplyTo).toBeTruthy();
+    expect(written.subject).toContain(`[#${threadKey}]`);
+    expect(written.text).toContain('另：请在本周内回复。');
     // Sending twice is refused.
     expect(
       (await call('payroll01', 'POST', `/mail/messages/${draft.id}/send`))
@@ -381,7 +408,7 @@ describe('对账邮箱 (V2-06)', () => {
       '03-corrected.eml',
       composeMail({
         from: vendor,
-        to: `billing+${threadKey}@qiheng.test`,
+        to: 'billing@qiheng.test',
         subject: `回复：蓉川人力 ${label}派遣工时账单 [#${threadKey}]`,
         text: '已更正，见附件。',
         date: new Date(),

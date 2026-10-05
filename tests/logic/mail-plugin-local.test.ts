@@ -45,70 +45,8 @@ process.env.AUTH_SECRET ??= 'test-auth-secret-at-least-32-characters';
 // A test-only value for the demo seed; never a real credential.
 const PASSWORD = 'mail-plugin-local-test-password';
 
-type Json = Record<string, any>;
-
 let server: StandaloneServer;
 let directory: string;
-let base: string;
-const cookies = new Map<string, string>();
-
-async function signIn(username: string): Promise<string> {
-  const cached = cookies.get(username);
-  if (cached) return cached;
-  const response = await server.fetch(
-    new Request(`${base}/api/auth/sign-in/username`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username, password: PASSWORD }),
-    }),
-  );
-  expect(response.status, `sign in ${username}`).toBe(200);
-  const cookie = response.headers
-    .getSetCookie()
-    .map((header) => header.split(';')[0])
-    .join('; ');
-  cookies.set(username, cookie);
-  return cookie;
-}
-
-async function call(
-  username: string | null,
-  method: string,
-  url: string,
-  body?: unknown,
-): Promise<{ status: number; json: Json }> {
-  const headers: Record<string, string> = {};
-  if (username) headers.cookie = await signIn(username);
-  if (body !== undefined) headers['content-type'] = 'application/json';
-  if (method !== 'GET') headers.origin = 'http://localhost';
-  const response = await server.fetch(
-    new Request(`${base}/api/talent${url}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
-  );
-  const text = await response.text();
-  return {
-    status: response.status,
-    json: text ? (JSON.parse(text) as Json) : {},
-  };
-}
-
-async function eventually<T>(
-  read: () => Promise<T>,
-  ok: (value: T) => boolean,
-  timeout = 15_000,
-): Promise<T> {
-  const started = Date.now();
-  let last = await read();
-  while (!ok(last)) {
-    if (Date.now() - started > timeout) return last;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    last = await read();
-  }
-  return last;
-}
 
 async function userId(username: string): Promise<string> {
   const { databaseManagerToken } = await import('@nocobase/db');
@@ -242,7 +180,6 @@ beforeAll(async () => {
       storageDir: path.join(directory, 'storage'),
     },
   });
-  base = `http://localhost${server.application.publicBasePath}`;
 }, 180_000);
 
 afterAll(async () => {

@@ -196,7 +196,6 @@ export function createRecruitingContext(deps: RecruitingDeps) {
           text: input.body,
           refType: input.applicationId ? 'application' : null,
           refId: input.applicationId ?? null,
-          channel: settings.email.channel,
           redirectTo: settings.email.redirectTo ?? undefined,
         });
         if (viaMail) return viaMail;
