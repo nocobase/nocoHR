@@ -128,7 +128,7 @@ import {
 } from './payroll/resources.js';
 import { payrollServicesToken } from './tokens.js';
 // V2-06 邮件往来
-import type { MailConfig } from '../../config/mail.js';
+import type { MailConfig } from '../../config/business-mail.js';
 import { createBillingMailHandler } from './mail/billing.js';
 import { createAuditMail } from './mail/audit.js';
 import { createRecruitingMailHandler } from './mail/recruiting.js';
@@ -848,7 +848,7 @@ export default class HrProvider extends ServiceProvider<Application> {
   }
 
   private mailConfig(): MailConfig {
-    const raw = this.app.config.get<Partial<MailConfig>>('mail') ?? {};
+    const raw = this.app.config.get<Partial<MailConfig>>('businessMail') ?? {};
     const fallback = (purpose: string) => ({
       adapter: 'mock' as const,
       address: `${purpose}@qiheng.test`,

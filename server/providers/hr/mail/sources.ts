@@ -18,7 +18,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 
-import type { MailboxConfig } from '../../../config/mail.js';
+import type { MailboxConfig } from '../../../config/business-mail.js';
 import type { MailPurpose } from './types.js';
 
 export interface IncomingMail {

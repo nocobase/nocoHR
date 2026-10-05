@@ -28,6 +28,8 @@ strictDepBuilds: false
 
 minimumReleaseAgeExclude:
   - '@asamuzakjp/css-color@7.1.2'
+  # The Mail plugin (Pro) is released ahead of the age window; its versions are pinned here.
+  - '@nocobase/app-plugin-mail@1.0.0-beta.7'
   - '@asamuzakjp/dom-selector@9.2.2'
   - '@nocobase/app-cli@1.0.0-beta.7'
   - '@nocobase/app-plugin-authorization@0.2.0-beta.21'

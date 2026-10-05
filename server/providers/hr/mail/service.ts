@@ -19,7 +19,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { DatabaseManager } from '@nocobase/db';
 import type { NocoBaseDriveManager } from '@nocobase/drive';
 
-import type { MailConfig, MailboxConfig } from '../../../config/mail.js';
+import type { MailConfig, MailboxConfig } from '../../../config/business-mail.js';
 import type { ActorContext } from '../framework-service.js';
 import { HrError } from '../shared.js';
 import { parseMail, type ParsedMail } from './parse.js';

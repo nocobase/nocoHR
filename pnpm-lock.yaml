@@ -47,6 +47,9 @@ importers:
       '@nocobase/app-plugin-i18n':
         specifier: ^0.1.0-beta.10
         version: 0.1.0-beta.10(@nocobase/app-client@1.0.0-beta.23(f423e414d28f377285d524265e2f49ec))(@nocobase/app-server@1.0.0-beta.30(@nocobase/caching@0.1.0-beta.2)(@nocobase/db-sqlite@0.1.0-beta.3(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3)))(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3))(@nocobase/i18n@1.0.0-beta.4(hono@4.13.9)(react-i18next@17.0.15(i18next@26.4.2(typescript@6.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(react@19.3.0)(typescript@6.0.3))(@nocobase/jobs@0.1.0-beta.0)(@nocobase/queue@0.1.0-beta.7(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3))(better-sqlite3@13.0.3)(kysely@0.29.6)(supports-color@8.1.1))(@nocobase/service-provider@0.0.2-beta.1)(idb-keyval@6.3.0))(@nocobase/i18n@1.0.0-beta.4(hono@4.13.9)(react-i18next@17.0.15(i18next@26.4.2(typescript@6.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(react@19.3.0)(typescript@6.0.3))(hono@4.13.9)(react@19.3.0)
+      '@nocobase/app-plugin-mail':
+        specifier: 1.0.0-beta.7
+        version: 1.0.0-beta.7(7c523959b81c5855a27fc3e02f9826ad)
       '@nocobase/app-plugin-notification':
         specifier: ^0.1.0-beta.18
         version: 0.1.0-beta.18(8d46f506608c585e9ab88dfa13f09aa7)
@@ -2396,6 +2399,29 @@ packages:
       '@nocobase/i18n': ^1.0.0-beta.4
       hono: ^4.13.2
       react: ^19.0.0
+
+  '@nocobase/app-plugin-mail@1.0.0-beta.7':
+    resolution: {integrity: sha512-c5ONYPmqFO8cIeDnxGw1Pnk3Cl6l76XHaXGyuS7ZmqpUiW9UYp0RRDY/35OQvMS/oLaxBHI4nC13QLNCv1V6UQ==}
+    engines: {node: '>=24.0.0'}
+    peerDependencies:
+      '@base-ui/react': ^1.6.0
+      '@nocobase/app-client': ^2.0.0-beta.0
+      '@nocobase/app-plugin-authentication': ^2.0.0-beta.0
+      '@nocobase/app-plugin-authorization': ^1.0.0-beta.24
+      '@nocobase/app-server': ^2.0.0-beta.0
+      '@nocobase/db': ^1.0.0-beta.17
+      '@nocobase/i18n': ^1.0.0-beta.5
+      '@nocobase/jobs': ^0.1.0-beta.2
+      '@nocobase/service-provider': ^0.0.2-beta.1
+      class-variance-authority: ^0.7.1
+      clsx: ^2.1.1
+      date-fns: ^4.4.0
+      lucide-react: ^0.487.0
+      react: ^19.0.0
+      react-day-picker: ^10.0.1
+      react-dom: ^19.0.0
+      react-router: ^7.0.2
+      tailwind-merge: ^3.2.0
 
   '@nocobase/app-plugin-notification-in-app@0.2.0-beta.18':
     resolution: {integrity: sha512-Npuphm+zxeUhlnAEn8fqGr77G0PYi7hhH835n4J5cNG6bnPalJFFh6mNkckEXAbwzRSkj0RQvQlabM9L93TQzg==}
@@ -5592,6 +5618,10 @@ packages:
 
   imapflow@1.7.8:
     resolution: {integrity: sha512-dJoCIdZOJh26Rn2PdwEzwj0bRDgGBxxX38pio534FagIHVuR2l0SAfLr6sJo32YfuJHiSs/U2ntNDHnMg3/Hlg==}
+
+  imapflow@2.2.4:
+    resolution: {integrity: sha512-+bPRoCs7qMGys74jVkQW94FmBPiXLflo/AKmArriu0L/MjnrcT4hZNaykiGFuuHACoTg03OyQghRYdgnD+KlGw==}
+    engines: {node: '>=20.0.0'}
 
   immediate@3.0.6:
     resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
@@ -10486,6 +10516,33 @@ snapshots:
       hono: 4.13.9
       react: 19.3.0
 
+  '@nocobase/app-plugin-mail@1.0.0-beta.7(7c523959b81c5855a27fc3e02f9826ad)':
+    dependencies:
+      '@base-ui/react': 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@nocobase/app-client': 1.0.0-beta.23(f423e414d28f377285d524265e2f49ec)
+      '@nocobase/app-plugin-authentication': 1.0.0-beta.24(@nocobase/app-client@1.0.0-beta.23(f423e414d28f377285d524265e2f49ec))(@nocobase/app-server@1.0.0-beta.30(@nocobase/caching@0.1.0-beta.2)(@nocobase/db-sqlite@0.1.0-beta.3(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3)))(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3))(@nocobase/i18n@1.0.0-beta.4(hono@4.13.9)(react-i18next@17.0.15(i18next@26.4.2(typescript@6.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(react@19.3.0)(typescript@6.0.3))(@nocobase/jobs@0.1.0-beta.0)(@nocobase/queue@0.1.0-beta.7(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3))(better-sqlite3@13.0.3)(kysely@0.29.6)(supports-color@8.1.1))(@nocobase/service-provider@0.0.2-beta.1)(idb-keyval@6.3.0))(@nocobase/caching@0.1.0-beta.2)(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3))(@nocobase/service-provider@0.0.2-beta.1)(@opentelemetry/api@1.9.1)(better-sqlite3@13.0.3)(react-dom@19.3.0(react@19.3.0))(react-router@7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)(vitest@4.1.11)
+      '@nocobase/app-plugin-authorization': 0.2.0-beta.21(a11778cc4eedc7673b979a8f33b7b2fa)
+      '@nocobase/app-server': 1.0.0-beta.30(@nocobase/caching@0.1.0-beta.2)(@nocobase/db-sqlite@0.1.0-beta.3(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3)))(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3))(@nocobase/i18n@1.0.0-beta.4(hono@4.13.9)(react-i18next@17.0.15(i18next@26.4.2(typescript@6.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(react@19.3.0)(typescript@6.0.3))(@nocobase/jobs@0.1.0-beta.0)(@nocobase/queue@0.1.0-beta.7(@nocobase/db@1.0.0-beta.16(better-sqlite3@13.0.3))(better-sqlite3@13.0.3)(kysely@0.29.6)(supports-color@8.1.1))(@nocobase/service-provider@0.0.2-beta.1)(idb-keyval@6.3.0)
+      '@nocobase/db': 1.0.0-beta.16(better-sqlite3@13.0.3)
+      '@nocobase/i18n': 1.0.0-beta.4(hono@4.13.9)(react-i18next@17.0.15(i18next@26.4.2(typescript@6.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(react@19.3.0)(typescript@6.0.3)
+      '@nocobase/jobs': 0.1.0-beta.0
+      '@nocobase/service-provider': 0.0.2-beta.1
+      '@sinclair/typebox': 0.34.52
+      class-variance-authority: 0.7.1
+      clsx: 2.1.1
+      date-fns: 4.4.0
+      hono: 4.13.9
+      imapflow: 2.2.4
+      lucide-react: 0.487.0(react@19.3.0)
+      mailparser: 3.9.31
+      nodemailer: 9.1.1
+      react: 19.3.0
+      react-day-picker: 10.0.1(@types/react@19.3.0)(react@19.3.0)
+      react-dom: 19.3.0(react@19.3.0)
+      react-router: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      tailwind-merge: 3.7.0
+      zod: 4.6.5
+
   '@nocobase/app-plugin-notification-in-app@0.2.0-beta.18(b3143bb6e92eddc23713c2b094da423a)':
     dependencies:
       '@base-ui/react': 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -14015,6 +14072,17 @@ snapshots:
       libqp: 2.1.1
       pino: 10.3.1
       socks: 2.8.9
+
+  imapflow@2.2.4:
+    dependencies:
+      '@zone-eu/mailsplit': 5.4.19
+      encoding-japanese: 2.4.0
+      iconv-lite: 0.7.3
+      libbase64: 1.3.1
+      libmime: 5.4.6
+      libqp: 2.1.2
+      pino: 10.3.1
+      socks: 2.8.10
 
   immediate@3.0.6: {}
 

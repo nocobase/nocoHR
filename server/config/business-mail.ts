@@ -7,7 +7,9 @@ import {
 } from '@nocobase/app-server/config';
 
 /**
- * Business mailboxes (总纲 邮件约定, V2-06): where each mailbox's mail is read
+ * Business mailboxes (总纲 邮件约定, V2-06), configuration section
+ * `businessMail` (environment `BUSINESS_MAIL_<PURPOSE>_*`): the `mail` section
+ * and `MAIL_*` variables belong to the Mail plugin. Where each mailbox's mail is read
  * from. Only credentials and connection details live here — set them through
  * the environment (`.env.local` in development, the deployment's secret store
  * in production), never in a committed file. What the mailboxes are used for
@@ -54,7 +56,7 @@ const mailboxDefaults = (purpose: string): MailboxConfig => ({
   imapPassword: '',
 });
 
-const mail: AppConfigFactory<MailConfig> = defineAppConfig({
+const businessMail: AppConfigFactory<MailConfig> = defineAppConfig({
   defaults: {
     billing: mailboxDefaults('billing'),
     recruiting: mailboxDefaults('recruiting'),
@@ -63,7 +65,7 @@ const mail: AppConfigFactory<MailConfig> = defineAppConfig({
   },
   env: Object.fromEntries(
     PURPOSES.flatMap((purpose) => {
-      const prefix = `MAIL_${purpose.toUpperCase()}`;
+      const prefix = `BUSINESS_MAIL_${purpose.toUpperCase()}`;
       return [
         [`${prefix}_ADAPTER`, envString(`${purpose}.adapter`)],
         [`${prefix}_ADDRESS`, envString(`${purpose}.address`)],
@@ -77,4 +79,4 @@ const mail: AppConfigFactory<MailConfig> = defineAppConfig({
   ),
 });
 
-export default mail;
+export default businessMail;

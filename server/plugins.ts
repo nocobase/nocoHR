@@ -18,6 +18,7 @@ import {
 } from '@nocobase/app-server/plugins';
 import scheduler from '@nocobase/app-plugin-scheduler/server';
 import file from '@nocobase/app-plugin-file/server';
+import mail from '@nocobase/app-plugin-mail/server';
 
 const serverPlugins: AppServerPlugins = defineServerPlugins([
   authentication,
@@ -36,6 +37,7 @@ const serverPlugins: AppServerPlugins = defineServerPlugins([
   workflow,
   file,
   scheduler,
+  mail,
 ]);
 
 export default serverPlugins;
