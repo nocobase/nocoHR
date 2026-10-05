@@ -6,6 +6,59 @@
  */
 const en = {
   top: {
+    myMailbox: {
+      title: 'My mailbox',
+      description:
+        'Connect your own mailbox so your correspondence with candidates shows here. Your password or authorization code stays with the mail service connection; nobody else can read your mail.',
+      add: 'Connect a mailbox',
+      accountType: 'Mailbox type',
+      chooseAccountType: 'Choose the type of mailbox',
+      connect: 'Connect',
+      connecting: 'Connecting…',
+      connectedAccounts: '{{count}} connected',
+      configurationRequired: 'Not configured yet; ask your administrator.',
+      emailAddress: 'Email address',
+      username: 'User name',
+      password: 'Password or authorization code',
+      displayName: 'Display name',
+      capabilities: {
+        receive: 'Receive',
+        send: 'Send',
+        incrementalSync: 'Incremental sync',
+        pushNotifications: 'Push',
+        folders: 'Folders',
+        labels: 'Labels',
+        drafts: 'Drafts',
+        moveMessage: 'Move',
+        aliases: 'Aliases',
+      },
+      status: {
+        connecting: 'Connecting',
+        active: 'Connected',
+        revoked: 'Access revoked',
+        suspended: 'Suspended',
+        reauthorizationRequired: 'Sign in again',
+        removing: 'Removing',
+      },
+      empty: 'No mailbox connected yet.',
+      emptyHint:
+        'Connect the mailbox you use with candidates and other outside contacts.',
+      authorized: 'Mailbox connected.',
+      authorizationFailed: 'The mailbox could not be authorized. Try again.',
+      connectFailed:
+        'The mailbox could not be connected. Check the address and the authorization code.',
+      loadFailed: 'Your mailboxes could not be loaded.',
+      remove: 'Remove',
+      removeTitle: 'Remove this mailbox?',
+      removeDescription:
+        'Mail from {{address}} will no longer show here. Nothing is deleted in the mailbox itself.',
+      removed: 'Mailbox removed.',
+      removeFailed: 'The mailbox could not be removed.',
+      cancel: 'Cancel',
+      correspondence: 'My correspondence',
+      noCorrespondence: 'No mail with this person in your own mailboxes.',
+      read: 'Read',
+    },
     auditRequests: {
       title: 'Audit request',
       tab: 'Audit requests',
@@ -192,6 +245,10 @@ const en = {
       senderDomains: 'Sender domains',
       senderDomainsHint: 'Comma separated. Empty: any sender.',
       retentionDays: 'Keep unlinked mail (days)',
+      account: 'Mailbox account',
+      noAccount: 'No account bound',
+      accountHint:
+        'The mailbox connected through the Mail plugin that serves this purpose. Its owner reads and sends as it; connect one on My mailbox first.',
       vendors: 'Staffing agencies',
       customers: 'Customers',
       customersHint:
@@ -509,7 +566,11 @@ const en = {
       },
     },
   },
-  navigation: { talentCompliance: 'Compliance', talentMail: 'Business mail' },
+  navigation: {
+    talentCompliance: 'Compliance',
+    talentMail: 'Business mail',
+    talentMyMailbox: 'My mailbox',
+  },
   errors: {
     MAIL_NOT_FOUND:
       'The message was not found, or you cannot see this mailbox.',
@@ -517,6 +578,8 @@ const en = {
     MAIL_SEND_FAILED:
       'The message could not be sent. Check the notification email channel.',
     MAIL_MAILBOX_UNAVAILABLE: 'This mailbox is not available.',
+    MAIL_ACCOUNT_INVALID:
+      'Choose a connected mailbox account; it is bound with its owner.',
     AUDIT_REQUEST_NOT_FOUND: 'The audit request was not found.',
     AUDIT_REQUEST_LOCKED:
       'The scope can no longer be changed: the pack was built or the request was answered.',
@@ -565,6 +628,57 @@ type Shape = typeof en;
 
 const zh: Shape = {
   top: {
+    myMailbox: {
+      title: '我的邮箱',
+      description:
+        '关联你自己的邮箱，你和候选人的邮件往来就会显示在这里。邮箱密码或授权码只保存在邮箱连接里，别人看不到你的邮件。',
+      add: '关联邮箱',
+      accountType: '邮箱类型',
+      chooseAccountType: '选择邮箱类型',
+      connect: '关联',
+      connecting: '正在关联…',
+      connectedAccounts: '已关联 {{count}} 个',
+      configurationRequired: '尚未配置，请联系管理员。',
+      emailAddress: '邮箱地址',
+      username: '用户名',
+      password: '密码或授权码',
+      displayName: '显示名称',
+      capabilities: {
+        receive: '收信',
+        send: '发信',
+        incrementalSync: '增量同步',
+        pushNotifications: '推送',
+        folders: '文件夹',
+        labels: '标签',
+        drafts: '草稿',
+        moveMessage: '移动',
+        aliases: '别名',
+      },
+      status: {
+        connecting: '正在关联',
+        active: '已关联',
+        revoked: '授权已撤销',
+        suspended: '已暂停',
+        reauthorizationRequired: '需要重新登录',
+        removing: '正在移除',
+      },
+      empty: '还没有关联邮箱。',
+      emptyHint: '关联你和候选人、外部联系人往来所用的邮箱。',
+      authorized: '邮箱已关联。',
+      authorizationFailed: '邮箱授权没有成功，请重试。',
+      connectFailed: '邮箱没有关联上，请检查地址和授权码。',
+      loadFailed: '没能读取你的邮箱。',
+      remove: '移除',
+      removeTitle: '移除这个邮箱？',
+      removeDescription:
+        '移除后 {{address}} 的邮件不再显示在这里；邮箱本身的邮件不会被删除。',
+      removed: '邮箱已移除。',
+      removeFailed: '邮箱没能移除。',
+      cancel: '取消',
+      correspondence: '我的邮箱往来',
+      noCorrespondence: '你的邮箱里还没有和这位的往来邮件。',
+      read: '查看',
+    },
     auditRequests: {
       title: '审核请求',
       tab: '审核请求',
@@ -742,6 +856,10 @@ const zh: Shape = {
       senderDomains: '允许的发件人域名',
       senderDomainsHint: '用逗号分隔；留空表示不限。',
       retentionDays: '未挂单据的来信保存（天）',
+      account: '邮箱账户',
+      noAccount: '未绑定账户',
+      accountHint:
+        '通过 Mail 插件关联、承担这个用途的邮箱；收信和发信以账户主人的身份进行。请先在“我的邮箱”里关联。',
       vendors: '派遣公司',
       customers: '客户',
       customersHint:
@@ -1043,12 +1161,18 @@ const zh: Shape = {
       },
     },
   },
-  navigation: { talentCompliance: '用工合规', talentMail: '邮件往来' },
+  navigation: {
+    talentCompliance: '用工合规',
+    talentMail: '邮件往来',
+    talentMyMailbox: '我的邮箱',
+  },
   errors: {
     MAIL_NOT_FOUND: '邮件不存在，或你没有查看这个邮箱的权限。',
     MAIL_NOT_DRAFT: '只有草稿可以修改或发送。',
     MAIL_SEND_FAILED: '邮件没有发出，请检查通知插件的邮件渠道。',
     MAIL_MAILBOX_UNAVAILABLE: '这个邮箱暂不可用。',
+    MAIL_ACCOUNT_INVALID:
+      '请选择一个已关联的邮箱账户，它会连同账户主人一起绑定。',
     AUDIT_REQUEST_NOT_FOUND: '审核请求不存在。',
     AUDIT_REQUEST_LOCKED: '审核包已生成或已回复，范围不能再修改。',
     AUDIT_SCOPE_EMPTY: '请至少选择一个部门或岗位，并勾选资料。',

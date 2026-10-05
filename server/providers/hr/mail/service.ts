@@ -1114,6 +1114,82 @@ export function createMailService(deps: MailServiceDeps) {
       return state;
     },
 
+    /** 设置 / 邮件: every Mail plugin account, to bind one to a purpose (HR administrators; checked by the route). */
+    async accounts() {
+      const accounts = await deps
+        .mail()
+        .listManagedAccounts({ actorId: 'system' });
+      return accounts.map((a) => ({
+        id: a.id,
+        address: a.address,
+        ownerUserId: a.userId,
+        ownerName: a.ownerName ?? null,
+        provider: a.provider.type,
+        status: a.status,
+      }));
+    },
+
+    /** A binding names an existing account and its real owner, or nothing. */
+    async checkBindings(
+      mailboxes: Record<string, { accountId?: string; ownerUserId?: string }>,
+    ) {
+      const accounts = await service.accounts();
+      for (const mailbox of Object.values(mailboxes)) {
+        if (!mailbox.accountId && !mailbox.ownerUserId) continue;
+        const account = accounts.find((a) => a.id === mailbox.accountId);
+        if (!account || account.ownerUserId !== mailbox.ownerUserId)
+          throw new HrError('MAIL_ACCOUNT_INVALID', 400);
+      }
+    },
+
+    /**
+     * 我的邮箱往来: messages in the user's own Mail accounts that involve an
+     * address (a candidate's), newest first. The plugin checks the ownership.
+     */
+    async mine(ctx: ActorContext, address: string) {
+      const target = address.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+$/u.test(target))
+        throw new HrError('INVALID_INPUT', 400);
+      const page = await deps
+        .mail()
+        .listMessages({ actorId: ctx.userId }, { query: target, limit: 50 });
+      return page.items
+        .filter(
+          (m) =>
+            !m.draft &&
+            [m.from, ...m.to, ...m.cc]
+              .filter((a): a is NonNullable<typeof a> => Boolean(a))
+              .some((a) => a.address.toLowerCase() === target),
+        )
+        .map((m) => ({
+          accountId: m.accountId,
+          id: m.id,
+          subject: m.subject,
+          from: m.from ?? null,
+          to: m.to,
+          at: m.receivedAt ?? m.sentAt ?? null,
+          preview: m.preview ?? '',
+        }));
+    },
+
+    /** One message of the user's own accounts, as text. */
+    async mineMessage(ctx: ActorContext, accountId: string, messageId: string) {
+      const message = await deps
+        .mail()
+        .getMessage({ actorId: ctx.userId }, accountId, messageId)
+        .catch(() => undefined);
+      if (!message) throw new HrError('MAIL_NOT_FOUND', 404);
+      return {
+        id: message.id,
+        subject: message.subject,
+        from: message.from ?? null,
+        to: message.to,
+        at: message.receivedAt ?? message.sentAt ?? null,
+        text: message.text ?? '',
+        attachments: message.attachments.map((a) => a.fileName),
+      };
+    },
+
     /** Daily: bodies and attachments past their retention are cleared; subject, addresses and links stay. */
     async sweepRetention(date: string) {
       const expired = await database

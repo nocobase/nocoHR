@@ -349,6 +349,16 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
         componentLoader: () => import('./pages/talent/mail/index.js'),
       },
       {
+        // 我的邮箱 (业务邮件改用 Mail 插件): a user connects their own mailbox through the Mail plugin. Gated by the
+        // plugin's own page resource, which its API also requires; granted to the mail roles (seed 202610190102).
+        name: 'talent-my-mailbox',
+        path: '/talent/my-mailbox',
+        auth: 'required',
+        authz: page('mail.workspace'),
+        navigation: { title: 'navigation.talentMyMailbox', icon: AtSign },
+        componentLoader: () => import('./pages/talent/my-mailbox/index.js'),
+      },
+      {
         // 变动影响清单 (V1-02): reached from the workbench, notifications and actions. An approver without the actions
         // page opens a preview through its link, so the page does not gate; the endpoint answers 404 to anyone else.
         name: 'talent-checklist',

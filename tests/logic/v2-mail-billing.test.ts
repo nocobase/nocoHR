@@ -531,3 +531,71 @@ describe('对账邮箱 (V2-06)', () => {
     expect(ignored.json.data.status).toBe('ignored');
   });
 });
+
+describe('Mail plugin accounts behind the business mailboxes', () => {
+  it('lists the accounts for HR administrators only and binds one only with its owner', async () => {
+    const accounts = await call('hr01', 'GET', '/mail/accounts');
+    expect(accounts.status).toBe(200);
+    const billing = (accounts.json.data as Json[]).find(
+      (a) => a.address === 'billing@qiheng.test',
+    )!;
+    expect(billing).toMatchObject({
+      provider: 'local-files',
+      status: 'active',
+    });
+    expect((await call('payroll01', 'GET', '/mail/accounts')).status).toBe(403);
+    const current = await call('hr01', 'GET', '/mail/settings');
+    const value = current.json.data.value as Json;
+    const wrongOwner = await call('hr01', 'PUT', '/mail/settings', {
+      revision: current.json.data.revision,
+      value: {
+        ...value,
+        mailboxes: {
+          ...value.mailboxes,
+          billing: { ...value.mailboxes.billing, ownerUserId: 'someone-else' },
+        },
+      },
+    });
+    expect(wrongOwner.status).toBe(400);
+    expect(wrongOwner.json.error?.code ?? wrongOwner.json.code).toBe(
+      'MAIL_ACCOUNT_INVALID',
+    );
+  });
+
+  it('shows each user only the correspondence in their own mailboxes', async () => {
+    const own = await call(
+      'payroll01',
+      'GET',
+      `/mail/mine?address=${encodeURIComponent(vendor.address)}`,
+    );
+    expect(own.status).toBe(200);
+    const items = own.json.data as Json[];
+    expect(items.length).toBeGreaterThan(0);
+    const message = await call(
+      'payroll01',
+      'GET',
+      `/mail/mine/${items[0]!.accountId}/${items[0]!.id}`,
+    );
+    expect(message.status).toBe(200);
+    expect(typeof message.json.data.text).toBe('string');
+    // Another user's mailbox is not readable, by listing or by id.
+    const other = await call(
+      'recruit01',
+      'GET',
+      `/mail/mine?address=${encodeURIComponent(vendor.address)}`,
+    );
+    expect(other.json.data).toEqual([]);
+    expect(
+      (
+        await call(
+          'recruit01',
+          'GET',
+          `/mail/mine/${items[0]!.accountId}/${items[0]!.id}`,
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await call(null, 'GET', '/mail/mine?address=a@b.test')).status,
+    ).toBe(401);
+  });
+});

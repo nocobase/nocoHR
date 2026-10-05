@@ -24,6 +24,10 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,6 +35,9 @@ import { toast } from '@/components/ui/toast';
 
 interface MailboxSettings {
   enabled: boolean;
+  /** The Mail plugin account serving this purpose, and its owner. */
+  accountId: string;
+  ownerUserId: string;
   allowedSenderDomains: string[];
   retentionDays: number;
   vendors: { domain: string; vendorName: string }[];
@@ -122,6 +129,15 @@ function textsOf(value: MailSettings): Record<string, string> {
   };
 }
 
+interface MailAccountOption {
+  id: string;
+  address: string;
+  ownerUserId: string;
+  ownerName: string | null;
+  provider: string;
+  status: string;
+}
+
 function MailSettingsForm({
   loaded,
   onSaved,
@@ -130,6 +146,8 @@ function MailSettingsForm({
   onSaved: () => void;
 }): ReactElement {
   const { t } = useTranslation();
+  // Every connected Mail account (HR administrators): one is bound to each purpose.
+  const accounts = useRemote<MailAccountOption[]>('talent/mail/accounts');
   const api = useApiClient();
   const [draft, setDraft] = useState<MailSettings>(loaded.value);
   const [texts, setTexts] = useState<Record<string, string>>(() =>
@@ -316,6 +334,36 @@ function MailSettingsForm({
             </CardHeader>
             <CardContent>
               <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor={`mail-account-${purpose}`}>
+                    {t('mailSettings.account')}
+                  </FieldLabel>
+                  <NativeSelect
+                    id={`mail-account-${purpose}`}
+                    value={mailbox.accountId}
+                    onChange={(e) => {
+                      const account = accounts.data?.find(
+                        (a) => a.id === e.target.value,
+                      );
+                      setMailbox(purpose, {
+                        accountId: account?.id ?? '',
+                        ownerUserId: account?.ownerUserId ?? '',
+                      });
+                    }}
+                  >
+                    <NativeSelectOption value=''>
+                      {t('mailSettings.noAccount')}
+                    </NativeSelectOption>
+                    {(accounts.data ?? []).map((a) => (
+                      <NativeSelectOption key={a.id} value={a.id}>
+                        {`${a.address}（${a.ownerName ?? a.ownerUserId}）`}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <FieldDescription>
+                    {t('mailSettings.accountHint')}
+                  </FieldDescription>
+                </Field>
                 <Field orientation='horizontal'>
                   <Switch
                     id={`mail-enabled-${purpose}`}

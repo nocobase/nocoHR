@@ -22,6 +22,8 @@ import {
 const mail: AppConfigFactory<MailConfig> = defineAppConfig<MailConfig>({
   defaults: ({ paths, env }): MailConfig => ({
     ...DEFAULT_MAIL_CONFIG,
+    // After a Gmail / Microsoft 365 authorization the browser returns to 我的邮箱 (client/pages/talent/my-mailbox).
+    oauthReturnUrl: '/talent/my-mailbox',
     providers:
       env.NODE_ENV === 'production'
         ? {}

@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
 import { downloadFile } from '@/components/talent/download';
 import { MailThread } from '@/components/talent/mail-thread';
+import { MyCorrespondence } from '@/components/talent/my-correspondence';
 import { formatDateTime, useAction } from '@/components/talent/recruiting-lib';
 import {
   PeoplePicker,
@@ -473,6 +474,14 @@ export default function CandidateDetail(): ReactElement {
                     refId={applicationId}
                     canSend
                   />
+                </CardContent>
+              </Card>
+            ) : null}
+            {/* 我的邮箱往来: the recruiter's own mailbox, connected through the Mail plugin. */}
+            {data.can?.manage && c?.email ? (
+              <Card>
+                <CardContent>
+                  <MyCorrespondence address={c.email} />
                 </CardContent>
               </Card>
             ) : null}

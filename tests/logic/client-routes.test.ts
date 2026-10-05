@@ -137,6 +137,7 @@ describe('app client routes', () => {
       { name: 'talent-compliance', authorizedAs: 'settings:talent.hr' },
       // V2-06 邮件往来
       { name: 'talent-mail', authorizedAs: 'talent.mail' },
+      { name: 'talent-my-mailbox', authorizedAs: 'mail.workspace' },
       { name: 'talent-checklist', authorizedAs: null },
       { name: 'talent-contracts', authorizedAs: 'talent.contracts' },
       // V2-06 薪酬与社保
