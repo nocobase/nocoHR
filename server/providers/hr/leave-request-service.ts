@@ -800,6 +800,95 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
     return first?.balanceDays ?? Number(row.duration);
   }
 
+  /** See `wholeDayWindow`: the signed-in employee's, or the given employee's, whole days. */
+  async function wholeDays(
+    ctx: ActorContext,
+    startAt: string,
+    endAt: string,
+    employeeId?: string,
+  ): Promise<{ startAt: string; endAt: string }> {
+    const start = Date.parse(startAt);
+    const end = Date.parse(endAt);
+    const localDate = (instant: number) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date(instant));
+    const first = localDate(start);
+    const afterLast = localDate(end);
+    if (
+      !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      end <= start ||
+      zonedInstant(first, '00:00', timeZone) !== start ||
+      zonedInstant(afterLast, '00:00', timeZone) !== end
+    )
+      return { startAt, endAt };
+    const last = addDays(afterLast, -1);
+    const own = employeeId
+      ? { id: employeeId }
+      : await database
+          .query()
+          .selectFrom('employees')
+          .select(['id'])
+          .where('userId', '=', ctx.userId)
+          .executeTakeFirst();
+    if (!own) return { startAt, endAt };
+    const cells = await database
+      .query()
+      .selectFrom('shiftSchedules')
+      .innerJoin('shifts', 'shifts.id', 'shiftSchedules.shiftId')
+      .select([
+        'shiftSchedules.date as date',
+        'shifts.startTime as startTime',
+        'shifts.endTime as endTime',
+      ])
+      .where('shiftSchedules.employeeId', '=', str(own.id))
+      .where('shiftSchedules.status', '=', 'published')
+      .where('shiftSchedules.date', '>=', addDays(first, -1))
+      .where('shiftSchedules.date', '<=', last)
+      .execute();
+    const window = (date: string) => {
+      const cell = cells.find(
+        (c) =>
+          (c.date instanceof Date
+            ? c.date.toISOString().slice(0, 10)
+            : str(c.date).slice(0, 10)) === date,
+      );
+      return cell
+        ? shiftInterval(
+            date,
+            {
+              startTime: str(cell.startTime).slice(0, 5),
+              endTime: str(cell.endTime).slice(0, 5),
+            },
+            timeZone,
+          )
+        : null;
+    };
+    const firstShift = window(first);
+    const previous = window(addDays(first, -1));
+    const lastShift = window(last);
+    const from = firstShift
+      ? firstShift.start
+      : Math.max(start, previous?.end ?? start);
+    const to = lastShift ? Math.max(lastShift.end, from + 1) : end;
+    if (to <= from) return { startAt, endAt };
+    return {
+      startAt: new Date(from).toISOString(),
+      endAt: new Date(to).toISOString(),
+    };
+  }
+
+  async function snapWholeDays<
+    T extends { startAt: string; endAt: string; employeeId?: string },
+  >(ctx: ActorContext, body: T, employeeId: string | undefined): Promise<T> {
+    const range = await wholeDays(
+      ctx,
+      body.startAt,
+      body.endAt,
+      employeeId ?? body.employeeId,
+    );
+    return { ...body, ...range };
+  }
+
   return {
     /** 与本人已发布排班的冲突 of a leave the user may read (their own draft, or one they approve). */
     /**
@@ -813,75 +902,9 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
       ctx: ActorContext,
       startAt: string,
       endAt: string,
+      employeeId?: string,
     ): Promise<{ startAt: string; endAt: string }> {
-      const start = Date.parse(startAt);
-      const end = Date.parse(endAt);
-      const localDate = (instant: number) =>
-        new Intl.DateTimeFormat('en-CA', { timeZone }).format(
-          new Date(instant),
-        );
-      const first = localDate(start);
-      const afterLast = localDate(end);
-      if (
-        !Number.isFinite(start) ||
-        !Number.isFinite(end) ||
-        end <= start ||
-        zonedInstant(first, '00:00', timeZone) !== start ||
-        zonedInstant(afterLast, '00:00', timeZone) !== end
-      )
-        return { startAt, endAt };
-      const last = addDays(afterLast, -1);
-      const own = await database
-        .query()
-        .selectFrom('employees')
-        .select(['id'])
-        .where('userId', '=', ctx.userId)
-        .executeTakeFirst();
-      if (!own) return { startAt, endAt };
-      const cells = await database
-        .query()
-        .selectFrom('shiftSchedules')
-        .innerJoin('shifts', 'shifts.id', 'shiftSchedules.shiftId')
-        .select([
-          'shiftSchedules.date as date',
-          'shifts.startTime as startTime',
-          'shifts.endTime as endTime',
-        ])
-        .where('shiftSchedules.employeeId', '=', str(own.id))
-        .where('shiftSchedules.status', '=', 'published')
-        .where('shiftSchedules.date', '>=', addDays(first, -1))
-        .where('shiftSchedules.date', '<=', last)
-        .execute();
-      const window = (date: string) => {
-        const cell = cells.find(
-          (c) =>
-            (c.date instanceof Date
-              ? c.date.toISOString().slice(0, 10)
-              : str(c.date).slice(0, 10)) === date,
-        );
-        return cell
-          ? shiftInterval(
-              date,
-              {
-                startTime: str(cell.startTime).slice(0, 5),
-                endTime: str(cell.endTime).slice(0, 5),
-              },
-              timeZone,
-            )
-          : null;
-      };
-      const firstShift = window(first);
-      const previous = window(addDays(first, -1));
-      const lastShift = window(last);
-      const from = firstShift
-        ? firstShift.start
-        : Math.max(start, previous?.end ?? start);
-      const to = lastShift ? Math.max(lastShift.end, from + 1) : end;
-      if (to <= from) return { startAt, endAt };
-      return {
-        startAt: new Date(from).toISOString(),
-        endAt: new Date(to).toISOString(),
-      };
+      return wholeDays(ctx, startAt, endAt, employeeId);
     },
     async scheduleConflicts(ctx: ActorContext, id: string) {
       const row = (await this.get(ctx, id)) as unknown as Record<
@@ -1199,7 +1222,14 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
     },
     async createDraft(ctx: ActorContext, input: unknown) {
       const policies = await requestPolicies(ctx, 'request');
-      const body = parseInput(draftCreate, input);
+      // Whole days (local midnight to midnight) become the shifts worked on them, as in the AI assistant's
+      // draft: a night shift is one day, not the hours that fall inside the calendar day. Read before the
+      // SQLite transaction, which holds the only connection.
+      const body = await snapWholeDays(
+        ctx,
+        parseInput(draftCreate, input),
+        undefined,
+      );
       // Authorization may load collection metadata from the manager connection.
       // Resolve it before entering the single-connection SQLite transaction.
       if (body.source === 'hr')
@@ -1313,7 +1343,19 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
     },
     async updateDraft(ctx: ActorContext, id: string, input: unknown) {
       const policies = await requestPolicies(ctx, 'request');
-      const body = parseInput(draftUpdate, input);
+      const parsed = parseInput(draftUpdate, input);
+      const owner = await database
+        .query()
+        .selectFrom('leaveRequests')
+        .select(['employeeId'])
+        .where('id', '=', id)
+        .executeTakeFirst();
+      // The draft's own employee: the rule is checked again inside the transaction.
+      const body = await snapWholeDays(
+        ctx,
+        parsed,
+        parsed.employeeId ?? (owner ? str(owner.employeeId) : undefined),
+      );
       const hrPolicies = await tryAuthorizeAction(
         ctx.authz,
         'talent.leaveRequest',

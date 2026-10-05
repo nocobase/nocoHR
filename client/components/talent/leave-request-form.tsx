@@ -17,6 +17,7 @@ import {
   wallClockInput,
 } from '@/components/talent/attendance/dates';
 import { LeaveError } from '@/components/talent/leave-error';
+import { sameLeaveRange } from '@/components/talent/leave-range';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
@@ -350,8 +351,7 @@ export function LeaveRequestForm({
       const matches = (record: LeaveDraft) =>
         (mode !== 'hr' || record.employeeId === employeeId) &&
         record.leaveTypeId === input.leaveTypeId &&
-        record.startAt === input.startAt &&
-        record.endAt === input.endAt &&
+        sameLeaveRange(record, input, zone) &&
         record.reason === input.reason &&
         record.source === input.source &&
         (record.attachmentFileId ?? null) === input.attachmentFileId &&

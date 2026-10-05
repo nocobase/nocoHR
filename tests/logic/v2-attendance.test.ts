@@ -1133,4 +1133,62 @@ describe('whole-day leave on a night shift', () => {
       endAt: local(date, '12:00'),
     });
   });
+
+  it('saves a whole day from the leave page as that day’s shift too, and a retry matches it', async () => {
+    const night = await (
+      await db()
+    )
+      .query()
+      .selectFrom('shiftSchedules')
+      .select(['date'])
+      .where('employeeId', '=', 'emp-wanglei')
+      .where('shiftId', '=', 'shift-mc-night')
+      .where('status', '=', 'published')
+      .where('date', '>', day(0))
+      .orderBy('date', 'asc')
+      .executeTakeFirst();
+    const date = String(
+      night!.date instanceof Date
+        ? night!.date.toISOString().slice(0, 10)
+        : night!.date,
+    ).slice(0, 10);
+    const input = {
+      leaveTypeId: 'leave-personal',
+      startAt: local(date, '00:00'),
+      endAt: local(addDays(date, 1), '00:00'),
+      reason: '家里有事',
+      clientRequestId: '6f1d6c1e-2b8a-4d4c-9f3e-1a2b3c4d5e6f',
+    };
+    const created = await call('emp_njl_1', 'POST', '/leave/requests', input);
+    expect(created.status).toBe(201);
+    const shift = {
+      startAt: new Date(local(date, '22:00')).toISOString(),
+      endAt: new Date(local(addDays(date, 1), '06:00')).toISOString(),
+    };
+    expect(created.json.data).toMatchObject({ ...shift, duration: 1 });
+    // The form retries with the same request id: the saved draft is returned, not refused.
+    const again = await call('emp_njl_1', 'POST', '/leave/requests', input);
+    expect(again.status).toBe(201);
+    expect(again.json.data.id).toBe(created.json.data.id);
+    const { sameLeaveRange } =
+      await import('../../client/components/talent/leave-range.ts');
+    expect(sameLeaveRange(created.json.data, input, 'Asia/Shanghai')).toBe(
+      true,
+    );
+    // Editing it as a whole day again keeps the shift.
+    const updated = await call(
+      'emp_njl_1',
+      'PATCH',
+      `/leave/requests/${created.json.data.id}`,
+      {
+        leaveTypeId: 'leave-personal',
+        startAt: input.startAt,
+        endAt: input.endAt,
+        reason: '家里有事（改）',
+        expectedUpdatedAt: created.json.data.updatedAt,
+      },
+    );
+    expect(updated.status).toBe(200);
+    expect(updated.json.data).toMatchObject({ ...shift, duration: 1 });
+  });
 });
