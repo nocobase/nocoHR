@@ -37,7 +37,12 @@ export interface MailMessage {
   readonly sentAt: string | null;
   readonly deliveryError: string | null;
   readonly receivedAt: string | null;
-  readonly createdAt: string;
+  readonly createdAt: string; /** A reschedule reply: the times the interview could move to and the one the text names. */
+  readonly proposal: {
+    readonly kind: string;
+    readonly options?: readonly { start: string; label?: string }[];
+    readonly chosen?: number;
+  } | null;
 }
 
 export interface Mailbox {

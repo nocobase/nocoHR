@@ -255,3 +255,33 @@ export function localDateTime(value: string | Date, timeZone: string): string {
 export function localDate(value: string | Date, timeZone: string): string {
   return localDateTime(value, timeZone).slice(0, 10);
 }
+
+/** The instant of a wall-clock time on a date in a time zone (2026-10-08 14:00 Asia/Shanghai). */
+export function zonedInstant(
+  date: string,
+  hour: number,
+  minute: number,
+  timeZone: string,
+): Date {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const guess = Date.UTC(y, m - 1, d, hour, minute);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(guess));
+  const get = (type: string) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const shown = Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour'),
+    get('minute'),
+  );
+  return new Date(guess - (shown - guess));
+}

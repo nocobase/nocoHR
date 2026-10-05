@@ -401,6 +401,143 @@ describe('招聘邮箱 (V2-07)', () => {
     expect(sentTo('zoupeng@mail.test')).toHaveLength(2);
   });
 
+  it('proposes the free Thursday afternoon times for a reschedule reply, and moves the interview only when the reply is sent', async () => {
+    const userOf = async (username: string) =>
+      String(
+        (
+          await (
+            await db()
+          )
+            .query()
+            .selectFrom('user')
+            .select(['id'])
+            .where('username', '=', username)
+            .executeTakeFirstOrThrow()
+        ).id,
+      );
+    const interviewers = [await userOf('mgr_cd'), await userOf('hr01')];
+    // Next week's Thursday, 10:00 in Shanghai.
+    const now = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }),
+    );
+    const thursday = new Date(now);
+    thursday.setDate(now.getDate() + ((4 - now.getDay() + 7) % 7) + 7);
+    const day = `${thursday.getFullYear()}-${String(thursday.getMonth() + 1).padStart(2, '0')}-${String(thursday.getDate()).padStart(2, '0')}`;
+    const scheduled = await call(
+      'recruit01',
+      'POST',
+      '/recruiting/interviews',
+      {
+        applicationId,
+        mode: 'onsite',
+        scheduledAt: `${day}T10:00:00+08:00`,
+        durationMinutes: 60,
+        locationOrLink: '成都工厂行政楼 2 楼会议室',
+        interviewerUserIds: interviewers,
+      },
+    );
+    expect(scheduled.status).toBe(201);
+    const interviewId = scheduled.json.data.id as string;
+
+    // A new message from his own address, outside the thread.
+    drop(
+      '05-zoupeng-reschedule.eml',
+      composeMail({
+        from: { name: '邹鹏', address: 'zoupeng@mail.test' },
+        to: 'recruiting@qiheng.test',
+        subject: '面试时间',
+        text: '您好，周四的面试能改到下午吗？上午要交接班。',
+        date: new Date(),
+      }),
+    );
+    await call('recruit01', 'POST', '/mail/poll?mailbox=recruiting');
+    const thread = (
+      await call(
+        'recruit01',
+        'GET',
+        `/mail/by-record/application/${applicationId}?mailbox=recruiting`,
+      )
+    ).json.data as Json[];
+    const request = thread.find((m) => m.subject === '面试时间')!;
+    expect(request).toMatchObject({ status: 'linked', aiIntent: 'reschedule' });
+    expect(request.aiSummary).toContain('可改到');
+    const draft = thread.find(
+      (m) => m.status === 'draft' && m.proposal?.kind === 'reschedule',
+    )!;
+    const options = draft.proposal.options as Json[];
+    expect(options.length).toBeGreaterThan(0);
+    for (const o of options) {
+      const hour = Number(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Shanghai',
+          hour: 'numeric',
+          hourCycle: 'h23',
+        }).format(new Date(o.start)),
+      );
+      expect(hour).toBeGreaterThanOrEqual(13);
+      expect(
+        o.start.slice(0, 10) <= day && o.start.slice(0, 10) >= day.slice(0, 8),
+      ).toBe(true);
+    }
+    expect(draft.bodyText).toContain('（周四）13:00');
+    expect(draft.bodyText).toContain('成都工厂行政楼 2 楼会议室');
+
+    // Picking another time rewrites the reply; nothing moves yet.
+    let chosen = options[0]!;
+    if (options.length > 1) {
+      const picked = await call(
+        'recruit01',
+        'PATCH',
+        `/mail/messages/${draft.id}/proposal`,
+        { choice: 1 },
+      );
+      expect(picked.status).toBe(200);
+      expect(picked.json.data.bodyText).toContain('（周四）14:00');
+      chosen = options[1]!;
+    }
+    const before = await (
+      await db()
+    )
+      .query()
+      .selectFrom('interviews')
+      .select(['scheduledAt'])
+      .where('id', '=', interviewId)
+      .executeTakeFirstOrThrow();
+    expect(new Date(before.scheduledAt as string).toISOString()).toBe(
+      new Date(`${day}T10:00:00+08:00`).toISOString(),
+    );
+
+    const sent = await call(
+      'recruit01',
+      'POST',
+      `/mail/messages/${draft.id}/send`,
+    );
+    expect(sent.status).toBe(200);
+    const after = await (
+      await db()
+    )
+      .query()
+      .selectFrom('interviews')
+      .select(['scheduledAt', 'status'])
+      .where('id', '=', interviewId)
+      .executeTakeFirstOrThrow();
+    expect(new Date(after.scheduledAt as string).toISOString()).toBe(
+      chosen.start,
+    );
+    expect(after.status).toBe('scheduled');
+    // Both interviewers hear of the change.
+    const { notificationServiceToken } =
+      await import('@nocobase/app-plugin-notification');
+    const notifications = server.application.container.resolve(
+      notificationServiceToken,
+    );
+    expect(
+      await notifications.getByIdempotencyKey(
+        `hr:interview:${interviewId}:rescheduled:${chosen.start}`,
+      ),
+    ).toBeTruthy();
+  });
+
   it('keeps the recruiting mailbox from people without candidate access', async () => {
     const anonymous = await call(
       null,

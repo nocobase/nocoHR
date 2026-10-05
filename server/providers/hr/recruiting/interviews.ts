@@ -19,8 +19,17 @@ import { HrError, newId, str } from '../shared.js';
 import { closeWorkItems } from '../work-item-store.js';
 import type { Calendar } from './calendar.js';
 import type { CandidateService } from './candidates.js';
-import { fill, iso, json, localDateTime, num } from './common.js';
+import {
+  fill,
+  iso,
+  json,
+  localDate,
+  localDateTime,
+  num,
+  zonedInstant,
+} from './common.js';
 import type { RecruitingContext } from './context.js';
+import type { PostingService } from './postings.js';
 import { COMPOSITE } from './resources.js';
 import type { Templates } from './templates.js';
 
@@ -124,6 +133,7 @@ export function createInterviewService(
     candidates: CandidateService;
     calendar: Calendar;
     templates: Templates;
+    postings: PostingService;
     /** Every interviewer submitted: the assistant summarizes (background, once). */
     onAllScored: (interviewId: string) => void;
   },
@@ -212,8 +222,206 @@ export function createInterviewService(
     };
   }
 
+  /** 改期回信 (招聘邮箱): the part of the day a candidate asks for. */
+  const PERIODS = {
+    morning: [9, 12],
+    afternoon: [13, 18],
+    evening: [18, 21],
+  } as const;
+
   const service = {
     get: row,
+
+    /** The application's next interview with people (not the AI interview), if any. */
+    async upcomingFor(applicationId: string): Promise<InterviewView | null> {
+      const rows = await database
+        .query()
+        .selectFrom('interviews')
+        .selectAll()
+        .where('applicationId', '=', applicationId)
+        .where('status', '=', 'scheduled')
+        .where('mode', '!=', 'ai')
+        .where('scheduledAt', '>', new Date())
+        .orderBy('scheduledAt', 'asc')
+        .execute();
+      return rows[0] ? presentInterview(rows[0]) : null;
+    },
+
+    /**
+     * Times an interview could move to, for a candidate's wish: the weekday
+     * they name (the interview's own day when it is that weekday) and the part
+     * of the day. Open self-booking slots of the posting first; otherwise the
+     * hours within that part of the day when every interviewer is free. At most
+     * three; never the current time.
+     */
+    async rescheduleOptions(
+      interviewId: string,
+      wish: {
+        weekday: number | null;
+        period: keyof typeof PERIODS | null;
+      },
+    ) {
+      const interview = await row(interviewId);
+      const application = await candidates.applicationRow(
+        interview.applicationId,
+      );
+      const tz = platform.timeZone;
+      const today = localDate(new Date(), tz);
+      const current = localDate(interview.scheduledAt, tz);
+      const weekdayOf = (date: string) =>
+        new Date(`${date}T00:00:00Z`).getUTCDay();
+      let date = current;
+      if (wish.weekday !== null && weekdayOf(current) !== wish.weekday) {
+        const d = new Date(`${today}T00:00:00Z`);
+        do d.setUTCDate(d.getUTCDate() + 1);
+        while (d.getUTCDay() !== wish.weekday);
+        date = d.toISOString().slice(0, 10);
+      }
+      const [fromHour, toHour] = wish.period ? PERIODS[wish.period] : [9, 18];
+      const from = zonedInstant(date, fromHour, 0, tz).getTime();
+      const to = zonedInstant(date, toHour, 0, tz).getTime();
+      const duration = interview.durationMinutes * 60_000;
+      const now = Date.now();
+      const currentAt = new Date(interview.scheduledAt).getTime();
+      const posting = await deps.postings.get(application.postingId);
+      const counts = await deps.postings.bookedCounts(posting.id);
+      const fromSlots = posting.interviewSlots
+        .filter((s) => {
+          const at = new Date(s.start).getTime();
+          return (
+            at >= from &&
+            at < to &&
+            at > now &&
+            at !== currentAt &&
+            (counts.get(s.start) ?? 0) < s.capacity
+          );
+        })
+        .map((s) => ({
+          start: s.start,
+          end: s.end,
+          slotKey: s.start,
+          location: s.location ?? interview.locationOrLink,
+        }));
+      const options: {
+        start: string;
+        end: string;
+        slotKey: string | null;
+        location: string | null;
+      }[] = [...fromSlots];
+      if (!options.length)
+        for (
+          let at = from;
+          at + duration <= to && options.length < 3;
+          at += 3_600_000
+        ) {
+          if (at <= now || at === currentAt) continue;
+          const start = new Date(at).toISOString();
+          const end = new Date(at + duration).toISOString();
+          const conflicts = await calendar.conflicts({
+            interviewerUserIds: interview.interviewerUserIds,
+            start,
+            end,
+            ignoreInterviewId: interview.id,
+          });
+          if (!conflicts.length)
+            options.push({
+              start,
+              end,
+              slotKey: null,
+              location: interview.locationOrLink,
+            });
+        }
+      return {
+        interview,
+        date,
+        options: options.slice(0, 3).map((o) => ({
+          ...o,
+          label: localDateTime(o.start, tz),
+        })),
+      };
+    },
+
+    /**
+     * Moves an interview to a confirmed time: still free for every
+     * interviewer (and the slot still open), then the interviewers hear of it.
+     */
+    async rescheduleTrusted(
+      interviewId: string,
+      option: {
+        start: string;
+        end: string;
+        slotKey: string | null;
+        location: string | null;
+      },
+      /** Only check that the time is still free (before the reply goes out). */
+      check = false,
+    ): Promise<InterviewView> {
+      const interview = await row(interviewId);
+      if (interview.status !== 'scheduled')
+        throw new HrError('INTERVIEW_NOT_SCHEDULED', 409);
+      const conflicts = await calendar.conflicts({
+        interviewerUserIds: interview.interviewerUserIds,
+        start: option.start,
+        end: option.end,
+        ignoreInterviewId: interview.id,
+      });
+      if (conflicts.length)
+        throw new HrError('INTERVIEW_CALENDAR_CONFLICT', 409, {
+          names: [...new Set(conflicts.map((c) => c.name ?? c.userId))].join(
+            '、',
+          ),
+        });
+      if (option.slotKey) {
+        const application = await candidates.applicationRow(
+          interview.applicationId,
+        );
+        const posting = await deps.postings.get(application.postingId);
+        const slot = posting.interviewSlots.find(
+          (s) => s.start === option.slotKey,
+        );
+        const counts = await deps.postings.bookedCounts(posting.id);
+        if (!slot || (counts.get(slot.start) ?? 0) >= slot.capacity)
+          throw new HrError('BOOKING_SLOT_FULL', 409);
+      }
+      if (check) return interview;
+      const previous = interview.scheduledAt;
+      await database
+        .query()
+        .updateTable('interviews')
+        .set({
+          scheduledAt: new Date(option.start),
+          durationMinutes: Math.max(
+            10,
+            Math.round(
+              (new Date(option.end).getTime() -
+                new Date(option.start).getTime()) /
+                60_000,
+            ),
+          ),
+          slotKey: option.slotKey,
+          locationOrLink: option.location,
+          // The reminder the day before goes out again for the new time.
+          reminderSentAt: null,
+          updatedAt: new Date(),
+        })
+        .where('id', '=', interview.id)
+        .execute();
+      const moved = await row(interview.id);
+      const application = await candidates.applicationRow(moved.applicationId);
+      const candidate = await candidates.candidateRow(application.candidateId);
+      await platform.notify({
+        key: `interview:${moved.id}:rescheduled:${moved.scheduledAt}`,
+        userIds: moved.interviewerUserIds,
+        message: 'recruitingInterviewRescheduled',
+        params: {
+          name: candidate.name,
+          from: localDateTime(previous, platform.timeZone),
+          time: localDateTime(moved.scheduledAt, platform.timeZone),
+        },
+        path: `/talent/interviews/${moved.id}`,
+      });
+      return moved;
+    },
 
     /** 我的面试 (mine=1), or the recruiter's rounds. */
     async list(actor: ActorContext, query: Record<string, string | undefined>) {

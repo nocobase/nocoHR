@@ -59,6 +59,89 @@ export function candidateReplyIntent(text: string): CandidateReplyIntent {
   return 'question';
 }
 
+const WEEKDAYS = '日一二三四五六';
+
+/** 改期回信: the weekday (0 = Sunday) and part of the day a candidate asks for, when named. */
+export function rescheduleWish(text: string): {
+  weekday: number | null;
+  period: 'morning' | 'afternoon' | 'evening' | null;
+} {
+  const body = text.replace(/\s+/gu, '');
+  // The day asked for is the last one named ("周四的面试能改到周五下午吗" → 周五).
+  const days = [...body.matchAll(/(?:周|星期|礼拜)([一二三四五六日天])/gu)];
+  const day = days.at(-1)?.[1];
+  const weekday = day ? (day === '天' ? 0 : WEEKDAYS.indexOf(day)) : null;
+  const period = /下午/u.test(body)
+    ? 'afternoon'
+    : /晚上|傍晚/u.test(body)
+      ? 'evening'
+      : /上午|早上/u.test(body)
+        ? 'morning'
+        : null;
+  return { weekday: weekday !== null && weekday >= 0 ? weekday : null, period };
+}
+
+export interface RescheduleOption {
+  start: string;
+  end: string;
+  slotKey: string | null;
+  location: string | null;
+}
+
+export interface RescheduleProposal {
+  kind: 'reschedule';
+  interviewId: string;
+  name: string;
+  options: RescheduleOption[];
+  chosen: number;
+}
+
+/** 10月8日（周四）14:00–15:00, in the company's time zone. */
+export function rescheduleLabel(
+  option: RescheduleOption,
+  timeZone: string,
+): string {
+  const parts = (value: string) =>
+    Object.fromEntries(
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'short',
+        hourCycle: 'h23',
+      })
+        .formatToParts(new Date(value))
+        .map((p) => [p.type, p.value]),
+    ) as Record<string, string>;
+  const a = parts(option.start);
+  const b = parts(option.end);
+  const weekday =
+    WEEKDAYS[
+      ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(a.weekday ?? '')
+    ] ?? '';
+  return `${Number(a.month)}月${Number(a.day)}日（周${weekday}）${a.hour}:${a.minute}–${b.hour}:${b.minute}`;
+}
+
+/** The reply proposing the chosen time; nothing else about the interview changes. */
+export function rescheduleText(
+  proposal: RescheduleProposal,
+  timeZone: string,
+  senderName: string,
+): string {
+  const option = proposal.options[proposal.chosen];
+  return [
+    `${proposal.name}，你好：`,
+    '',
+    `可以，你的面试改到 ${rescheduleLabel(option, timeZone)}${option.location ? `，地点不变：${option.location}` : ''}。`,
+    '',
+    '如这个时间仍不方便，请直接回复本邮件。',
+    '',
+    senderName,
+  ].join('\n');
+}
+
 const compact = (text: string): string =>
   text.toLowerCase().replace(/\s+/gu, '');
 
@@ -87,6 +170,16 @@ export function postingForSubject<T extends { id: string; title: string }>(
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score);
   return scored[0]?.posting ?? null;
+}
+
+function proposalOf(mail: MailMessage): RescheduleProposal | null {
+  const p = mail.proposal as Partial<RescheduleProposal> | null;
+  return p?.kind === 'reschedule' &&
+    typeof p.interviewId === 'string' &&
+    Array.isArray(p.options) &&
+    typeof p.chosen === 'number'
+    ? (p as RescheduleProposal)
+    : null;
 }
 
 const firstLine = (text: string | null): string =>
@@ -153,6 +246,21 @@ export function createRecruitingMailHandler(deps: {
   /** Whether this address had a receipt in the last days. */
   receiptSince: (address: string, since: Date) => Promise<boolean>;
   now: () => Date;
+  /** The company's time zone, for the times a reply names. */
+  timeZone: () => string;
+  /** 改期回信: the application's next interview, the times it could move to, and the move. */
+  interviews: {
+    upcomingFor(applicationId: string): Promise<{ id: string } | null>;
+    rescheduleOptions(
+      interviewId: string,
+      wish: ReturnType<typeof rescheduleWish>,
+    ): Promise<{ options: RescheduleOption[] }>;
+    rescheduleTrusted(
+      interviewId: string,
+      option: RescheduleOption,
+      check?: boolean,
+    ): Promise<unknown>;
+  };
   notify: (input: {
     key: string;
     userIds: string[];
@@ -366,6 +474,36 @@ export function createRecruitingMailHandler(deps: {
           ),
         );
         const line = firstLine(message.bodyText);
+        const settings = (await deps.settings.read()).value;
+        const tz = deps.timeZone();
+        // 改期: the times the interview could move to; the reply names the first, the recruiter may pick another.
+        let proposal: RescheduleProposal | null = null;
+        let rescheduleNote = '';
+        if (intent === 'reschedule') {
+          const interview = await deps.interviews.upcomingFor(applicationId);
+          if (!interview)
+            rescheduleNote = '这份投递没有待进行的面试，请人工处理。';
+          else {
+            const { options } = await deps.interviews.rescheduleOptions(
+              interview.id,
+              rescheduleWish(
+                `${message.subject}\n${message.bodyText ?? ''}`.slice(0, 2000),
+              ),
+            );
+            if (options.length) {
+              proposal = {
+                kind: 'reschedule',
+                interviewId: interview.id,
+                name: application.candidateName,
+                options,
+                chosen: 0,
+              };
+              rescheduleNote = `可改到：${options.map((o) => rescheduleLabel(o, tz)).join('、')}。回复写的是第一个时间，可在草稿中换成其他时间；确认发送后面试才改到所选时段，并通知面试官。`;
+            } else
+              rescheduleNote =
+                '所提时段内没有面试官都空闲的时间，请与面试官协调后在面试安排中调整。';
+          }
+        }
         await mail.link({
           id: message.id,
           refType: 'application',
@@ -374,20 +512,20 @@ export function createRecruitingMailHandler(deps: {
           summary: `${application.candidateName}${SUMMARY[intent]}${line ? `：“${line}”` : ''}。${
             intent === 'withdraw'
               ? '确认后请在投递中点“标记放弃”。'
-              : intent === 'reschedule'
-                ? '改期请在面试安排中调整，再发送回复。'
-                : ''
+              : rescheduleNote
           }`,
         });
-        const settings = (await deps.settings.read()).value;
         const draft = await mail.draftReply({
           replyTo: message.id,
-          body: replyDraft(
-            intent,
-            application.candidateName,
-            application.postingTitle,
-            settings.senderName,
-          ),
+          body: proposal
+            ? rescheduleText(proposal, tz, settings.senderName)
+            : replyDraft(
+                intent,
+                application.candidateName,
+                application.postingTitle,
+                settings.senderName,
+              ),
+          proposal: proposal as unknown as Record<string, unknown> | null,
         });
         const recruiter = await deps.recruiterOf(application.postingId);
         await deps.notify({
@@ -427,6 +565,37 @@ export function createRecruitingMailHandler(deps: {
     recipients: deps.recruiters,
     onUnmatched: sort,
     onReply: reply,
+    async chooseProposal(draft, choice) {
+      const proposal = proposalOf(draft);
+      if (!proposal || choice >= proposal.options.length)
+        throw new HrError('INVALID_INPUT', 400);
+      const next = { ...proposal, chosen: choice };
+      const settings = (await deps.settings.read()).value;
+      return {
+        proposal: next as unknown as Record<string, unknown>,
+        body: rescheduleText(next, deps.timeZone(), settings.senderName),
+      };
+    },
+    /** A reschedule reply moves the interview once it was sent, if the time is still free. */
+    async prepareSend(_ctx, draft) {
+      const body = draft.bodyText ?? '';
+      const proposal = proposalOf(draft);
+      if (!proposal) return { text: body, storedText: body };
+      const option = proposal.options[proposal.chosen];
+      if (!option) return { text: body, storedText: body };
+      await deps.interviews.rescheduleTrusted(
+        proposal.interviewId,
+        option,
+        true,
+      );
+      return {
+        text: body,
+        storedText: body,
+        onSent: async () => {
+          await deps.interviews.rescheduleTrusted(proposal.interviewId, option);
+        },
+      };
+    },
   };
 
   return { handler };

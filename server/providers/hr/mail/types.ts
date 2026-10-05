@@ -52,6 +52,8 @@ export interface MailMessage {
   readonly aiIntent: string | null;
   readonly aiSummary: string | null;
   readonly draftOf: string | null;
+  /** What a draft proposes to do once sent (a reschedule: the options and the one chosen). */
+  readonly proposal: Record<string, unknown> | null;
   readonly sentBy: string | null;
   readonly sentAt: string | null;
   readonly deliveryError: string | null;
@@ -79,6 +81,15 @@ export interface MailHandler {
   onUnmatched(mail: MailMessage, attempt?: string): Promise<void>;
   /** A reply in a thread already linked to a record. */
   onReply(mail: MailMessage): Promise<void>;
+  /**
+   * A person picks another of a draft's proposed options: the new proposal
+   * and the draft text that names it. Only steps whose drafts propose
+   * something implement this.
+   */
+  chooseProposal?(
+    mail: MailMessage,
+    choice: number,
+  ): Promise<{ proposal: Record<string, unknown>; body: string }>;
   /**
    * Called as a person sends a draft of this purpose: what actually goes out
    * (`text`), what the thread keeps instead (`storedText`, e.g. without a

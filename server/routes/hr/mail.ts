@@ -108,6 +108,16 @@ export const mailRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
         ),
       });
     });
+    routes.patch('/messages/:id/proposal', async (c) => {
+      const body = await readJson(c);
+      return c.json({
+        data: await mail().chooseProposal(
+          actor(c),
+          c.req.param('id'),
+          (body as { choice?: unknown } | null)?.choice,
+        ),
+      });
+    });
     routes.post('/messages/:id/send', async (c) =>
       c.json({ data: await mail().send(actor(c), c.req.param('id')) }),
     );

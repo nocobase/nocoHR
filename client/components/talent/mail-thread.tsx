@@ -27,6 +27,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 
@@ -115,6 +119,29 @@ function DraftEditor({
     }
   }
 
+  const options =
+    message.proposal?.kind === 'reschedule'
+      ? (message.proposal.options ?? [])
+      : [];
+  const [chosen, setChosen] = useState(message.proposal?.chosen ?? 0);
+
+  async function choose(choice: number): Promise<void> {
+    setBusy(true);
+    try {
+      const response = await api.request<{ data: MailMessage }>({
+        path: `talent/mail/messages/${encodeURIComponent(message.id)}/proposal`,
+        method: 'PATCH',
+        json: { choice },
+      });
+      setChosen(choice);
+      setBody(response.data.bodyText ?? '');
+    } catch (error) {
+      toast.add({ type: 'error', title: errorMessage(error, t) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function send(): Promise<void> {
     setBusy(true);
     try {
@@ -135,6 +162,27 @@ function DraftEditor({
 
   return (
     <div className='space-y-3'>
+      {/* 改期回信: sending the reply moves the interview to the chosen time. */}
+      {options.length ? (
+        <Field>
+          <FieldLabel htmlFor={`${id}-time`}>
+            {t('mail.rescheduleTo')}
+          </FieldLabel>
+          <NativeSelect
+            id={`${id}-time`}
+            value={String(chosen)}
+            disabled={!canSend || busy}
+            onChange={(e) => void choose(Number(e.target.value))}
+          >
+            {options.map((o, index) => (
+              <NativeSelectOption key={o.start} value={String(index)}>
+                {o.label ?? o.start}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <FieldDescription>{t('mail.rescheduleHint')}</FieldDescription>
+        </Field>
+      ) : null}
       <Field>
         <FieldLabel htmlFor={id}>{t('mail.draftTitle')}</FieldLabel>
         <Textarea

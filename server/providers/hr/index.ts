@@ -761,6 +761,14 @@ export default class HrProvider extends ServiceProvider<Application> {
               .executeTakeFirst(),
           ),
         now: () => new Date(),
+        timeZone: () => container.resolve(platformToken).timeZone,
+        interviews: {
+          upcomingFor: (id) => recruiting().interviews.upcomingFor(id),
+          rescheduleOptions: (id, wish) =>
+            recruiting().interviews.rescheduleOptions(id, wish),
+          rescheduleTrusted: (id, option, check) =>
+            recruiting().interviews.rescheduleTrusted(id, option, check),
+        },
         notify: this.notifier(),
       });
     });
@@ -1324,6 +1332,7 @@ export default class HrProvider extends ServiceProvider<Application> {
         recruitingPostingDrafted: 'postingDraft',
         recruitingPoolSuggested: 'poolReuse',
         recruitingInterviewScheduled: 'interview',
+        recruitingInterviewRescheduled: 'interview',
         recruitingInterviewQuestions: 'interview',
         recruitingInterviewSummary: 'interviewSummary',
         recruitingOfferPending: 'offerApproval',

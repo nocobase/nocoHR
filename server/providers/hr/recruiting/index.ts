@@ -77,6 +77,7 @@ export function createRecruitingServices(deps: RecruitingDeps) {
     candidates,
     calendar,
     templates,
+    postings,
     onAllScored: (id) =>
       later('recruitingAssistant.interviewSummary', () =>
         assistant.onAllScored(id),

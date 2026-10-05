@@ -82,6 +82,7 @@ export function toMail(row: Record<string, unknown>): MailMessage {
     aiIntent: row.aiIntent == null ? null : str(row.aiIntent),
     aiSummary: row.aiSummary == null ? null : str(row.aiSummary),
     draftOf: row.draftOf == null ? null : str(row.draftOf),
+    proposal: parseJson<Record<string, unknown> | null>(row.proposal, null),
     sentBy: row.sentBy == null ? null : str(row.sentBy),
     sentAt: iso(row.sentAt),
     deliveryError: row.deliveryError == null ? null : str(row.deliveryError),
@@ -575,6 +576,7 @@ export function createMailService(deps: MailServiceDeps) {
       replyTo: string;
       body: string;
       subject?: string;
+      proposal?: Record<string, unknown> | null;
     }): Promise<MailMessage> {
       const original = await row(input.replyTo);
       if (original.direction !== 'inbound')
@@ -617,6 +619,7 @@ export function createMailService(deps: MailServiceDeps) {
           aiIntent: null,
           aiSummary: null,
           draftOf: original.id,
+          proposal: input.proposal ?? null,
           sentBy: null,
           sentAt: null,
           deliveryError: null,
@@ -625,6 +628,34 @@ export function createMailService(deps: MailServiceDeps) {
           createdAt: now,
           updatedAt: now,
         })
+        .execute();
+      return row(id);
+    },
+
+    /** A person picks another proposed option of a draft (a reschedule time); the text follows. */
+    async chooseProposal(ctx: ActorContext, id: string, choice: unknown) {
+      const mail = await service.get(ctx, id);
+      await requireSend(ctx, mail.mailbox);
+      if (mail.status !== 'draft') throw new HrError('MAIL_NOT_DRAFT', 409);
+      const handler = handlerFor(mail.mailbox);
+      if (
+        !mail.proposal ||
+        !handler.chooseProposal ||
+        typeof choice !== 'number' ||
+        !Number.isInteger(choice) ||
+        choice < 0
+      )
+        throw new HrError('INVALID_INPUT', 400);
+      const next = await handler.chooseProposal(mail, choice);
+      await database
+        .query()
+        .updateTable('mailMessages')
+        .set({
+          proposal: next.proposal,
+          bodyText: next.body.slice(0, 100_000),
+          updatedAt: new Date(),
+        })
+        .where('id', '=', id)
         .execute();
       return row(id);
     },

@@ -146,6 +146,9 @@ const en = {
       thread: 'Mail',
       threadEmpty: 'No mail for this record.',
       draftTitle: 'Reply draft',
+      rescheduleTo: 'Move the interview to',
+      rescheduleHint:
+        'The interviewers are free at these times. The interview moves only when you send the reply, and the interviewers are told.',
       draftHint:
         'Drafted by the {{assistant}}. Check it, edit it if needed, then send; it goes only to {{to}}.',
       save: 'Save draft',
@@ -689,6 +692,9 @@ const zh: Shape = {
       thread: '邮件往来',
       threadEmpty: '这张单据还没有邮件往来。',
       draftTitle: '回复草稿',
+      rescheduleTo: '发送后把面试改到',
+      rescheduleHint:
+        '这些时间面试官都有空。发送回复后面试才改到所选时间，并通知面试官。',
       draftHint:
         '由{{assistant}}起草，请核对，需要时修改后发送；只会发给 {{to}}。',
       save: '保存草稿',

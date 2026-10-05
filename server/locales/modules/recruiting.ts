@@ -45,6 +45,10 @@ export const recruitingServerEn = {
       'You have a new interview',
       'Interview with {{name}} at {{time}}. The questions will be ready 24 hours before.',
     ),
+    recruitingInterviewRescheduled: n(
+      'An interview was moved',
+      'The interview with {{name}} moved from {{from}} to {{time}}.',
+    ),
     recruitingInterviewQuestions: n(
       'Interview questions are ready',
       'The recruiting assistant prepared questions based on the requirements.',
@@ -62,8 +66,14 @@ export const recruitingServerEn = {
       'Offer approved',
       'The offer letter is ready. Preview the email and send it.',
     ),
-    recruitingOfferAccepted: n('An offer was accepted', '{{name}} accepted the offer.'),
-    recruitingOfferDeclined: n('An offer was declined', '{{name}} declined the offer.'),
+    recruitingOfferAccepted: n(
+      'An offer was accepted',
+      '{{name}} accepted the offer.',
+    ),
+    recruitingOfferDeclined: n(
+      'An offer was declined',
+      '{{name}} declined the offer.',
+    ),
     recruitingOnboardDraft: n(
       'Onboarding to process: {{position}}',
       'The candidate accepted; the onboarding action is pre-filled for {{date}}. Enter the employee number and submit.',
@@ -140,7 +150,8 @@ export const recruitingServerEn = {
       startDate: 'Start date: {{date}}',
       probation: 'Probation: {{months}} months',
       salary: 'Monthly base salary: {{amount}} yuan',
-      closing: 'Please reply through the link in the email before the deadline.',
+      closing:
+        'Please reply through the link in the email before the deadline.',
     },
     checkIns: {
       opening:
@@ -200,8 +211,14 @@ export const recruitingServerZh: typeof recruitingServerEn = {
       '待审批招聘需求：{{department}}{{position}}',
       '{{department}}申请招聘{{position}} {{count}} 人，请审批。',
     ),
-    recruitingRequisitionRejected: n('招聘需求被退回：{{position}}', '审批意见：{{comment}}'),
-    recruitingRequisitionOpened: n('招聘需求已批准：{{position}}', '招聘负责人：{{recruiter}}。'),
+    recruitingRequisitionRejected: n(
+      '招聘需求被退回：{{position}}',
+      '审批意见：{{comment}}',
+    ),
+    recruitingRequisitionOpened: n(
+      '招聘需求已批准：{{position}}',
+      '招聘负责人：{{recruiter}}。',
+    ),
     recruitingPostingDrafted: n(
       '职位草稿待确认：{{position}}',
       '招聘助理已按岗位职责和条件清单起草职位描述、任职要求和门槛问题，确认后才能发布。',
@@ -214,14 +231,24 @@ export const recruitingServerZh: typeof recruitingServerEn = {
       '你有一场新的面试安排',
       '{{time}} 面试候选人{{name}}，面试题会在面试前 24 小时准备好。',
     ),
-    recruitingInterviewQuestions: n('面试题已就绪', '招聘助理已按任职要求准备好面试题。'),
+    recruitingInterviewRescheduled: n(
+      '面试时间已调整',
+      '候选人{{name}}的面试由 {{from}} 改到 {{time}}。',
+    ),
+    recruitingInterviewQuestions: n(
+      '面试题已就绪',
+      '招聘助理已按任职要求准备好面试题。',
+    ),
     recruitingInterviewSummary: n(
       '面试汇总：{{position}}',
       '所有面试官已提交评分，招聘助理整理了评分分布、分歧点和待核实事项。',
     ),
     recruitingOfferPending: n('待审批 Offer：{{position}}', '请审批这份录用。'),
     recruitingOfferRejected: n('Offer 被退回', '审批意见：{{comment}}'),
-    recruitingOfferApproved: n('Offer 已审批通过', '录用通知书已生成，预览邮件后即可发送。'),
+    recruitingOfferApproved: n(
+      'Offer 已审批通过',
+      '录用通知书已生成，预览邮件后即可发送。',
+    ),
     recruitingOfferAccepted: n('候选人已接受 Offer', '{{name}}已接受 Offer。'),
     recruitingOfferDeclined: n('候选人已拒绝 Offer', '{{name}}已拒绝 Offer。'),
     recruitingOnboardDraft: n(
@@ -244,7 +271,10 @@ export const recruitingServerZh: typeof recruitingServerEn = {
       '入职材料已识别，待确认',
       '候选人上传的材料已识别，请在 {{date}} 入职前到入职单草稿中核对。',
     ),
-    recruitingNewHireIssue: n('新员工回访：{{topic}}', '{{name}}在回访中提到：{{summary}}。请跟进。'),
+    recruitingNewHireIssue: n(
+      '新员工回访：{{topic}}',
+      '{{name}}在回访中提到：{{summary}}。请跟进。',
+    ),
     recruitingCheckInFaceToFace: n(
       '请当面了解新员工近况',
       '{{name}}入职第 {{day}} 天，没有账号或未绑定飞书，请当面了解住宿、带教和排班是否适应。',
@@ -300,7 +330,8 @@ export const recruitingServerZh: typeof recruitingServerEn = {
       closing: '请在截止日期前通过邮件中的链接回复。',
     },
     checkIns: {
-      opening: '{{name}}，你好，我是人事助理。今天是你入职第 {{day}} 天，想问问：{{question}}（也可以说说：{{more}}）',
+      opening:
+        '{{name}}，你好，我是人事助理。今天是你入职第 {{day}} 天，想问问：{{question}}（也可以说说：{{more}}）',
       thanks: '谢谢！一切顺利就好，有需要随时找我。',
       received: '谢谢你告诉我们。',
       policy: '按《{{title}}》（{{section}}）：{{excerpt}} {{link}}',
