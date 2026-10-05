@@ -362,24 +362,29 @@ function MailSettingsForm({
                     }
                   />
                 </Field>
-                {purpose === 'billing' ? (
+                {/* billing: 派遣公司 by sender domain; audit (V3-11): 客户 by sender domain. */}
+                {purpose === 'billing' || purpose === 'audit' ? (
                   <Field>
-                    <FieldLabel htmlFor='mail-vendors'>
-                      {t('mailSettings.vendors')}
+                    <FieldLabel htmlFor={`mail-vendors-${purpose}`}>
+                      {purpose === 'billing'
+                        ? t('mailSettings.vendors')
+                        : t('mailSettings.customers')}
                     </FieldLabel>
                     <Textarea
-                      id='mail-vendors'
+                      id={`mail-vendors-${purpose}`}
                       rows={3}
-                      value={texts['vendors.billing'] ?? ''}
+                      value={texts[`vendors.${purpose}`] ?? ''}
                       onChange={(e) =>
                         setTexts({
                           ...texts,
-                          'vendors.billing': e.target.value,
+                          [`vendors.${purpose}`]: e.target.value,
                         })
                       }
                     />
                     <FieldDescription>
-                      {t('mailSettings.vendorsHint')}
+                      {purpose === 'billing'
+                        ? t('mailSettings.vendorsHint')
+                        : t('mailSettings.customersHint')}
                     </FieldDescription>
                   </Field>
                 ) : null}

@@ -626,6 +626,15 @@ const enUS = {
       title: 'Reply to the {{vendor}} bill for {{month}} drafted',
       body: 'Review it and send.',
     },
+    // V3-11 audit mailbox (server/providers/hr/mail/audit.ts): never the risks or a person's data in the text.
+    mailAuditRequest: {
+      title: 'Audit material request from {{customer}}',
+      body: 'Due {{due}}; {{risks}} risks to handle before the audit. Confirm the scope, then build the pack.',
+    },
+    mailAuditDraftReady: {
+      title: 'Reply to the {{customer}} audit request drafted',
+      body: 'Review it and send; the share link is created when it is sent.',
+    },
     // V2-07 recruiting mailbox (server/providers/hr/mail/recruiting.ts)
     mailResumeReceived: {
       title: 'A resume arrived in the recruiting mailbox',

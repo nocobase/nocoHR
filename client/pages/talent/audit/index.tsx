@@ -7,6 +7,7 @@ import { useSearchParams } from 'react-router';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { AssistantLauncher } from '@/components/talent/ai-chat';
+import { AuditRequestsTab } from '@/components/talent/audit-requests';
 import { downloadFile } from '@/components/talent/download';
 // V4-14
 import { LicensedAuditExports } from '@/components/talent/licensed-audit-exports';
@@ -46,7 +47,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 
 // V4-14: 'licensed' — 工单人员追溯 and 权限变化记录 (licensed-audit-exports.tsx).
+// V3-11 客户审核问询: 'requests' — the customers' requests from the audit mailbox (audit-requests.tsx).
 const TABS = [
+  'requests',
   'pack',
   'trainingFile',
   'ledger',
@@ -73,7 +76,9 @@ export default function AuditPage(): ReactElement {
   const [params, setParams] = useSearchParams();
   const tab: Tab = (TABS as readonly string[]).includes(params.get('tab') ?? '')
     ? (params.get('tab') as Tab)
-    : 'pack';
+    : params.get('request')
+      ? 'requests'
+      : 'pack';
   return (
     <PageContainer>
       <PageHeader
@@ -108,12 +113,16 @@ export default function AuditPage(): ReactElement {
             <TabsTrigger key={name} value={name}>
               {name === 'licensed'
                 ? t('licensed.audit.tab')
-                : t(`talent.insights.audit.tabs.${name}`)}
+                : name === 'requests'
+                  ? t('auditRequests.tab')
+                  : t(`talent.insights.audit.tabs.${name}`)}
             </TabsTrigger>
           ))}
         </TabsList>
       </Tabs>
-      {tab === 'pack' ? (
+      {tab === 'requests' ? (
+        <AuditRequestsTab />
+      ) : tab === 'pack' ? (
         <PackTab />
       ) : tab === 'trainingFile' ? (
         <TrainingFileTab />

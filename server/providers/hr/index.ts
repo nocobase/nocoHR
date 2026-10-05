@@ -130,6 +130,7 @@ import { payrollServicesToken } from './tokens.js';
 // V2-06 邮件往来
 import type { MailConfig } from '../../config/mail.js';
 import { createBillingMailHandler } from './mail/billing.js';
+import { createAuditMail } from './mail/audit.js';
 import { createRecruitingMailHandler } from './mail/recruiting.js';
 import { extractResumeText, readIdentity } from './recruiting/resume-text.js';
 import { createMailService } from './mail/service.js';
@@ -137,6 +138,7 @@ import { createMailSettingsService } from './mail/settings.js';
 import {
   billingMailToken,
   recruitingMailToken,
+  auditMailToken,
   mailServiceToken,
   mailSettingsToken,
 } from './tokens.js';
@@ -489,6 +491,7 @@ export default class HrProvider extends ServiceProvider<Application> {
     // V2-06 邮件往来 (总纲 邮件约定)
     this.registerMail();
     this.registerRecruitingMail();
+    this.registerAuditMail();
     // V2-06 邮件往来 end
     // V2-07 用工计划与招聘入职
     this.registerRecruiting();
@@ -757,6 +760,79 @@ export default class HrProvider extends ServiceProvider<Application> {
               .where('createdAt', '>=', since)
               .executeTakeFirst(),
           ),
+        now: () => new Date(),
+        notify: this.notifier(),
+      });
+    });
+  }
+
+  /**
+   * V3-11 审核邮箱与审核请求: a customer's request for audit material by mail,
+   * the confirmed scope's pack and the share link (mail/audit.ts).
+   */
+  private registerAuditMail(): void {
+    const container = this.app.container;
+    container.singleton(auditMailToken, () => {
+      const database = container.resolve(databaseManagerToken);
+      const platform = container.resolve(platformToken);
+      const profile = () => container.resolve(profileServicesToken);
+      return createAuditMail({
+        database,
+        mail: container.resolve(mailServiceToken),
+        settings: container.resolve(mailSettingsToken),
+        run: (key, options, work) =>
+          container
+            .resolve(automationServiceToken)
+            .run(key, 'event', options, work),
+        audit: () => profile().audit,
+        storePack: (pack) => profile().storeAuditPack(pack),
+        readPack: async (fileId) => {
+          const file = await profile().reads.readFile(
+            container.resolve(driveManagerToken),
+            fileId,
+          );
+          return file && file.filename.startsWith('audit-pack')
+            ? { bytes: file.bytes, filename: file.filename }
+            : null;
+        },
+        reviewers: async () => {
+          const core = container.resolve(hrCoreServiceToken);
+          return [
+            ...new Set([
+              ...(await core.holdersOf('hr.admin')),
+              ...(await core.holdersOf('hr.auditor')),
+            ]),
+          ];
+        },
+        // A workshop named the same in several plants is shown with its plant (苏州工厂 · 机加工车间).
+        departmentTitle: async (id) => {
+          const organization = platform.organization;
+          const department = await organization.getDepartment(id);
+          if (!department) return id;
+          const title = organization.titleText(department.title);
+          const parent = department.parentId
+            ? await organization.getDepartment(department.parentId)
+            : null;
+          if (!parent) return title;
+          const plant = organization.titleText(parent.title);
+          const prefix = plant.replace(/工厂$/u, '');
+          return prefix && prefix !== plant && !title.startsWith(prefix)
+            ? `${plant}${title}`
+            : title;
+        },
+        positionTitle: async (id) => {
+          const position = await database
+            .query()
+            .selectFrom('positions')
+            .select(['title'])
+            .where('id', '=', id)
+            .executeTakeFirst();
+          return position ? str(position.title) : id;
+        },
+        publicUrl: (path) =>
+          `${String(this.app.config.get<{ publicOrigin?: string }>('app')?.publicOrigin ?? '').replace(/\/$/u, '')}${this.app.publicBasePath.replace(/\/$/u, '')}${path}`,
+        companyName: () => this.talentConfig().companyName,
+        today: () => platform.currentDate(),
         now: () => new Date(),
         notify: this.notifier(),
       });
@@ -1229,6 +1305,9 @@ export default class HrProvider extends ServiceProvider<Application> {
         // V2-07 招聘邮箱: a resume taken in, a candidate's reply with its drafted answer.
         mailResumeReceived: 'mailSort',
         mailCandidateReplied: 'mailReply',
+        // V3-11 审核邮箱: a customer's request to prepare, the reply drafted after the pack.
+        mailAuditRequest: 'mailSort',
+        mailAuditDraftReady: 'mailReply',
         // V3-11: the talent analyst's suggestions, rule drafts and failed write-backs; the writer's revisions.
         competencySuggestionDrafted: 'aiDecision',
         trainingRecommendationPending: 'aiDecision',
@@ -1305,7 +1384,9 @@ export default class HrProvider extends ServiceProvider<Application> {
         message.startsWith('payrollAnomalies') ||
         (message.startsWith('mail') &&
           message !== 'mailResumeReceived' &&
-          message !== 'mailCandidateReplied');
+          message !== 'mailCandidateReplied' &&
+          message !== 'mailAuditRequest' &&
+          message !== 'mailAuditDraftReady');
       const aiEmployeeOf: Record<string, string> = {
         automationGapReport: 'knowledgeAssistant',
         documentConflictFound: 'knowledgeAssistant',
@@ -1321,6 +1402,8 @@ export default class HrProvider extends ServiceProvider<Application> {
         recruitingInterviewSummary: 'recruitingAssistant',
         mailResumeReceived: 'recruitingAssistant',
         mailCandidateReplied: 'recruitingAssistant',
+        mailAuditRequest: 'certificationSteward',
+        mailAuditDraftReady: 'certificationSteward',
         recruitingDigest: 'recruitingAssistant',
         recruitingNewHireIssue: 'hrAssistant',
         recruitingPreboardingExtracted: 'hrAssistant',
@@ -2019,6 +2102,9 @@ export default class HrProvider extends ServiceProvider<Application> {
         'recruiting',
         container.resolve(recruitingMailToken).handler,
       );
+    container
+      .resolve(mailServiceToken)
+      .registerHandler('audit', container.resolve(auditMailToken).handler);
     const database = container.resolve(databaseManagerToken);
     const organization = container.resolve(organizationServiceToken);
 

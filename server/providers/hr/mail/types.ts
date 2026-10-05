@@ -79,4 +79,18 @@ export interface MailHandler {
   onUnmatched(mail: MailMessage, attempt?: string): Promise<void>;
   /** A reply in a thread already linked to a record. */
   onReply(mail: MailMessage): Promise<void>;
+  /**
+   * Called as a person sends a draft of this purpose: what actually goes out
+   * (`text`), what the thread keeps instead (`storedText`, e.g. without a
+   * share link), and what to do once it was delivered. A step that adds
+   * nothing at sending leaves this out.
+   */
+  prepareSend?(
+    ctx: ActorContext,
+    mail: MailMessage,
+  ): Promise<{
+    text: string;
+    storedText: string;
+    onSent?: () => Promise<void>;
+  }>;
 }

@@ -1409,6 +1409,14 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
     componentLoader: () => import('./pages/talent/recruiting/public/offer.js'),
   },
   // V2-07 end
+  // V3-11 客户审核问询: the customer's share link; /api/public/audit-pack enforces the token and the code.
+  {
+    name: 'public-audit-pack',
+    path: '/audit-pack/:token',
+    auth: 'optional',
+    authz: 'skip',
+    componentLoader: () => import('./pages/audit-pack/index.js'),
+  },
   {
     auth: 'guest',
     authz: 'skip',

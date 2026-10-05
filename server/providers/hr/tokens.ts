@@ -291,6 +291,9 @@ export const mailServiceToken: ServiceToken<
 > = createServiceToken<import('./mail/service.js').MailService>(
   'hr/mail-service',
 );
+export const auditMailToken: ServiceToken<
+  import('./mail/audit.js').AuditMail
+> = createServiceToken<import('./mail/audit.js').AuditMail>('hr/mail-audit');
 export const recruitingMailToken: ServiceToken<
   import('./mail/recruiting.js').RecruitingMailHandler
 > = createServiceToken<import('./mail/recruiting.js').RecruitingMailHandler>(

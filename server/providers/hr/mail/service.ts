@@ -661,7 +661,11 @@ export function createMailService(deps: MailServiceDeps) {
         !deps.production && settings.redirectTo
           ? settings.redirectTo
           : mail.to[0];
-      const text = mail.bodyText ?? '';
+      const prepared = (await handlerFor(mail.mailbox).prepareSend?.(
+        ctx,
+        mail,
+      )) ?? { text: mail.bodyText ?? '', storedText: mail.bodyText ?? '' };
+      const text = prepared.text;
       let state: 'sent' | 'channelNotConfigured' | 'failed';
       if (config.adapter === 'mock' && !deps.production) {
         writeMockOutbox(deps.storageDir(), {
@@ -693,6 +697,7 @@ export function createMailService(deps: MailServiceDeps) {
             ? {
                 status: 'sent',
                 subject,
+                bodyText: prepared.storedText.slice(0, 100_000),
                 sentBy: ctx.userId,
                 sentAt: now,
                 deliveryError: null,
@@ -704,6 +709,7 @@ export function createMailService(deps: MailServiceDeps) {
         .execute();
       if (state !== 'sent')
         throw new HrError('MAIL_SEND_FAILED', 409, { state });
+      await prepared.onSent?.();
       return row(id);
     },
 
@@ -723,6 +729,8 @@ export function createMailService(deps: MailServiceDeps) {
       /** A step's own channel and test address, when it has them (招聘设置 · 邮件). */
       channel?: string;
       redirectTo?: string;
+      /** What the thread keeps when the sent text must not be stored (a one-time code). */
+      storedText?: string;
     }): Promise<'sent' | 'channelNotConfigured' | 'failed' | null> {
       // null: the mailbox is off, so the step sends the way it did before mail was connected.
       const settings = (await deps.settings.read()).value;
@@ -813,7 +821,7 @@ export function createMailService(deps: MailServiceDeps) {
             toAddresses: [input.to],
             ccAddresses: [],
             subject: subject.slice(0, 500),
-            bodyText: input.text.slice(0, 100_000),
+            bodyText: (input.storedText ?? input.text).slice(0, 100_000),
             attachmentFileIds: [],
             rejectedAttachments: [],
             refType: input.refType,

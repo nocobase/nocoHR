@@ -615,6 +615,15 @@ const zhCN: AppServerResource = {
       title: '{{vendor}} {{month}} 账单的回复已起草',
       body: '请核对后发送。',
     },
+    // V3-11 审核邮箱 (server/providers/hr/mail/audit.ts): never the risks or a person's data in the text.
+    mailAuditRequest: {
+      title: '{{customer}} 发来审核资料请求',
+      body: '期限 {{due}}；审核前有 {{risks}} 条风险待处理。请确认范围后生成审核包。',
+    },
+    mailAuditDraftReady: {
+      title: '{{customer}} 审核请求的回复已起草',
+      body: '请核对后发送；分享链接在发送时生成。',
+    },
     // V2-07 招聘邮箱 (server/providers/hr/mail/recruiting.ts)
     mailResumeReceived: {
       title: '招聘邮箱收到一份简历',

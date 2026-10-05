@@ -324,8 +324,15 @@ const en = {
           // V4-14
           startTrace: 'Work order operator trace',
           permissionChanges: 'Permission changes',
+          // V3-11 客户审核问询
+          auditPackShare: 'Audit pack downloaded by share link',
         },
-        via: { page: 'Page', assistant: 'Certification steward' },
+        via: {
+          page: 'Page',
+          assistant: 'Certification steward',
+          auditRequest: 'Audit request',
+          share: 'Share link',
+        },
         columns: {
           time: 'Time',
           actor: 'By',
@@ -492,6 +499,12 @@ const en = {
     teamDashboard: { title: 'Team dashboard', export: 'Export' },
     findPeople: { title: 'Find people', use: 'Use' },
     profileSummary: { title: 'Profile summary', regenerate: 'Regenerate' },
+    auditRequest: {
+      title: 'Customer audit requests',
+      confirm: 'Confirm scope and build pack',
+      share: 'Send the share link',
+      revoke: 'Revoke the share link',
+    },
     audit: {
       title: 'Audit exports',
       exportTrainingFile: 'Training file',
@@ -833,8 +846,15 @@ const zh: Shape<typeof en> = {
           // V4-14
           startTrace: '工单人员追溯',
           permissionChanges: '权限变化记录',
+          // V3-11 客户审核问询
+          auditPackShare: '客户通过分享链接下载审核包',
         },
-        via: { page: '页面', assistant: '认证管家' },
+        via: {
+          page: '页面',
+          assistant: '认证管家',
+          auditRequest: '审核请求',
+          share: '分享链接',
+        },
         columns: {
           time: '时间',
           actor: '导出人',
@@ -994,6 +1014,12 @@ const zh: Shape<typeof en> = {
     teamDashboard: { title: '团队看板', export: '导出' },
     findPeople: { title: '找人', use: '使用' },
     profileSummary: { title: '画像摘要', regenerate: '重新生成' },
+    auditRequest: {
+      title: '客户审核请求',
+      confirm: '确认范围并生成审核包',
+      share: '发送分享链接',
+      revoke: '撤销分享链接',
+    },
     audit: {
       title: '审计导出',
       exportTrainingFile: '个人培训档案',

@@ -58,6 +58,8 @@ export function recordPath(message: MailMessage): string | null {
   if (!message.refId) return null;
   if (message.refType === 'laborVendorBill')
     return `/talent/payroll/vendor-bills/${encodeURIComponent(message.refId)}`;
+  if (message.refType === 'auditRequest')
+    return `/talent/audit?tab=requests&request=${encodeURIComponent(message.refId)}`;
   if (message.refType === 'application')
     return `/talent/candidates/${encodeURIComponent(message.refId)}`;
   return null;

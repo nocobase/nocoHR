@@ -365,6 +365,21 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     kind: 'daily',
     defaults: { hour: 18 },
   },
+  // V3-11 审核邮箱 (mail/audit.ts): 审核问询分拣与准备 and 审核回复起草 (owner hr01).
+  {
+    key: 'certificationSteward.mailSortAudit',
+    employee: 'certificationSteward',
+    composite: 'talent.certificationSteward',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'certificationSteward.mailReplyAudit',
+    employee: 'certificationSteward',
+    composite: 'talent.certificationSteward',
+    kind: 'event',
+    defaults: {},
+  },
   // 招聘邮箱 (mail/recruiting.ts): resumes by mail into candidates, and candidates' replies with drafted answers.
   {
     key: 'recruitingAssistant.mailSortRecruiting',

@@ -24,6 +24,7 @@ import { talentApiRoutes } from './hr/talent.js';
 import { trainingApiRoutes } from './hr/training.js';
 // V2-06
 import { payrollRoutes } from './hr/payroll.js';
+import { auditRequestRoutes } from './hr/audit-requests.js';
 import { mailRoutes } from './hr/mail.js';
 // V3-08
 import { competencyApiRoutes } from './hr/competency.js';
@@ -53,6 +54,8 @@ const routes: readonly AppRouteContribution<Application>[] = [
   // V2-06
   payrollRoutes,
   mailRoutes,
+  // V3-11 客户审核问询
+  auditRequestRoutes,
   // V2-07
   recruitingRoutes,
   organizationApiRoutes,

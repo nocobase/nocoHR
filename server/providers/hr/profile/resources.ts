@@ -370,6 +370,38 @@ export const talentAnalystResource = defineCompositeResource(
       ),
 );
 
+/**
+ * 审核请求 (客户审核问询): view lists the requests and their mail; confirm
+ * edits and confirms the scope and builds the pack (which also needs
+ * talent.audit exportAuditPack); share sends the reply with the share link;
+ * revoke ends a link early. The requests are read through the service, which
+ * checks these actions; the employee grant is what the scope and risks read.
+ */
+export const auditRequestResource = defineCompositeResource(
+  'talent.auditRequest',
+  (r) =>
+    r
+      .title(label('authz.auditRequest.title'))
+      .action('view', (a) =>
+        a.title(label('authz.actions.view')).grant('employees', employeeRead),
+      )
+      .action('confirm', (a) =>
+        a
+          .title(label('authz.auditRequest.confirm'))
+          .grant('employees', employeeRead),
+      )
+      .action('share', (a) =>
+        a
+          .title(label('authz.auditRequest.share'))
+          .grant('employees', employeeRead),
+      )
+      .action('revoke', (a) =>
+        a
+          .title(label('authz.auditRequest.revoke'))
+          .grant('employees', employeeRead),
+      ),
+);
+
 export const PROFILE_COLLECTIONS: readonly { name: string; title: string }[] = [
   { name: 'businessSignals', title: 'collections.businessSignals' },
   {
@@ -396,6 +428,7 @@ export const PROFILE_COMPOSITES = [
   findPeopleResource,
   profileSummaryResource,
   auditResource,
+  auditRequestResource,
   talentAnalystResource,
   revisionResource,
 ] as const;

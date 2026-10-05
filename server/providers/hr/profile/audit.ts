@@ -64,6 +64,13 @@ const STATE_LABEL: Record<string, string> = {
   expired: '已过期',
   missing: '缺失',
 };
+// The re-certification task's state as the risk text says it (never the stored value).
+const TASK_STATUS_LABEL: Record<string, string> = {
+  notStarted: '未开始',
+  inProgress: '进行中',
+  overdue: '已逾期',
+  completed: '已完成',
+};
 const EVENT_LABEL: Record<string, string> = {
   onboard: '入职',
   regularize: '转正',
@@ -266,9 +273,12 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
         out.push({
           id: str(row.id),
           kind: str(row.kind),
+          // A download through a customer's share link has no user (mail/audit.ts).
           actorName:
-            (await platform.userName(str(row.actorUserId))) ??
-            str(row.actorUserId),
+            str(row.actorUserId) === 'external'
+              ? '客户（分享链接）'
+              : ((await platform.userName(str(row.actorUserId))) ??
+                str(row.actorUserId)),
           fileName: row.fileName ? str(row.fileName) : null,
           summary: row.summary ? str(row.summary) : null,
           via: str(row.via),
@@ -785,7 +795,7 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
               ? tasks
                   .map(
                     (t) =>
-                      `${str(t.status)}${t.dueDate ? `（截止 ${dateOnly(t.dueDate)}）` : ''}`,
+                      `${TASK_STATUS_LABEL[str(t.status)] ?? str(t.status)}${t.dueDate ? `（截止 ${dateOnly(t.dueDate)}）` : ''}`,
                   )
                   .join('、')
               : '无复训任务';
@@ -1122,8 +1132,13 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
         ],
         { title: '客户审核包', footer: 'NocoHR 客户审核包' },
       );
+      // Node's ESM loader puts CFB on the module's default export only; Vitest's interop also exposes it on the namespace.
+      const xlsxModule = XLSX as unknown as {
+        CFB?: unknown;
+        default?: { CFB?: unknown };
+      };
       const XLSXCFB = (
-        XLSX as unknown as {
+        { CFB: xlsxModule.CFB ?? xlsxModule.default?.CFB } as unknown as {
           CFB: {
             utils: {
               cfb_new(): unknown;
