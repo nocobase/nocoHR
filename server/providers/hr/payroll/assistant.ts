@@ -502,6 +502,7 @@ export function createPayrollAssistant(deps: {
       },
       path: `/talent/payroll/vendor-bills/${billId}`,
     });
+    ctx.onBillReviewed?.(billId);
     return { output: { billId, notes: wrote, employee: employee ?? null } };
   }
 

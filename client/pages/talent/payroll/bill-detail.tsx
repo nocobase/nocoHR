@@ -12,6 +12,7 @@ import { useParams } from 'react-router';
 
 import { RouteDrawer } from '@/components/route-drawer';
 import { downloadFile } from '@/components/talent/download';
+import { MailThread } from '@/components/talent/mail-thread';
 import { PayrollStatus } from '@/components/talent/payroll-shared';
 import { useMoney, usePayrollError } from '@/components/talent/payroll-hooks';
 import { BlockSkeleton, LoadError } from '@/components/talent/states';
@@ -46,6 +47,11 @@ export default function VendorBillDrawer(): ReactElement {
   const exportable = useCan({
     resource: { type: 'composite', id: 'talent.vendorBill' },
     action: 'export',
+  });
+  // Sending a reply to the vendor needs the same permission as uploading its bill.
+  const canUpload = useCan({
+    resource: { type: 'composite', id: 'talent.vendorBill' },
+    action: 'upload',
   });
   const [busy, setBusy] = useState(false);
 
@@ -188,6 +194,15 @@ export default function VendorBillDrawer(): ReactElement {
               </TableBody>
             </Table>
           </div>
+          {/* V2-06 邮件往来: the vendor's mail and the reply draft, for a bill that came by mail. */}
+          {data.sourceMailId ? (
+            <MailThread
+              mailbox='billing'
+              refType='laborVendorBill'
+              refId={data.id}
+              canSend={canUpload.can}
+            />
+          ) : null}
         </div>
       )}
     </RouteDrawer>

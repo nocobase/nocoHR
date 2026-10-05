@@ -819,6 +819,7 @@ export function createOfferService(
       };
       const delivery = await ctx.sendEmail({
         key: `offer:${id}:${hash.slice(0, 12)}`,
+        applicationId: offer.applicationId,
         to: a.candidate.email,
         subject: fill(template.subject, text),
         body: fill(template.body, text),

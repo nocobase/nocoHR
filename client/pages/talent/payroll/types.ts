@@ -290,6 +290,8 @@ export interface VendorBill {
   aiNotes: string | null;
   status: string;
   uploads: { at: string; rows: number }[];
+  /** V2-06 邮件往来: set when the bill arrived in the billing mailbox. */
+  sourceMailId?: string | null;
   totals: {
     billedHours: number;
     attendanceHours: number;

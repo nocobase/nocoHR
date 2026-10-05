@@ -602,6 +602,28 @@ const zhCN: AppServerResource = {
       title: '{{vendor}} {{month}} 账单已上传',
       body: '{{diffPeople}} 人工时有差异，合计 {{diffHours}} 小时。',
     },
+    // V2-06 邮件往来 (server/providers/hr/mail/)
+    mailUnmatched: {
+      title: '业务邮箱有一封来信待归类',
+      body: '{{from}}：{{subject}}',
+    },
+    mailReplyReceived: {
+      title: '{{vendor}} 回信',
+      body: '{{subject}}',
+    },
+    mailDraftReady: {
+      title: '{{vendor}} {{month}} 账单的回复已起草',
+      body: '请核对后发送。',
+    },
+    // V2-07 招聘邮箱 (server/providers/hr/mail/recruiting.ts)
+    mailResumeReceived: {
+      title: '招聘邮箱收到一份简历',
+      body: '{{name}} 已投递到「{{position}}」并开始初筛。',
+    },
+    mailCandidateReplied: {
+      title: '候选人回信',
+      body: '{{name}}{{intent}}，回复已起草，请确认后发送。',
+    },
   },
   // V1-04 办公软件机器人与飞书卡片 (server/providers/hr/im-channel.ts, im-cards/)
   imBot: {

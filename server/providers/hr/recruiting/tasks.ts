@@ -97,6 +97,7 @@ export function createRecruitingTasks(
       };
       const delivery = await ctx.sendEmail({
         key: `interviewReminder:${interview.id}`,
+        applicationId: application.id,
         to: candidate.email,
         subject: fill(posting.bookingTemplate.subject, values),
         body: fill(posting.bookingTemplate.body, values),

@@ -1543,6 +1543,26 @@ const zhCN: AppResource = {
         description:
           '派遣账单上传后，由薪酬设置中指定的 AI 员工核对，把差异说明写给薪酬负责人。',
       },
+      'hrAssistant.mailSortBilling': {
+        title: '对账邮箱分拣',
+        description:
+          '对账邮箱收到来信后，认出派遣公司的账单并生成派遣账单，更正账单挂回原账单重新核对；认不出的放入待归类。',
+      },
+      'recruitingAssistant.mailSortRecruiting': {
+        title: '招聘邮箱分拣',
+        description:
+          '招聘邮箱收到带简历的来信后，建立或合并候选人并投递到主题中的在招职位，回一封收信回执；没有简历或认不出职位的放入待归类。',
+      },
+      'recruitingAssistant.mailReplyRecruiting': {
+        title: '候选人回信处理',
+        description:
+          '候选人回复面试邀请、Offer 等邮件时，认出改期、放弃、删除信息或询问，起草回复交招聘负责人确认；不改变阶段、面试安排和 Offer。',
+      },
+      'hrAssistant.mailReplyBilling': {
+        title: '账单回复起草',
+        description:
+          '邮件来的派遣账单核对后，起草给派遣公司的回复（只列工时差异，不含金额），由薪酬专员确认后发送。',
+      },
       'hrAssistant.syncExplain': {
         title: '组织同步说明',
         description:

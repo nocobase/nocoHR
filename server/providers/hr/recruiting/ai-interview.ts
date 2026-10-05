@@ -289,6 +289,7 @@ export function createAiInterview(
         const values = { name: candidate.name, position: posting.title, link: ctx.publicUrl(`/jobs/ai-interview/${token}`), minutes: '20' };
         const delivery = await ctx.sendEmail({
           key: `aiInterview:${applicationId}:${hash.slice(0, 10)}`,
+          applicationId,
           to: candidate.email,
           subject: fill(template.subject, values),
           body: fill(template.body, values),

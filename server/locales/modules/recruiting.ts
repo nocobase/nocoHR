@@ -168,6 +168,7 @@ export const recruitingServerEn = {
     consentBy: {
       page: 'ticked on the careers page',
       recruiter: 'confirmed by the recruiter on import',
+      email: 'the candidate sent the resume to the recruiting mailbox',
     },
     uploads: {
       idCard: 'ID card',
@@ -323,6 +324,7 @@ export const recruitingServerZh: typeof recruitingServerEn = {
     consentBy: {
       page: '公开页投递时勾选',
       recruiter: '导入时由招聘负责人确认已取得授权',
+      email: '候选人主动发来简历（招聘邮箱）',
     },
     uploads: {
       idCard: '身份证',

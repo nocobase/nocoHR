@@ -472,7 +472,7 @@ export function createCandidateService(
       email: string | null;
       file: UploadedFile | null;
       sourceChannel: string;
-      consentBy: 'page' | 'recruiter';
+      consentBy: 'page' | 'recruiter' | 'email';
       knockoutAnswers: { key: string; answer: string }[];
       customFields: Record<string, unknown>;
       by: string;
@@ -1113,6 +1113,7 @@ export function createCandidateService(
       if (!candidate.email) throw new HrError('CANDIDATE_EMAIL_MISSING', 409);
       const delivery = await ctx.sendEmail({
         key: `message:${messageId}`,
+        applicationId,
         to: candidate.email,
         subject: message.subject,
         body: message.body,

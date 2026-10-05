@@ -24,6 +24,7 @@ import { talentApiRoutes } from './hr/talent.js';
 import { trainingApiRoutes } from './hr/training.js';
 // V2-06
 import { payrollRoutes } from './hr/payroll.js';
+import { mailRoutes } from './hr/mail.js';
 // V3-08
 import { competencyApiRoutes } from './hr/competency.js';
 // V3-11
@@ -51,6 +52,7 @@ const routes: readonly AppRouteContribution<Application>[] = [
   attendanceRoutes,
   // V2-06
   payrollRoutes,
+  mailRoutes,
   // V2-07
   recruitingRoutes,
   organizationApiRoutes,

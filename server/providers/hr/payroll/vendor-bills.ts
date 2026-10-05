@@ -76,6 +76,8 @@ export function toBill(row: Record<string, unknown>, withAmounts: boolean) {
       row.uploads,
       [],
     ),
+    // V2-06 邮件往来: the billing mailbox message the bill came from.
+    sourceMailId: row.sourceMailId ? str(row.sourceMailId) : null,
     updatedAt: iso(row.updatedAt),
   };
 }

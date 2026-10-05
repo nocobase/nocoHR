@@ -280,3 +280,25 @@ export const licensedServicesToken: ServiceToken<
   'hr/licensed-services',
 );
 // V4-14 end
+// V2-06 邮件往来 (总纲 邮件约定).
+export const mailSettingsToken: ServiceToken<
+  import('./mail/settings.js').MailSettingsService
+> = createServiceToken<import('./mail/settings.js').MailSettingsService>(
+  'hr/mail-settings',
+);
+export const mailServiceToken: ServiceToken<
+  import('./mail/service.js').MailService
+> = createServiceToken<import('./mail/service.js').MailService>(
+  'hr/mail-service',
+);
+export const recruitingMailToken: ServiceToken<
+  import('./mail/recruiting.js').RecruitingMailHandler
+> = createServiceToken<import('./mail/recruiting.js').RecruitingMailHandler>(
+  'hr/mail-recruiting',
+);
+export const billingMailToken: ServiceToken<
+  import('./mail/billing.js').BillingMailHandler
+> = createServiceToken<import('./mail/billing.js').BillingMailHandler>(
+  'hr/mail-billing',
+);
+// V2-06 邮件往来 end

@@ -96,6 +96,24 @@ export const ZHOU_DI_RESUME: DemoResume = {
   kind: 'zhoudi',
 };
 
+/** 邹鹏: 3 years on CNC lathes; his resume arrives forwarded by a job site to the 招聘邮箱 (V2-07 招聘邮箱). */
+export const ZOU_PENG_RESUME: DemoResume = {
+  file: '邹鹏-简历.docx',
+  name: '邹鹏',
+  phone: '13900007301',
+  email: 'zoupeng@mail.test',
+  gender: '男',
+  age: 27,
+  education: '中专 德阳某技工学校 机械加工专业 毕业',
+  experiences: [
+    '2022-2025 德阳某阀门厂 数控车床操作工 3 年：负责数控车床编程调用、装夹与加工，首件送检与过程自检',
+    '能看懂零件图纸，熟练使用卡尺、千分尺与高度尺，适应倒班',
+  ],
+  skills: ['数控车床', 'FANUC 系统', '看图纸', '卡尺', '千分尺', '首件检验', '倒班'],
+  certificates: ['数控车工（四级）'],
+  kind: 'cnc',
+};
+
 /** 另 2 名公开页投递的候选人: one answers "不能" to 三班倒. */
 export const PUBLIC_APPLICANTS = [
   { name: '邱明', phone: '13900007201', email: 'qiuming@qiheng.test', shiftWork: 'no' },

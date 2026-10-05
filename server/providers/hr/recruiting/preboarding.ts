@@ -112,6 +112,7 @@ export function createPreboarding(
             };
             const delivery = await ctx.sendEmail({
               key: `preboarding:${offer.id}:${days}`,
+              applicationId: offer.applicationId,
               to: c.candidate.email,
               subject: fill(template.subject, values),
               body: fill(template.body, values),

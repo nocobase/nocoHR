@@ -27,11 +27,15 @@ import {
   hrCoreServiceToken,
   imChannelToken,
   knowledgeServiceToken,
+  mailServiceToken,
   payrollServicesToken,
 } from '../tokens.js';
 import { readRecruitingSettings, type RecruitingSettings } from './config.js';
 
-export type Translate = (key: string, values?: Record<string, unknown>) => string;
+export type Translate = (
+  key: string,
+  values?: Record<string, unknown>,
+) => string;
 
 export interface RecruitingDeps {
   readonly container: ServiceContainer;
@@ -178,8 +182,25 @@ export function createRecruitingContext(deps: RecruitingDeps) {
       to: string;
       subject: string;
       body: string;
+      /** The application the mail is about: its thread in the 招聘邮箱, so a candidate's reply comes back to it. */
+      applicationId?: string | null;
     }): Promise<'sent' | 'channelNotConfigured' | 'failed'> {
       const settings = (await readRecruitingSettings(database)).value;
+      // V2-07: through the 招聘邮箱 when it is on, with the thread's reply address.
+      if (container.has(mailServiceToken)) {
+        const viaMail = await container.resolve(mailServiceToken).sendDirect({
+          purpose: 'recruiting',
+          idempotencyKey: `recruiting:${input.key}`,
+          to: input.to,
+          subject: input.subject,
+          text: input.body,
+          refType: input.applicationId ? 'application' : null,
+          refId: input.applicationId ?? null,
+          channel: settings.email.channel,
+          redirectTo: settings.email.redirectTo ?? undefined,
+        });
+        if (viaMail) return viaMail;
+      }
       const to =
         !deps.production && settings.email.redirectTo
           ? settings.email.redirectTo
@@ -222,11 +243,18 @@ export function createRecruitingContext(deps: RecruitingDeps) {
       const id = newId();
       const safe = file.name.replace(/[^\w.\-一-龥]/gu, '_').slice(-120);
       const ext = safe.includes('.')
-        ? safe.split('.').pop()!.replace(/[^A-Za-z0-9]/gu, '').slice(0, 16)
+        ? safe
+            .split('.')
+            .pop()!
+            .replace(/[^A-Za-z0-9]/gu, '')
+            .slice(0, 16)
         : '';
       // The storage key stays ASCII (the drive refuses other characters); the original name is kept in the row.
       const key = `recruiting/${file.folder}/${new Date().toISOString().slice(0, 7)}/${id}${ext ? `.${ext}` : ''}`;
-      await container.resolve(driveManagerToken).use('local').put(key, file.bytes);
+      await container
+        .resolve(driveManagerToken)
+        .use('local')
+        .put(key, file.bytes);
       const now = new Date();
       await database
         .query()

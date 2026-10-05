@@ -14,6 +14,7 @@ import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
 import { downloadFile } from '@/components/talent/download';
+import { MailThread } from '@/components/talent/mail-thread';
 import { formatDateTime, useAction } from '@/components/talent/recruiting-lib';
 import {
   PeoplePicker,
@@ -459,6 +460,19 @@ export default function CandidateDetail(): ReactElement {
                         ) : null}
                       </div>
                     ))}
+                </CardContent>
+              </Card>
+            ) : null}
+            {/* V2-07 招聘邮箱: the mail sent to the candidate, their replies and the drafted answers. */}
+            {data.can?.manage ? (
+              <Card>
+                <CardContent>
+                  <MailThread
+                    mailbox='recruiting'
+                    refType='application'
+                    refId={applicationId}
+                    canSend
+                  />
                 </CardContent>
               </Card>
             ) : null}

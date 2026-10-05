@@ -613,6 +613,28 @@ const enUS = {
       title: '{{vendor}} bill for {{month}} uploaded',
       body: '{{diffPeople}} people differ, {{diffHours}} hours in total.',
     },
+    // V2-06 business mail (server/providers/hr/mail/)
+    mailUnmatched: {
+      title: 'A business mailbox message waits to be sorted',
+      body: '{{from}}: {{subject}}',
+    },
+    mailReplyReceived: {
+      title: 'Reply from {{vendor}}',
+      body: '{{subject}}',
+    },
+    mailDraftReady: {
+      title: 'Reply to the {{vendor}} bill for {{month}} drafted',
+      body: 'Review it and send.',
+    },
+    // V2-07 recruiting mailbox (server/providers/hr/mail/recruiting.ts)
+    mailResumeReceived: {
+      title: 'A resume arrived in the recruiting mailbox',
+      body: '{{name}} applied to "{{position}}"; screening has started.',
+    },
+    mailCandidateReplied: {
+      title: 'A candidate replied',
+      body: '{{name}}: {{intent}}. A reply is drafted for you to review and send.',
+    },
   },
   // V1-04 办公软件机器人与飞书卡片 (server/providers/hr/im-channel.ts, im-cards/)
   imBot: {

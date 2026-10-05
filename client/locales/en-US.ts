@@ -1672,6 +1672,26 @@ const enUS = {
         description:
           'After a staffing-agency bill is uploaded, the AI employee chosen in payroll settings reconciles it and writes notes on the differences for the payroll owner.',
       },
+      'hrAssistant.mailSortBilling': {
+        title: 'Sort the billing mailbox',
+        description:
+          'Recognises staffing-agency bills arriving in the billing mailbox and creates the vendor bill; a corrected bill is attached to the original and reconciled again; anything else waits to be sorted.',
+      },
+      'recruitingAssistant.mailSortRecruiting': {
+        title: 'Sort the recruiting mailbox',
+        description:
+          'When a message with a resume arrives in the recruiting mailbox, creates or merges the candidate, applies to the open position named in the subject and sends a receipt; anything without a resume or a recognisable position waits to be sorted.',
+      },
+      'recruitingAssistant.mailReplyRecruiting': {
+        title: 'Handle candidate replies',
+        description:
+          'When a candidate answers an invitation, an offer or another message, recognises a reschedule, a withdrawal, an erasure request or a question and drafts the reply for the recruiter to confirm. Never changes a stage, an interview or an offer.',
+      },
+      'hrAssistant.mailReplyBilling': {
+        title: 'Draft bill replies',
+        description:
+          'Once a bill that came by mail is reconciled, drafts the reply to the agency (hours only, no amounts) for the payroll specialist to send.',
+      },
       'hrAssistant.syncExplain': {
         title: 'Explain sync issues',
         description:

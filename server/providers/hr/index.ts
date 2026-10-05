@@ -127,6 +127,19 @@ import {
   PAYROLL_COMPOSITES,
 } from './payroll/resources.js';
 import { payrollServicesToken } from './tokens.js';
+// V2-06 邮件往来
+import type { MailConfig } from '../../config/mail.js';
+import { createBillingMailHandler } from './mail/billing.js';
+import { createRecruitingMailHandler } from './mail/recruiting.js';
+import { extractResumeText, readIdentity } from './recruiting/resume-text.js';
+import { createMailService } from './mail/service.js';
+import { createMailSettingsService } from './mail/settings.js';
+import {
+  billingMailToken,
+  recruitingMailToken,
+  mailServiceToken,
+  mailSettingsToken,
+} from './tokens.js';
 // V2-06 end
 // V2-07
 import { createRecruitingServices } from './recruiting/index.js';
@@ -473,6 +486,10 @@ export default class HrProvider extends ServiceProvider<Application> {
     // V2-06 薪酬与社保
     this.registerPayroll();
     // V2-06 end
+    // V2-06 邮件往来 (总纲 邮件约定)
+    this.registerMail();
+    this.registerRecruitingMail();
+    // V2-06 邮件往来 end
     // V2-07 用工计划与招聘入职
     this.registerRecruiting();
     // V2-07 end
@@ -485,6 +502,284 @@ export default class HrProvider extends ServiceProvider<Application> {
     // V4-14 行业方案 · 持证上岗
     this.registerLicensed();
     // V4-14 end
+  }
+
+  /**
+   * V2-06 邮件往来 (mail/): the business mailboxes' store, the 设置 / 邮件
+   * data and the billing mailbox's handler. Handlers are attached in boot();
+   * later steps register theirs the same way.
+   */
+  private registerMail(): void {
+    const container = this.app.container;
+    const production = process.env.NODE_ENV === 'production';
+    container.singleton(mailSettingsToken, () =>
+      createMailSettingsService(container.resolve(databaseManagerToken)),
+    );
+    container.singleton(mailServiceToken, () =>
+      createMailService({
+        database: container.resolve(databaseManagerToken),
+        settings: container.resolve(mailSettingsToken),
+        config: () => this.mailConfig(),
+        storageDir: () => this.app.paths.storage(),
+        drive: () => container.resolve(driveManagerToken),
+        production,
+        sendEmail: async (input) => {
+          if (!container.has(notificationServiceToken))
+            return 'channelNotConfigured';
+          try {
+            await container.resolve(notificationServiceToken).send({
+              idempotencyKey: input.idempotencyKey,
+              source: { type: 'hr.mail', referenceId: input.idempotencyKey },
+              messages: {
+                [input.channel]: {
+                  to: input.to,
+                  replyTo: input.replyTo,
+                  subject: input.subject,
+                  text: input.text,
+                },
+              },
+            });
+            return 'sent';
+          } catch (error) {
+            const code = str(
+              (error as { code?: unknown }).code ??
+                (error as Error).message ??
+                '',
+            );
+            return /CHANNEL|UNKNOWN|DISABLED|NOT_FOUND/iu.test(code)
+              ? 'channelNotConfigured'
+              : 'failed';
+          }
+        },
+        notify: this.notifier(),
+        log: (fields, message) =>
+          container.resolve(loggingToken).getLogger('hr').warn(fields, message),
+      }),
+    );
+    container.singleton(billingMailToken, () => {
+      const database = container.resolve(databaseManagerToken);
+      const platform = container.resolve(platformToken);
+      return createBillingMailHandler({
+        mail: container.resolve(mailServiceToken),
+        settings: container.resolve(mailSettingsToken),
+        bills: () => container.resolve(payrollServicesToken).bills,
+        payrollUsers: () =>
+          container.resolve(hrCoreServiceToken).holdersOf('hr.payroll'),
+        today: () => platform.currentDate(),
+        run: (key, options, work) =>
+          container
+            .resolve(automationServiceToken)
+            .run(key, 'event', options, work),
+        setSourceMail: async (billId, mailId) => {
+          await database
+            .query()
+            .updateTable('laborVendorBills')
+            .set({ sourceMailId: mailId })
+            .where('id', '=', billId)
+            .execute();
+        },
+        billSourceMail: async (billId) => {
+          const bill = await database
+            .query()
+            .selectFrom('laborVendorBills')
+            .select(['sourceMailId'])
+            .where('id', '=', billId)
+            .executeTakeFirst();
+          if (!bill?.sourceMailId) return null;
+          // The latest message from the vendor in that thread: a correction is answered in turn.
+          const source = await database
+            .query()
+            .selectFrom('mailMessages')
+            .select(['id', 'threadKey'])
+            .where('id', '=', str(bill.sourceMailId))
+            .executeTakeFirst();
+          if (!source) return null;
+          const latest = await database
+            .query()
+            .selectFrom('mailMessages')
+            .select(['id'])
+            .where('threadKey', '=', String(source.threadKey))
+            .where('direction', '=', 'inbound')
+            .orderBy('createdAt', 'desc')
+            .executeTakeFirst();
+          return latest ? String(latest.id) : String(source.id);
+        },
+        billFor: async (vendorName, month) => {
+          const bill = await database
+            .query()
+            .selectFrom('laborVendorBills')
+            .select(['id'])
+            .where('vendorName', '=', vendorName)
+            .where('month', '=', month)
+            .executeTakeFirst();
+          return bill ? String(bill.id) : null;
+        },
+        notify: this.notifier(),
+      });
+    });
+  }
+
+  /**
+   * V2-07 招聘邮箱: resumes by mail go through the recruiting intake, and a
+   * candidate's replies come back to the application (mail/recruiting.ts).
+   */
+  private registerRecruitingMail(): void {
+    const container = this.app.container;
+    container.singleton(recruitingMailToken, () => {
+      const database = container.resolve(databaseManagerToken);
+      const recruiting = () => container.resolve(recruitingServicesToken);
+      const recruiterOf = async (postingId: string) => {
+        const posting = await recruiting().postings.get(postingId);
+        const requisition = await recruiting().requisitions.get(
+          posting.requisitionId,
+        );
+        return requisition.recruiterUserId ?? null;
+      };
+      return createRecruitingMailHandler({
+        mail: container.resolve(mailServiceToken),
+        settings: container.resolve(mailSettingsToken),
+        run: (key, options, work) =>
+          container
+            .resolve(automationServiceToken)
+            .run(key, 'event', options, work),
+        publishedPostings: async () =>
+          (
+            await database
+              .query()
+              .selectFrom('jobPostings')
+              .select(['id', 'title', 'requisitionId'])
+              .where('status', '=', 'published')
+              .execute()
+          ).map((r) => ({
+            id: String(r.id),
+            title: String(r.title),
+            requisitionId: String(r.requisitionId),
+          })),
+        recruiterOf,
+        recruiters: () =>
+          container.resolve(hrCoreServiceToken).holdersOf('hr.recruiter'),
+        applicationForAddress: async (address) => {
+          const found = await database
+            .query()
+            .selectFrom('applications')
+            .innerJoin(
+              'candidates',
+              'candidates.id',
+              'applications.candidateId',
+            )
+            .select(['applications.id as id'])
+            .where('candidates.email', '=', address.trim().toLowerCase())
+            .where('candidates.anonymizedAt', 'is', null)
+            .where('applications.stage', 'not in', [
+              'hired',
+              'rejected',
+              'withdrawn',
+            ])
+            .orderBy('applications.updatedAt', 'desc')
+            .executeTakeFirst();
+          return found ? String(found.id) : null;
+        },
+        intake: async (input) => {
+          const services = recruiting();
+          const posting = await services.postings.get(input.postingId);
+          const mimeType = await services.candidates.validateResume(
+            input.file,
+            false,
+          );
+          const text = await extractResumeText(
+            input.file.bytes,
+            input.file.name,
+            mimeType,
+          );
+          const identity = text
+            ? readIdentity(text)
+            : { name: null, phone: null, email: null };
+          // The resume's own contact details first: a job site forwards from its own address.
+          const email = identity.email ?? input.fromAddress;
+          const outcome = await services.candidates.intake({
+            posting,
+            name:
+              identity.name ??
+              input.fromName ??
+              input.file.name.replace(/\.[^.]+$/u, ''),
+            phone: identity.phone,
+            email,
+            file: { ...input.file, mimeType },
+            sourceChannel: 'email',
+            consentBy: 'email',
+            knockoutAnswers: [],
+            customFields: {},
+            by: input.by,
+          });
+          const candidate = await services.candidates.candidateRow(
+            outcome.candidateId,
+          );
+          return {
+            applicationId: outcome.applicationId,
+            candidateName: candidate.name,
+            created: outcome.created,
+            email: candidate.email,
+          };
+        },
+        application: async (id) => {
+          const services = recruiting();
+          const application = await services.candidates
+            .applicationRow(id)
+            .catch(() => null);
+          if (!application) return null;
+          const candidate = await services.candidates.candidateRow(
+            application.candidateId,
+          );
+          const posting = await services.postings.get(application.postingId);
+          return {
+            id,
+            postingId: posting.id,
+            postingTitle: posting.title,
+            candidateName: candidate.name,
+            stage: application.stage,
+          };
+        },
+        retentionMonths: async () =>
+          (await recruiting().context.settings()).retention.months,
+        sendEmail: (input) => recruiting().context.sendEmail(input),
+        receiptSince: async (address, since) =>
+          Boolean(
+            await database
+              .query()
+              .selectFrom('mailMessages')
+              .select(['id'])
+              .where('mailbox', '=', 'recruiting')
+              .where(
+                'messageId',
+                'like',
+                `<recruiting:receipt:${address.toLowerCase()}:%`,
+              )
+              .where('createdAt', '>=', since)
+              .executeTakeFirst(),
+          ),
+        now: () => new Date(),
+        notify: this.notifier(),
+      });
+    });
+  }
+
+  private mailConfig(): MailConfig {
+    const raw = this.app.config.get<Partial<MailConfig>>('mail') ?? {};
+    const fallback = (purpose: string) => ({
+      adapter: 'mock' as const,
+      address: `${purpose}@qiheng.test`,
+      imapHost: '',
+      imapPort: 993,
+      imapSecure: true,
+      imapUser: '',
+      imapPassword: '',
+    });
+    return {
+      billing: { ...fallback('billing'), ...raw.billing },
+      recruiting: { ...fallback('recruiting'), ...raw.recruiting },
+      audit: { ...fallback('audit'), ...raw.audit },
+      hr: { ...fallback('hr'), ...raw.hr },
+    };
   }
 
   /**
@@ -660,6 +955,11 @@ export default class HrProvider extends ServiceProvider<Application> {
             container
               .resolve(payrollServicesToken)
               .assistant.review(billId, new Date().toISOString()),
+          ),
+        // V2-06 邮件往来: a bill that came by mail gets its reply drafted once reconciled.
+        onBillReviewed: (billId) =>
+          this.inBackground('hrAssistant.mailReplyBilling', () =>
+            container.resolve(billingMailToken).draftForBill(billId),
           ),
         onAdjustmentDecided: (actionId) => this.syncChecklist(actionId),
         // V4-12: perf.coefficient, the bonus cycle and the review result an adjustment links to.
@@ -922,6 +1222,13 @@ export default class HrProvider extends ServiceProvider<Application> {
         payrollBaseAdjust: 'payrollInsurance',
         payrollVendorBillReviewed: 'payrollVendorBill',
         payrollVendorBillUploaded: 'payrollVendorBill',
+        // V2-06 邮件往来: messages to sort and reply drafts to send.
+        mailUnmatched: 'mailSort',
+        mailReplyReceived: 'mailReply',
+        mailDraftReady: 'mailReply',
+        // V2-07 招聘邮箱: a resume taken in, a candidate's reply with its drafted answer.
+        mailResumeReceived: 'mailSort',
+        mailCandidateReplied: 'mailReply',
         // V3-11: the talent analyst's suggestions, rule drafts and failed write-backs; the writer's revisions.
         competencySuggestionDrafted: 'aiDecision',
         trainingRecommendationPending: 'aiDecision',
@@ -994,8 +1301,11 @@ export default class HrProvider extends ServiceProvider<Application> {
         message === 'attendanceOvertimeNear' ||
         message === 'attendanceMonthCheck' ||
         message.startsWith('attendanceInquiry') ||
-        // V2-06: 算薪异常检查.
-        message.startsWith('payrollAnomalies');
+        // V2-06: 算薪异常检查 and 业务邮件分拣.
+        message.startsWith('payrollAnomalies') ||
+        (message.startsWith('mail') &&
+          message !== 'mailResumeReceived' &&
+          message !== 'mailCandidateReplied');
       const aiEmployeeOf: Record<string, string> = {
         automationGapReport: 'knowledgeAssistant',
         documentConflictFound: 'knowledgeAssistant',
@@ -1009,6 +1319,8 @@ export default class HrProvider extends ServiceProvider<Application> {
         recruitingPoolSuggested: 'recruitingAssistant',
         recruitingInterviewQuestions: 'recruitingAssistant',
         recruitingInterviewSummary: 'recruitingAssistant',
+        mailResumeReceived: 'recruitingAssistant',
+        mailCandidateReplied: 'recruitingAssistant',
         recruitingDigest: 'recruitingAssistant',
         recruitingNewHireIssue: 'hrAssistant',
         recruitingPreboardingExtracted: 'hrAssistant',
@@ -1697,6 +2009,16 @@ export default class HrProvider extends ServiceProvider<Application> {
   public override async boot(): Promise<void> {
     const container = this.app.container;
     const authz: AppAuthorization = container.resolve(authorizationToken);
+    // V2-06 邮件往来: each purpose's handler (later steps add theirs here).
+    container
+      .resolve(mailServiceToken)
+      .registerHandler('billing', container.resolve(billingMailToken).handler);
+    container
+      .resolve(mailServiceToken)
+      .registerHandler(
+        'recruiting',
+        container.resolve(recruitingMailToken).handler,
+      );
     const database = container.resolve(databaseManagerToken);
     const organization = container.resolve(organizationServiceToken);
 
@@ -2023,6 +2345,55 @@ export default class HrProvider extends ServiceProvider<Application> {
     if (container.has(schedulerServiceToken)) {
       const scheduler = container.resolve(schedulerServiceToken);
       const logger = container.resolve(loggingToken).getLogger('hr');
+      // V2-06 邮件往来: every minute, the mailboxes are read once 设置 / 邮件's interval has passed.
+      let lastMailPoll = 0;
+      scheduler.registerTarget({
+        type: 'app.hr-mail-poll',
+        title: 'Business mail: read the mailboxes',
+        validate: (config) =>
+          config !== null &&
+          typeof config === 'object' &&
+          !Array.isArray(config)
+            ? { valid: true }
+            : { valid: false, reason: 'config-must-be-an-object' },
+        start: async () => {
+          const settings = (await container.resolve(mailSettingsToken).read())
+            .value;
+          if (Date.now() - lastMailPoll < settings.pollMinutes * 60_000 - 5_000)
+            return { state: 'completed', outcome: 'succeeded', result: {} };
+          lastMailPoll = Date.now();
+          const counts = await container.resolve(mailServiceToken).poll();
+          return { state: 'completed', outcome: 'succeeded', result: counts };
+        },
+      });
+      scheduler.defineSchedule({
+        key: 'hr.mail-poll',
+        title: 'Business mail: read the mailboxes',
+        schedule: { cron: '* * * * *', timezone: this.talentConfig().timeZone },
+        target: { type: 'app.hr-mail-poll', config: {} },
+      });
+      scheduler.registerTarget({
+        type: 'app.hr-mail-retention',
+        title: 'Business mail: clear bodies past retention',
+        validate: (config) =>
+          config !== null &&
+          typeof config === 'object' &&
+          !Array.isArray(config)
+            ? { valid: true }
+            : { valid: false, reason: 'config-must-be-an-object' },
+        start: async () => {
+          const result = await container
+            .resolve(mailServiceToken)
+            .sweepRetention(container.resolve(platformToken).currentDate());
+          return { state: 'completed', outcome: 'succeeded', result };
+        },
+      });
+      scheduler.defineSchedule({
+        key: 'hr.mail-retention',
+        title: 'Business mail: clear bodies past retention',
+        schedule: { cron: '0 3 * * *', timezone: this.talentConfig().timeZone },
+        target: { type: 'app.hr-mail-retention', config: {} },
+      });
       scheduler.registerTarget({
         type: 'app.hr-daily',
         title: 'HR daily maintenance',

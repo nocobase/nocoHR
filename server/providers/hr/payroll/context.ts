@@ -26,6 +26,8 @@ export interface PayrollDeps {
   readonly onCalculated: (cycleId: string, calculationId: string) => void;
   /** A vendor bill was uploaded and reconciled. */
   readonly onBillUploaded: (billId: string) => void;
+  /** V2-06 邮件往来: the reconciliation notes of a bill were written (the billing mailbox drafts the vendor's reply). */
+  readonly onBillReviewed?: (billId: string) => void;
   /** A salary adjustment related to a personnel action was decided: refresh its change checklist. */
   readonly onAdjustmentDecided: (actionId: string) => void;
   /** Import, export and publish events for the server log (the application has no audit-log plugin). */
@@ -73,10 +75,12 @@ export async function storeUpload(
 ): Promise<string> {
   const id = newId();
   const safe = file.name.replace(/[^\w.\-一-龥]/gu, '_').slice(-120);
-  const key = `payroll/${new Date().toISOString().slice(0, 7)}/${id}-${safe}`;
+  const ext = safe.includes('.') ? safe.split('.').pop()!.slice(0, 32) : '';
+  // The storage key stays ASCII: the drive refuses other characters (a Chinese file name failed every upload).
+  // hrFiles keeps the original name.
+  const key = `payroll/${new Date().toISOString().slice(0, 7)}/${id}${ext ? `.${ext.replace(/[^\w]/gu, '')}` : ''}`;
   await ctx.drive().use('local').put(key, file.bytes);
   const now = new Date();
-  const ext = safe.includes('.') ? safe.split('.').pop()!.slice(0, 32) : '';
   await ctx.platform.database
     .query()
     .insertInto('hrFiles')

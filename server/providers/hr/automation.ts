@@ -278,6 +278,21 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     kind: 'event',
     defaults: {},
   },
+  // V2-06 邮件往来 (mail/billing.ts): 业务邮件分拣 of the billing mailbox and the reply draft (owner payroll01).
+  {
+    key: 'hrAssistant.mailSortBilling',
+    employee: 'hrAssistant',
+    composite: 'talent.payrollSettings',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'hrAssistant.mailReplyBilling',
+    employee: 'hrAssistant',
+    composite: 'talent.payrollSettings',
+    kind: 'event',
+    defaults: {},
+  },
   // V2-07 (recruiting/assistant.ts): 人事助理的用工测算、待入职跟进、新员工回访与材料识别 (owner hr01); 招聘助理的
   // 职位起草、简历库复用、初筛、面试题、面试汇总与 18:00 汇总 (owner recruit01; each runs as the requisition's recruiter).
   {
@@ -349,6 +364,21 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     composite: 'talent.recruitingAssistant',
     kind: 'daily',
     defaults: { hour: 18 },
+  },
+  // 招聘邮箱 (mail/recruiting.ts): resumes by mail into candidates, and candidates' replies with drafted answers.
+  {
+    key: 'recruitingAssistant.mailSortRecruiting',
+    employee: 'recruitingAssistant',
+    composite: 'talent.recruitingAssistant',
+    kind: 'event',
+    defaults: {},
+  },
+  {
+    key: 'recruitingAssistant.mailReplyRecruiting',
+    employee: 'recruitingAssistant',
+    composite: 'talent.recruitingAssistant',
+    kind: 'event',
+    defaults: {},
   },
   // V2-07 end
   // V3-11 (profile/analyst.ts): the talent analyst's five jobs, the coach's recommendation content, the writer's

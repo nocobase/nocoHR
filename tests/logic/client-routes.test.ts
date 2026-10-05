@@ -135,6 +135,8 @@ describe('app client routes', () => {
       { name: 'talent-job-event-detail', authorizedAs: 'talent.jobEvents' },
       // V1-02: the compliance list is an HR administrator's tool; a checklist link is gated by its endpoint.
       { name: 'talent-compliance', authorizedAs: 'settings:talent.hr' },
+      // V2-06 邮件往来
+      { name: 'talent-mail', authorizedAs: 'talent.mail' },
       { name: 'talent-checklist', authorizedAs: null },
       { name: 'talent-contracts', authorizedAs: 'talent.contracts' },
       // V2-06 薪酬与社保

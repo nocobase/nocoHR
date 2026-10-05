@@ -465,7 +465,15 @@ export function createProfileReads(platform: Platform) {
     ): Promise<string> {
       const id = newId();
       const safe = file.name.replace(/[^\w.\-一-龥]/gu, '_').slice(-120);
-      const key = `${file.folder}/${new Date().toISOString().slice(0, 7)}/${id}-${safe}`;
+      const ext = safe.includes('.')
+        ? safe
+            .split('.')
+            .pop()!
+            .replace(/[^A-Za-z0-9]/gu, '')
+            .slice(0, 16)
+        : '';
+      // The storage key stays ASCII (the drive refuses other characters); the original name is kept in the row.
+      const key = `${file.folder}/${new Date().toISOString().slice(0, 7)}/${id}${ext ? `.${ext}` : ''}`;
       await drive.use('local').put(key, file.bytes);
       const now = new Date();
       await database

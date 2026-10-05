@@ -40,6 +40,8 @@ import {
 } from 'lucide-react';
 // V2-06
 import { Calculator, ReceiptText, Wallet } from 'lucide-react';
+// V2-06 邮件往来
+import { AtSign, Mail } from 'lucide-react';
 // V4-13 (ClipboardCheck comes with the first import)
 import {
   Grid2x2Check,
@@ -335,6 +337,16 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
         },
         navigation: { title: 'navigation.talentCompliance', icon: ShieldCheck },
         componentLoader: () => import('./pages/talent/compliance/index.js'),
+      },
+      {
+        // 邮件往来 (V2-06): the business mailboxes. The page grant puts the entry in front of mailbox owners
+        // (薪酬专员 first); each mailbox's own permission decides what the endpoints show.
+        name: 'talent-mail',
+        path: '/talent/mail',
+        auth: 'required',
+        authz: page('talent.mail'),
+        navigation: { title: 'navigation.talentMail', icon: Mail },
+        componentLoader: () => import('./pages/talent/mail/index.js'),
       },
       {
         // 变动影响清单 (V1-02): reached from the workbench, notifications and actions. An approver without the actions
@@ -1492,6 +1504,17 @@ const settingsRoutes: AppClientRouteContribution = defineSettingsRoutes([
       action: 'administer',
     },
     componentLoader: () => import('./pages/settings/custom-fields/index.js'),
+  },
+  {
+    // 设置 / 邮件 (V2-06): what the business mailboxes are used for; connections stay in the configuration.
+    name: 'talent-mail-settings',
+    path: '/mail',
+    navigation: { title: 'mailSettings.title', icon: AtSign },
+    authz: {
+      resource: { type: 'settings', id: 'talent.hr' },
+      action: 'administer',
+    },
+    componentLoader: () => import('./pages/settings/mail/index.js'),
   },
   {
     // 组织管理: departments, heads and members. Checks the departments settings item the server registers.

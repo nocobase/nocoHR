@@ -172,6 +172,7 @@ export function createPublicService(
     };
     return ctx.sendEmail({
       key: `booking:${interviewId}`,
+      applicationId,
       to: candidate.email,
       subject: fill(
         t('recruiting.templates.bookingConfirmation.subject'),

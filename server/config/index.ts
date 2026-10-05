@@ -25,6 +25,8 @@ import talent from './talent.js';
 import talentProfile from './talent-profile.js';
 // Feishu self-built app (organization sync, bot)
 import feishu from './feishu.js';
+// V2-06: business mailboxes (邮件往来).
+import mail from './mail.js';
 
 const defaultConfigs: AppConfigFactory<{
   auth: ReturnType<typeof auth>;
@@ -48,6 +50,7 @@ const defaultConfigs: AppConfigFactory<{
   talent: ReturnType<typeof talent>;
   talentProfile: ReturnType<typeof talentProfile>;
   feishu: ReturnType<typeof feishu>;
+  mail: ReturnType<typeof mail>;
 }> = defaultAppConfigs({
   auth,
   authorization,
@@ -70,6 +73,7 @@ const defaultConfigs: AppConfigFactory<{
   talent,
   talentProfile,
   feishu,
+  mail,
 });
 
 export default defaultConfigs;
