@@ -908,6 +908,13 @@ describe('工作台 · AI 员工已办完', () => {
           {},
         ),
         run(
+          'ai-done-empty',
+          await userIdOf('hr01'),
+          'certificationSteward.recertEscalation',
+          '复审未开始且临近到期 0 人',
+          { escalated: 0, heads: 0 },
+        ),
+        run(
           'ai-done-payroll',
           await userIdOf('payroll01'),
           'hrAssistant.mailSortBilling',
@@ -925,6 +932,8 @@ describe('工作台 · AI 员工已办完', () => {
     expect(tasks).toContain('hrAssistant.renewalPrep');
     // The billing mailbox belongs to payroll01: it never shows on hr01's workbench.
     expect(tasks).not.toContain('hrAssistant.mailSortBilling');
+    // A run that produced nothing is not work done.
+    expect(tasks).not.toContain('certificationSteward.recertEscalation');
     const renewal = (mine.json.data.groups as Json[]).find(
       (g) => g.task === 'hrAssistant.renewalPrep',
     );

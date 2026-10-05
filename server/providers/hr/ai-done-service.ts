@@ -11,6 +11,10 @@
  *   application time zone, the week starting on Monday) and the latest few
  *   runs, each with its own summary line and a link to the record it acted on.
  *
+ * - Empty runs are not work done either: a run whose output counts are all
+ *   zero (顶班推荐「候选 0 人」, 复审催办 0 人) finished without producing
+ *   anything, so it is neither counted nor shown as a group's latest entry.
+ *
  * Summary lines are the run's own (`run.summarize`) when they read as a
  * sentence; ones that are only an id get no line and the client words the
  * group from its count.
@@ -83,6 +87,23 @@ export function aiDoneText(text: string): string | null {
   // A UUID, or any run of 12+ hex digits, is an internal id.
   if (/[0-9a-f]{8}-[0-9a-f]{4}-|[0-9a-f]{12,}/iu.test(trimmed)) return null;
   return trimmed;
+}
+
+/**
+ * A run that produced nothing: its output has counts (numbers or lists) and
+ * every one is zero or empty. Outputs without counts — a sorted mail, a
+ * drafted reply — always name what they did.
+ */
+export function aiDoneEmpty(output: Record<string, unknown>): boolean {
+  const counts = Object.values(output).filter(
+    (value) => typeof value === 'number' || Array.isArray(value),
+  );
+  return (
+    counts.length > 0 &&
+    counts.every((value) =>
+      Array.isArray(value) ? value.length === 0 : value === 0,
+    )
+  );
 }
 
 const id = (output: Record<string, unknown>, key: string): string | null =>
@@ -190,9 +211,12 @@ export function createAiDoneService(deps: {
         }
       >();
       let todayCount = 0;
+      let week = 0;
       for (const row of rows) {
         const at = instant(row.finishedAt);
         if (!Number.isFinite(at)) continue;
+        const output = json(row.output);
+        if (aiDoneEmpty(output)) continue;
         const task = str(row.task);
         const group = groups.get(task) ?? {
           task,
@@ -203,6 +227,7 @@ export function createAiDoneService(deps: {
           entries: [],
         };
         group.week += 1;
+        week += 1;
         if (at >= dayStart) {
           group.today += 1;
           todayCount += 1;
@@ -212,14 +237,14 @@ export function createAiDoneService(deps: {
           group.entries.push({
             at: new Date(at).toISOString(),
             text: aiDoneText(str(row.inputSummary)),
-            link: aiDoneLink(task, json(row.output)),
+            link: aiDoneLink(task, output),
           });
         groups.set(task, group);
       }
       return {
         timeZone: deps.timeZone,
         today: todayCount,
-        week: rows.length,
+        week,
         groups: [...groups.values()]
           .sort((a, b) => b.latest - a.latest)
           .map(({ latest, ...g }) => ({
