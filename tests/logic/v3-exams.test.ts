@@ -848,6 +848,13 @@ describe('certificate lifecycle, renewal and external certificates', () => {
     expect(String(renewed.expiresAt).slice(0, 10)).toBe(
       expected.toISOString().slice(0, 10),
     );
+    // 认证要求 · 你的进度 keeps the passed exam ticked for the holder of the new certificate.
+    const detail = await call('emp_th_1', 'GET', '/certifications/cert-cnc');
+    expect(
+      (detail.json.data.mine.requirements.exams as Json[]).find(
+        (e) => e.id === 'exam-cnc-cert',
+      )?.done,
+    ).toBe(true);
   });
 
   it('verifies an external certificate only by HR, never by its holder', async () => {

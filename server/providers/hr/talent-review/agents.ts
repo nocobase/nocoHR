@@ -191,7 +191,7 @@ export function createAgentService(ctx: TalentReviewContext) {
       const rows = (await database
         .repository('agentCallLogs')
         .withPolicy(policyOf(policies, 'agentCallLogs'))
-        .findMany({ filter: filters.clientId ? { clientId: filters.clientId } : {} })) as Record<
+        .findMany(filters.clientId ? { filter: { clientId: filters.clientId } } : {})) as Record<
         string,
         unknown
       >[];

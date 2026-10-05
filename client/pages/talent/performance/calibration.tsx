@@ -1,3 +1,4 @@
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 /**
  * V4-12 校准 (`/talent/calibration`; hr.admin adjusts and publishes, heads
  * read their own scope): the calibration pack the assistant prepared, the
@@ -122,11 +123,18 @@ interface CalibrationView {
 export default function CalibrationPage(): ReactElement {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
+  // HR reads every cycle; a head reads their team's. Ask first, so a head sends no refused request.
+  const allCycles = useCan({
+    resource: { type: 'composite', id: 'talent.reviewCycle' },
+    action: 'view',
+  });
   const cycles = useRemote<{
     cycles: { id: string; title: string; status: string }[];
-  }>('talent/performance/cycles');
+  }>(allCycles.can ? 'talent/performance/cycles' : null);
   const team = useRemote<{ id: string; title: string; status: string }[]>(
-    cycles.error ? 'talent/performance/team/cycles' : null,
+    !allCycles.isPending && !allCycles.can
+      ? 'talent/performance/team/cycles'
+      : null,
   );
   const options = cycles.data?.cycles ?? team.data ?? [];
   const cycleId =

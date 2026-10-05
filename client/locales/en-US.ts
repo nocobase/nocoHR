@@ -1418,6 +1418,7 @@ const enUS = {
   'auth.passwordMismatch': "Passwords don't match.",
   'routeOverlay.close': 'Close',
   'status.deniedDescription': 'You do not have permission to access {{label}}.',
+  'status.thisPage': 'this page',
   'status.routeFailedDescription':
     'Route {{label}} from {{packageName}} could not be loaded.',
   shell: {
@@ -1676,6 +1677,16 @@ const enUS = {
         title: 'Sort the billing mailbox',
         description:
           'Recognises staffing-agency bills arriving in the billing mailbox and creates the vendor bill; a corrected bill is attached to the original and reconciled again; anything else waits to be sorted.',
+      },
+      'certificationSteward.mailSortAudit': {
+        title: 'Sort audit requests',
+        description:
+          'When a customer asks for audit material in the audit mailbox, recognises the customer, scope, material and due date, creates an audit request for a person to confirm with the pre-audit risks, and notifies HR and internal audit; anything else waits to be sorted.',
+      },
+      'certificationSteward.mailReplyAudit': {
+        title: 'Draft audit replies',
+        description:
+          'Once a request’s scope is confirmed and the pack is built, drafts the reply: which material is provided, how long the link lasts and how to open it — never the risks. The share link is created when the reply is sent.',
       },
       'recruitingAssistant.mailSortRecruiting': {
         title: 'Sort the recruiting mailbox',

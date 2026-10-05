@@ -742,15 +742,11 @@ export function createCertificationService(
           .where('certificationId', '=', id)
           .orderBy('issuedAt', 'desc')
           .executeTakeFirst();
-        const holding =
-          own &&
-          (HOLDING_STATUSES as readonly string[]).includes(String(own.status));
+        // 认证要求 · 你的进度 shows what has been done toward this certification, before or after a
+        // certificate was issued: a holder's completed course and passed exam stay ticked. Renewal
+        // progress has its own record (复审任务), so it is not measured from the issue date here.
         mine = {
-          requirements: await requirementStatus(
-            employee.id,
-            id,
-            holding ? isoTime(own.createdAt) : 0,
-          ),
+          requirements: await requirementStatus(employee.id, id, 0),
           certificate: own ? (await toCertificateViews([own]))[0] : null,
         };
       }

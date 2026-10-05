@@ -253,6 +253,10 @@ describe('settings centre', () => {
       ],
     );
     expect(await screen.findByText('Access denied')).toBeVisible();
+    // A page without a title is "this page": the internal route name never shows.
+    expect(
+      screen.getByText('You do not have permission to access this page.'),
+    ).toBeVisible();
     expect(loader).not.toHaveBeenCalled();
   });
 

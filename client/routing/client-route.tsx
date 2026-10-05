@@ -74,6 +74,14 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
 function ClientPageDenied(inputProps: ClientRouteProps): ReactElement {
   const { t } = useTranslation();
   const { route } = inputProps;
+  // Application change: name the page by its menu or breadcrumb title, never the internal route name
+  // (demo-batch-record leaked onto a phone screen); a page with neither is "this page".
+  const { t: tPage } = useTranslation(route.packageName);
+  const titleKey = route.navigation?.title ?? route.breadcrumb?.title;
+  const label = titleKey
+    ? tPage(titleKey, { defaultValue: '' }) ||
+      t('status.thisPage', { defaultValue: 'this page' })
+    : t('status.thisPage', { defaultValue: 'this page' });
 
   return (
     <section className='grid min-h-[calc(100svh-4rem)] place-items-center px-6'>
@@ -83,8 +91,8 @@ function ClientPageDenied(inputProps: ClientRouteProps): ReactElement {
         </h1>
         <p className='text-sm text-muted-foreground'>
           {t('status.deniedDescription', {
-            label: route.name,
-            defaultValue: `You do not have permission to access ${route.name}.`,
+            label,
+            defaultValue: `You do not have permission to access ${label}.`,
           })}
         </p>
       </section>

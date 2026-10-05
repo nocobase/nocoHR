@@ -129,6 +129,10 @@ describe('13C 开放给外部 AI Agent', () => {
 
   it('hr01 sees every call per client; a revoked token stops at once; the per-minute limit refuses', async () => {
     const logs = await h.call('hr01', 'GET', `/agent-clients/logs?clientId=${CLIENT}`);
+    // The settings page first lists every client's calls, with no filter at all.
+    const everything = await h.call('hr01', 'GET', '/agent-clients/logs');
+    expect(everything.status).toBe(200);
+    expect(Array.isArray(everything.json.data)).toBe(true);
     expect(logs.status).toBe(200);
     const tools = logs.json.data.map((l: { tool: string }) => l.tool);
     expect(tools).toEqual(expect.arrayContaining(['getMyLearning', 'searchEmployees', 'draftMyLeaveRequest']));

@@ -296,7 +296,7 @@ ${c.content}
       const rows = (await database
         .repository('knowledgeCandidates')
         .withPolicy(policyOf(policies, 'knowledgeCandidates'))
-        .findMany({ filter: filters.status ? { status: filters.status } : {} })) as Record<
+        .findMany(filters.status ? { filter: { status: filters.status } } : {})) as Record<
         string,
         unknown
       >[];

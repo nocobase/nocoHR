@@ -1296,6 +1296,7 @@ const zhCN: AppResource = {
   'auth.passwordMismatch': '两次输入的密码不一致。',
   'routeOverlay.close': '关闭',
   'status.deniedDescription': '你没有访问 {{label}} 的权限。',
+  'status.thisPage': '此页面',
   'status.routeFailedDescription':
     '无法加载 {{packageName}} 的路由 {{label}}。',
   shell: {
@@ -1547,6 +1548,16 @@ const zhCN: AppResource = {
         title: '对账邮箱分拣',
         description:
           '对账邮箱收到来信后，认出派遣公司的账单并生成派遣账单，更正账单挂回原账单重新核对；认不出的放入待归类。',
+      },
+      'certificationSteward.mailSortAudit': {
+        title: '审核问询分拣与准备',
+        description:
+          '审核邮箱收到客户的资料请求后，认出客户、范围、资料和期限，建立待确认的审核请求并列出审核前的风险，通知 HR 与内审；认不出的放入待归类。',
+      },
+      'certificationSteward.mailReplyAudit': {
+        title: '审核回复起草',
+        description:
+          '审核请求的范围确认、审核包生成后，起草给客户的回复：说明提供了哪些资料、链接有效期与验证方式，不写风险清单；分享链接在发送时生成。',
       },
       'recruitingAssistant.mailSortRecruiting': {
         title: '招聘邮箱分拣',
