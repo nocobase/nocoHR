@@ -592,14 +592,14 @@ export default class HrProvider extends ServiceProvider<Application> {
           // The latest message from the vendor in that thread: a correction is answered in turn.
           const source = await database
             .query()
-            .selectFrom('mailMessages')
+            .selectFrom('businessMailMessages')
             .select(['id', 'threadKey'])
             .where('id', '=', str(bill.sourceMailId))
             .executeTakeFirst();
           if (!source) return null;
           const latest = await database
             .query()
-            .selectFrom('mailMessages')
+            .selectFrom('businessMailMessages')
             .select(['id'])
             .where('threadKey', '=', String(source.threadKey))
             .where('direction', '=', 'inbound')
@@ -749,7 +749,7 @@ export default class HrProvider extends ServiceProvider<Application> {
           Boolean(
             await database
               .query()
-              .selectFrom('mailMessages')
+              .selectFrom('businessMailMessages')
               .select(['id'])
               .where('mailbox', '=', 'recruiting')
               .where(

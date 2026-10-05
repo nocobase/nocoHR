@@ -161,7 +161,7 @@ export function createMailService(deps: MailServiceDeps) {
   async function row(id: string): Promise<MailMessage> {
     const found = await database
       .query()
-      .selectFrom('mailMessages')
+      .selectFrom('businessMailMessages')
       .selectAll()
       .where('id', '=', id)
       .executeTakeFirst();
@@ -217,7 +217,7 @@ export function createMailService(deps: MailServiceDeps) {
     const messageId = parsed.messageId ?? `<no-id-${randomUUID()}>`;
     const duplicate = await database
       .query()
-      .selectFrom('mailMessages')
+      .selectFrom('businessMailMessages')
       .select(['id'])
       .where('mailbox', '=', purpose)
       .where('messageId', '=', messageId)
@@ -249,7 +249,7 @@ export function createMailService(deps: MailServiceDeps) {
     const thread = key
       ? await database
           .query()
-          .selectFrom('mailMessages')
+          .selectFrom('businessMailMessages')
           .select(['refType', 'refId'])
           .where('threadKey', '=', key)
           .where('mailbox', '=', purpose)
@@ -260,7 +260,7 @@ export function createMailService(deps: MailServiceDeps) {
     const id = randomUUID();
     await database
       .query()
-      .insertInto('mailMessages')
+      .insertInto('businessMailMessages')
       .values({
         id,
         mailbox: purpose,
@@ -379,7 +379,7 @@ export function createMailService(deps: MailServiceDeps) {
         if (!handler || !(await handler.canView(ctx))) continue;
         const unmatched = await database
           .query()
-          .selectFrom('mailMessages')
+          .selectFrom('businessMailMessages')
           .select(['id'])
           .where('mailbox', '=', purpose)
           .where('status', '=', 'unmatched')
@@ -405,7 +405,7 @@ export function createMailService(deps: MailServiceDeps) {
       await requireView(ctx, purpose);
       let query = database
         .query()
-        .selectFrom('mailMessages')
+        .selectFrom('businessMailMessages')
         .selectAll()
         .where('mailbox', '=', purpose);
       if (filter.status === 'unmatched')
@@ -435,7 +435,7 @@ export function createMailService(deps: MailServiceDeps) {
       await requireView(ctx, purpose);
       const rows = await database
         .query()
-        .selectFrom('mailMessages')
+        .selectFrom('businessMailMessages')
         .selectAll()
         .where('mailbox', '=', purpose)
         .where('refType', '=', refType)
@@ -493,14 +493,14 @@ export function createMailService(deps: MailServiceDeps) {
       // The record belongs to the whole thread; status, intent and summary describe this message only.
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({ refType: input.refType, refId: input.refId, updatedAt: now })
         .where('threadKey', '=', mail.threadKey)
         .where('mailbox', '=', mail.mailbox)
         .execute();
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({
           status: mail.direction === 'inbound' ? 'linked' : mail.status,
           ...(input.intent !== undefined ? { aiIntent: input.intent } : {}),
@@ -518,7 +518,7 @@ export function createMailService(deps: MailServiceDeps) {
     async leaveUnmatched(id: string, intent: string | null, summary: string) {
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({
           status: 'unmatched',
           aiIntent: intent,
@@ -546,7 +546,7 @@ export function createMailService(deps: MailServiceDeps) {
         throw new HrError('INVALID_INPUT', 400);
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({ status: 'received', updatedAt: new Date() })
         .where('id', '=', id)
         .execute();
@@ -561,7 +561,7 @@ export function createMailService(deps: MailServiceDeps) {
       if (mail.direction !== 'inbound') throw new HrError('INVALID_INPUT', 400);
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({ status: 'ignored', updatedAt: new Date() })
         .where('id', '=', id)
         .execute();
@@ -584,7 +584,7 @@ export function createMailService(deps: MailServiceDeps) {
       // One open draft per message: a new draft replaces an unsent one.
       await database
         .query()
-        .deleteFrom('mailMessages')
+        .deleteFrom('businessMailMessages')
         .where('draftOf', '=', original.id)
         .where('status', '=', 'draft')
         .execute();
@@ -597,7 +597,7 @@ export function createMailService(deps: MailServiceDeps) {
           : `Re: ${original.subject}`);
       await database
         .query()
-        .insertInto('mailMessages')
+        .insertInto('businessMailMessages')
         .values({
           id,
           mailbox: original.mailbox,
@@ -649,7 +649,7 @@ export function createMailService(deps: MailServiceDeps) {
       const next = await handler.chooseProposal(mail, choice);
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({
           proposal: next.proposal,
           bodyText: next.body.slice(0, 100_000),
@@ -669,7 +669,7 @@ export function createMailService(deps: MailServiceDeps) {
         throw new HrError('INVALID_INPUT', 400);
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({ bodyText: body.slice(0, 100_000), updatedAt: new Date() })
         .where('id', '=', id)
         .execute();
@@ -722,7 +722,7 @@ export function createMailService(deps: MailServiceDeps) {
       const now = new Date();
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set(
           state === 'sent'
             ? {
@@ -774,7 +774,7 @@ export function createMailService(deps: MailServiceDeps) {
       const messageId = `<${input.idempotencyKey}>`;
       const done = await database
         .query()
-        .selectFrom('mailMessages')
+        .selectFrom('businessMailMessages')
         .select(['status'])
         .where('mailbox', '=', input.purpose)
         .where('messageId', '=', messageId)
@@ -784,7 +784,7 @@ export function createMailService(deps: MailServiceDeps) {
         input.refType && input.refId
           ? await database
               .query()
-              .selectFrom('mailMessages')
+              .selectFrom('businessMailMessages')
               .select(['threadKey'])
               .where('mailbox', '=', input.purpose)
               .where('refType', '=', input.refType)
@@ -825,7 +825,7 @@ export function createMailService(deps: MailServiceDeps) {
       if (done)
         await database
           .query()
-          .updateTable('mailMessages')
+          .updateTable('businessMailMessages')
           .set({
             status: state === 'sent' ? 'sent' : 'failed',
             sentAt: state === 'sent' ? now : null,
@@ -838,7 +838,7 @@ export function createMailService(deps: MailServiceDeps) {
       else
         await database
           .query()
-          .insertInto('mailMessages')
+          .insertInto('businessMailMessages')
           .values({
             id,
             mailbox: input.purpose,
@@ -879,7 +879,7 @@ export function createMailService(deps: MailServiceDeps) {
     async sweepRetention(date: string) {
       const expired = await database
         .query()
-        .selectFrom('mailMessages')
+        .selectFrom('businessMailMessages')
         .select(['id'])
         .where('retentionUntil', '<', date)
         .where('bodyText', 'is not', null)
@@ -887,7 +887,7 @@ export function createMailService(deps: MailServiceDeps) {
       if (!expired.length) return { cleared: 0 };
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({
           bodyText: null,
           attachmentFileIds: [],
