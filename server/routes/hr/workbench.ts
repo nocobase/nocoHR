@@ -7,6 +7,7 @@ import {
 } from '@nocobase/app-server/router';
 import { databaseManagerToken } from '@nocobase/db';
 import { Hono } from 'hono';
+import { createAiDoneService } from '../../providers/hr/ai-done-service.js';
 import { createWorkbenchService } from '../../providers/hr/workbench-service.js';
 import { actor, installErrorHandler, type HrEnv } from './shared.js';
 
@@ -25,6 +26,14 @@ export const workbenchRoutes: AppApiRouteContribution<Application> =
     );
     routes.get('/', async (c) =>
       c.json({ data: await service.list(actor(c), c.req.query()) }),
+    );
+    // 工作台 · AI 员工已办完: the AI employees' finished runs for the tasks this user is responsible for.
+    const aiDone = createAiDoneService({
+      database: app.container.resolve(databaseManagerToken),
+      timeZone: app.config.get<string>('talent.timeZone') || 'Asia/Shanghai',
+    });
+    routes.get('/ai-done', async (c) =>
+      c.json({ data: await aiDone.summary(actor(c)) }),
     );
     routes.post('/:id/complete', async (c) =>
       c.json({

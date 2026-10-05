@@ -864,3 +864,82 @@ describe('重置登录密码', () => {
     expect(signedIn.status).toBe(200);
   });
 });
+
+describe('工作台 · AI 员工已办完', () => {
+  it('lists the finished runs of the tasks the caller is responsible for, and nobody else’s', async () => {
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const database = server.application.container.resolve(databaseManagerToken);
+    const now = new Date();
+    const run = (
+      id: string,
+      owner: string,
+      task: string,
+      summary: string,
+      output: unknown,
+    ) => ({
+      id,
+      task,
+      employee: task.split('.')[0],
+      trigger: 'event',
+      triggerRef: null,
+      dedupeKey: id,
+      ownerUserId: owner,
+      status: 'succeeded',
+      inputSummary: summary,
+      output,
+      references: null,
+      fallback: false,
+      conversationSessionId: null,
+      error: null,
+      startedAt: now,
+      finishedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await database
+      .query()
+      .insertInto('aiTaskRuns')
+      .values([
+        run(
+          'ai-done-hr',
+          await userIdOf('hr01'),
+          'hrAssistant.renewalPrep',
+          '为 1 份即将到期的合同准备了续签材料',
+          {},
+        ),
+        run(
+          'ai-done-payroll',
+          await userIdOf('payroll01'),
+          'hrAssistant.mailSortBilling',
+          '蓉川人力账单已归档',
+          {
+            billId: 'bill-x',
+          },
+        ),
+      ])
+      .execute();
+    expect((await call(null, 'GET', '/work-items/ai-done')).status).toBe(401);
+    const mine = await call('hr01', 'GET', '/work-items/ai-done');
+    expect(mine.status).toBe(200);
+    const tasks = (mine.json.data.groups as Json[]).map((g) => g.task);
+    expect(tasks).toContain('hrAssistant.renewalPrep');
+    // The billing mailbox belongs to payroll01: it never shows on hr01's workbench.
+    expect(tasks).not.toContain('hrAssistant.mailSortBilling');
+    const renewal = (mine.json.data.groups as Json[]).find(
+      (g) => g.task === 'hrAssistant.renewalPrep',
+    );
+    expect(renewal).toMatchObject({
+      employee: 'hrAssistant',
+      today: expect.any(Number),
+    });
+    expect(renewal.entries[0]).toMatchObject({
+      text: '为 1 份即将到期的合同准备了续签材料',
+      link: '/talent/contracts',
+    });
+    expect(mine.json.data.today).toBeGreaterThanOrEqual(1);
+    const payroll = await call('payroll01', 'GET', '/work-items/ai-done');
+    expect((payroll.json.data.groups as Json[]).map((g) => g.task)).toEqual([
+      'hrAssistant.mailSortBilling',
+    ]);
+  });
+});

@@ -1120,6 +1120,21 @@ const enUS = {
   },
   workbench: {
     title: 'Workbench',
+    decide: 'Waiting for your decision',
+    aiDone: {
+      title: 'Done by AI employees',
+      description:
+        'What the AI employees finished this week for the tasks you are responsible for.',
+      counts: 'Today {{today}} · this week {{week}}, from their run records',
+      empty: 'Nothing finished by the AI employees for you this week yet.',
+      times: '{{week}} this week',
+      timesToday: '{{week}} this week, {{today}} today',
+      view: 'View',
+      more: 'More runs of {{title}}',
+      done: 'Done',
+      showAll: 'Show all {{count}}',
+      showLess: 'Show fewer',
+    },
     showDetail: 'Show / hide the full text',
     description:
       'Review your approvals, AI-prepared items and system reminders.',

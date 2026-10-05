@@ -42,6 +42,25 @@ export interface HrAssistantSyncDeps {
   readonly structured: Structured;
 }
 
+/** Issue types in the words of the 组织同步 page, for the run summary and the HR notice. */
+const TYPE_TEXT: Record<string, string> = {
+  unmappedTitle: '职务未映射',
+  unknownParentDepartment: '上级部门未知',
+  departmentRemoved: '部门已删除',
+  departmentAmbiguous: '部门匹配不唯一',
+  duplicateMatch: '重复匹配',
+  managerOutOfScope: '上级不在同步范围',
+  noAccount: '没有登录账号',
+  lockedChange: '锁定员工被修改',
+  newMember: '新成员',
+  deactivatedMember: '成员已停用',
+  orgMismatch: '部门或岗位不一致',
+  managerMismatch: '直属上级不一致',
+  departmentManagerMismatch: '部门负责人不一致',
+  contractPending: '合同仍在履行',
+};
+const typeText = (type: string) => TYPE_TEXT[type] ?? type;
+
 const ADVICE: Record<string, { why: string; action: string }> = {
   unmappedTitle: {
     why: '飞书职务没有已确认的职务映射，同步不会改动该员工的岗位',
@@ -280,7 +299,7 @@ export function createHrAssistantSync(deps: HrAssistantSyncDeps) {
     for (const i of pending) counts[i.type] = (counts[i.type] ?? 0) + 1;
     run.summarize(
       `说明 ${pending.length} 项待处理（${Object.entries(counts)
-        .map(([type, n]) => `${type} ${n}`)
+        .map(([type, n]) => `${typeText(type)} ${n}`)
         .join('、')}），起草职务映射 ${aliases.created.length} 条`,
     );
     await platform.notify({
@@ -291,7 +310,7 @@ export function createHrAssistantSync(deps: HrAssistantSyncDeps) {
         count: String(pending.length),
         drafts: String(aliases.created.length),
         types: Object.entries(counts)
-          .map(([type, n]) => `${type} × ${n}`)
+          .map(([type, n]) => `${typeText(type)} × ${n}`)
           .join('、'),
       },
       path: '/settings/org-sync/issues',

@@ -51,6 +51,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 
+import { AiDonePanel } from './ai-done.js';
+
 const groups = ['today', 'week', 'later', 'completed'] as const;
 type Group = (typeof groups)[number];
 interface Item {
@@ -233,6 +235,9 @@ function Workbench(): ReactElement {
           </Button>
         }
       />
+      {/* 工作台 · AI 员工已办完, then the open to-dos as 等你决定. */}
+      <AiDonePanel />
+      <h2 className='text-lg font-semibold'>{t('workbench.decide')}</h2>
       <div className='flex flex-wrap gap-2'>
         {groups.map((value, index) => (
           <Button
