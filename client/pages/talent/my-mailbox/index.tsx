@@ -22,6 +22,7 @@ import { useSearchParams } from 'react-router';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { BlockSkeleton, EmptyState } from '@/components/talent/states';
+import { useRemote } from '@/components/talent/use-remote';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -51,6 +52,10 @@ export default function MyMailboxPage(): ReactElement {
   const [showConnector, setShowConnector] = useState(false);
   const [error, setError] = useState<string>();
   const authorization = params.get('mailAuthorization');
+  // A business mailbox (招聘邮箱 …) bound to one of the user's accounts: marked, and unbound on 设置 / 邮件 before removal.
+  const bindings = useRemote<{ purpose: string; accountId: string }[]>(
+    'talent/mail/mine/bindings',
+  );
 
   const refresh = useCallback(() => {
     void Promise.all([mail.listProviders(), mail.listAccounts()])
@@ -64,6 +69,14 @@ export default function MyMailboxPage(): ReactElement {
   }, [mail, t]);
 
   useEffect(() => refresh(), [refresh]);
+
+  // Removal finishes in the background: while an account is being removed, look again every two seconds.
+  const removing = (accounts ?? []).some((a) => a.status === 'removing');
+  useEffect(() => {
+    if (!removing) return;
+    const timer = window.setInterval(refresh, 2000);
+    return () => window.clearInterval(timer);
+  }, [removing, refresh]);
 
   const done = () => {
     setConnecting(undefined);
@@ -191,60 +204,73 @@ export default function MyMailboxPage(): ReactElement {
                   defaultValue: account.status,
                 })}
               />
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={<Button variant='outline' size='sm' />}
-                >
-                  {t('myMailbox.remove')}
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t('myMailbox.removeTitle')}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t('myMailbox.removeDescription', {
-                        address: account.address,
-                      })}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>
-                      {t('myMailbox.cancel')}
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      variant='destructive'
-                      onClick={() => {
-                        void mail
-                          .removeAccount(account.id)
-                          .then(() => {
-                            toast.add({
-                              type: 'success',
-                              title: t('myMailbox.removed'),
-                            });
-                            if (authorization) {
-                              const next = new URLSearchParams(params);
-                              next.delete('mailAuthorization');
-                              setParams(next, { replace: true });
-                            }
-                            refresh();
-                          })
-                          .catch((cause: unknown) =>
-                            toast.add({
-                              type: 'error',
-                              title: mailErrorMessage(
-                                cause,
-                                t('myMailbox.removeFailed'),
-                              ),
-                            }),
-                          );
-                      }}
+              {(() => {
+                const bound = bindings.data?.find(
+                  (b) => b.accountId === account.id,
+                );
+                return bound ? (
+                  <p className='text-sm text-muted-foreground'>
+                    {t('myMailbox.business', {
+                      purpose: t(`mail.purposes.${bound.purpose}`),
+                    })}
+                  </p>
+                ) : (
+                  <AlertDialog>
+                    <AlertDialogTrigger
+                      render={<Button variant='outline' size='sm' />}
                     >
                       {t('myMailbox.remove')}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {t('myMailbox.removeTitle')}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t('myMailbox.removeDescription', {
+                            address: account.address,
+                          })}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>
+                          {t('myMailbox.cancel')}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          variant='destructive'
+                          onClick={() => {
+                            void mail
+                              .removeAccount(account.id)
+                              .then(() => {
+                                toast.add({
+                                  type: 'success',
+                                  title: t('myMailbox.removed'),
+                                });
+                                if (authorization) {
+                                  const next = new URLSearchParams(params);
+                                  next.delete('mailAuthorization');
+                                  setParams(next, { replace: true });
+                                }
+                                refresh();
+                              })
+                              .catch((cause: unknown) =>
+                                toast.add({
+                                  type: 'error',
+                                  title: mailErrorMessage(
+                                    cause,
+                                    t('myMailbox.removeFailed'),
+                                  ),
+                                }),
+                              );
+                          }}
+                        >
+                          {t('myMailbox.remove')}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                );
+              })()}
             </li>
           ))}
         </ul>

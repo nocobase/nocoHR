@@ -1142,6 +1142,19 @@ export function createMailService(deps: MailServiceDeps) {
       }
     },
 
+    /** The business mailboxes bound to the user's own accounts (我的邮箱 marks them and keeps them from removal). */
+    async myBindings(ctx: ActorContext) {
+      const settings = (await deps.settings.read()).value;
+      return MAIL_PURPOSES.filter(
+        (p) =>
+          settings.mailboxes[p].accountId &&
+          settings.mailboxes[p].ownerUserId === ctx.userId,
+      ).map((purpose) => ({
+        purpose,
+        accountId: settings.mailboxes[purpose].accountId,
+      }));
+    },
+
     /**
      * 我的邮箱往来: messages in the user's own Mail accounts that involve an
      * address (a candidate's), newest first. The plugin checks the ownership.
@@ -1150,6 +1163,17 @@ export function createMailService(deps: MailServiceDeps) {
       const target = address.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+$/u.test(target))
         throw new HrError('INVALID_INPUT', 400);
+      // The user's mailboxes are synchronized in the background too, so a message that just arrived shows on the next look.
+      const own = { actorId: ctx.userId };
+      for (const account of await deps
+        .mail()
+        .listAccounts(own)
+        .catch(() => []))
+        if (account.status === 'active')
+          void deps
+            .mail()
+            .startSync(own, { accountId: account.id })
+            .catch(() => undefined);
       const page = await deps
         .mail()
         .listMessages({ actorId: ctx.userId }, { query: target, limit: 50 });

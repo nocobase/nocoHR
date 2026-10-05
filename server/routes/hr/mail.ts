@@ -71,6 +71,9 @@ export const mailRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
       await settings().get(actor(c));
       return c.json({ data: await mail().accounts() });
     });
+    routes.get('/mine/bindings', async (c) =>
+      c.json({ data: await mail().myBindings(actor(c)) }),
+    );
     routes.get('/mine', async (c) =>
       c.json({
         data: await mail().mine(actor(c), c.req.query('address') ?? ''),

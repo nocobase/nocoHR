@@ -55,6 +55,8 @@ const en = {
       removed: 'Mailbox removed.',
       removeFailed: 'The mailbox could not be removed.',
       cancel: 'Cancel',
+      business:
+        'This is the {{purpose}}, a business mailbox kept in your name. An HR administrator unbinds it on Settings / Mail before it can be removed.',
       correspondence: 'My correspondence',
       noCorrespondence: 'No mail with this person in your own mailboxes.',
       read: 'Read',
@@ -675,6 +677,8 @@ const zh: Shape = {
       removed: '邮箱已移除。',
       removeFailed: '邮箱没能移除。',
       cancel: '取消',
+      business:
+        '这是{{purpose}}（业务邮箱），挂在你名下。需由 HR 管理员先在“设置 / 邮件”里解绑，才能移除。',
       correspondence: '我的邮箱往来',
       noCorrespondence: '你的邮箱里还没有和这位的往来邮件。',
       read: '查看',
