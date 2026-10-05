@@ -857,6 +857,63 @@ describe('certificate lifecycle, renewal and external certificates', () => {
     ).toBe(true);
   });
 
+  it('gives an expired certificate its renewal once, and certifies 吴敏 again from today', async () => {
+    const { DEMO_QUESTIONS } =
+      await import('../../database/seed-data/demo-exams.ts');
+    const answerOf = new Map(DEMO_QUESTIONS.map((q) => [q.id, q.answer]));
+    const renewals = () =>
+      db()
+        .query()
+        .selectFrom('assignments')
+        .select(['id', 'examId'])
+        .where('certificateId', '=', 'certificate-wumin-cnc')
+        .where('source', '=', 'recertification')
+        .execute();
+    // The certificate expired on the first run (above); the daily run then sets the renewal exam.
+    await call('hr01', 'POST', '/org/maintenance/run', {});
+    expect((await renewals()).map((r) => r.examId)).toEqual(['exam-cnc-cert']);
+    await call('hr01', 'POST', '/org/maintenance/run', {});
+    expect(await renewals()).toHaveLength(1);
+    // The exam she passed last year no longer blocks a new attempt.
+    const started = await call(
+      'emp_th_2',
+      'POST',
+      '/my-exams/exam-cnc-cert/start',
+    );
+    expect(started.status).toBe(200);
+    const submitted = await call(
+      'emp_th_2',
+      'POST',
+      `/attempts/${started.json.data.id}/submit`,
+      {
+        answers: Object.fromEntries(
+          (started.json.data.items as Json[]).map((i) => [
+            i.questionId,
+            answerOf.get(i.questionId),
+          ]),
+        ),
+      },
+      { 'x-exam-device': started.json.data.deviceToken },
+    );
+    expect(submitted.json.data.status).toBe('passed');
+    const renewed = (await db()
+      .query()
+      .selectFrom('employeeCertificates')
+      .selectAll()
+      .where('employeeId', '=', 'emp-wumin')
+      .where('status', '=', 'valid')
+      .executeTakeFirst()) as Json;
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+    }).format(new Date());
+    expect(String(renewed.issuedAt).slice(0, 10)).toBe(today);
+    const expected = new Date(`${today}T00:00:00Z`);
+    expected.setUTCMonth(expected.getUTCMonth() + 12);
+    expect(String(renewed.expiresAt).slice(0, 10)).toBe(
+      expected.toISOString().slice(0, 10),
+    );
+  });
+
   it('verifies an external certificate only by HR, never by its holder', async () => {
     const pending = await call(
       'hr01',

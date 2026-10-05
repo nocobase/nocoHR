@@ -181,6 +181,35 @@ function normalizeForQuote(text: string): string {
   return text.replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
 }
 
+type Turn = { role: 'coach' | 'employee'; text: string; at: string };
+
+/** The coach's prompt for one turn: the setting, the source document and the dialogue so far. */
+export function coachPrompt(
+  scenario: Record<string, unknown>,
+  transcript: readonly Turn[],
+  employeeText: string,
+  turnNo: number,
+  sourceText: string,
+): string {
+  const rubric = json<RubricPoint[]>(scenario.rubric, []);
+  const earlier = transcript.map(
+    (t) => `${t.role === 'coach' ? '你' : '员工'}：${t.text}`,
+  );
+  return [
+    '【陪练设定】你正在进行一次岗位陪练，请始终保持以下角色，不要跳出角色讲课，也不要直接给出正确答案。',
+    `角色与语气：${str(scenario.persona)}`,
+    `情境（员工也看得到）：${str(scenario.situation)}`,
+    `你要考察的要点（不要告诉员工）：${rubric.map((r) => r.point).join('；')}`,
+    '事实标准只有下面这份依据文档；不要引入文档之外的规定和数字。员工说错时像真实的班组长或审核员那样追问。',
+    sourceText,
+    earlier.length
+      ? `到目前为止的对话：\n${earlier.join('\n')}`
+      : `你已经说出的开场白：${str(scenario.openingLine)}`,
+    `员工的回答（第 ${turnNo}/${Number(scenario.maxTurns)} 轮）：${employeeText}`,
+    '请以角色身份说下一句（不超过 150 字），不要重复已经问过的问题。所有要点都已问到或对话自然结束时，把 end 设为 true。',
+  ].join('\n');
+}
+
 export function createPracticeService(
   deps: PracticeServiceDeps,
 ): PracticeService {
@@ -435,7 +464,6 @@ export function createPracticeService(
     return `《${str(doc.title)}》\n${str(doc.contentText ?? '').slice(0, DOCUMENT_EXCERPT_LENGTH)}`;
   }
 
-  type Turn = { role: 'coach' | 'employee'; text: string; at: string };
 
   async function practiceRow(id: string): Promise<Record<string, unknown>> {
     const row = await database
@@ -519,28 +547,26 @@ export function createPracticeService(
     throw error;
   }
 
+  /**
+   * The coach's next line. Every turn is a fresh conversation carrying the setting and the dialogue so far:
+   * continuing the previous one fails the structured format from the second turn on (a continued
+   * conversation can hold a structured-output call without its result, which the model provider rejects,
+   * and the runner retries only fresh conversations), so the practice stopped after one exchange.
+   */
   async function coachReply(
-    row: Record<string, unknown>,
     scenario: Record<string, unknown>,
+    transcript: readonly Turn[],
     employeeText: string,
     userId: string,
     turnNo: number,
   ): Promise<{ reply: string; end: boolean; sessionId: string }> {
-    const rubric = json<RubricPoint[]>(scenario.rubric, []);
-    const first = !row.conversationSessionId;
-    const prompt = first
-      ? [
-          '【陪练设定】你正在进行一次岗位陪练，请始终保持以下角色，不要跳出角色讲课，也不要直接给出正确答案。',
-          `角色与语气：${str(scenario.persona)}`,
-          `情境（员工也看得到）：${str(scenario.situation)}`,
-          `你要考察的要点（不要告诉员工）：${rubric.map((r) => r.point).join('；')}`,
-          '事实标准只有下面这份依据文档；不要引入文档之外的规定和数字。员工说错时像真实的班组长或审核员那样追问。',
-          await documentText(str(scenario.sourceDocumentId)),
-          `你已经说出的开场白：${str(scenario.openingLine)}`,
-          `员工的回答（第 ${turnNo}/${Number(scenario.maxTurns)} 轮）：${employeeText}`,
-          '请以角色身份说下一句（不超过 150 字）。所有要点都已问到或对话自然结束时，把 end 设为 true。',
-        ].join('\n')
-      : `员工的回答（第 ${turnNo}/${Number(scenario.maxTurns)} 轮）：${employeeText}\n请继续以角色身份说下一句（不超过 150 字）；所有要点都已问到时把 end 设为 true。`;
+    const prompt = coachPrompt(
+      scenario,
+      transcript,
+      employeeText,
+      turnNo,
+      await documentText(str(scenario.sourceDocumentId)),
+    );
     const result = await ai
       .structured({
         employee: 'practiceCoach',
@@ -552,7 +578,6 @@ export function createPracticeService(
           end: z.boolean(),
         }),
         timeZone: platform.timeZone,
-        sessionId: first ? undefined : str(row.conversationSessionId),
         unattended: false,
       })
       .catch(aiError);
@@ -642,12 +667,19 @@ export function createPracticeService(
           clause: found?.clause ?? null,
         };
       });
-      if (!problems.length)
+      // The second time, a point still scored without the employee's own words gets 0, as the rule says,
+      // rather than leaving the whole practice unscored.
+      const last = attempt === 1;
+      if (!problems.length || last) {
+        const kept = results.map((r) =>
+          problems.includes(r.point) ? { ...r, score: 0, quote: null } : r,
+        );
         return {
-          score: results.reduce((sum, r) => sum + r.score, 0),
-          results,
+          score: kept.reduce((sum, r) => sum + r.score, 0),
+          results: kept,
           feedback: data.feedback,
         };
+      }
       correction = `\n\n上一次的评分中，这些要点给了分却没有逐字引用员工原话（或引用不在对话中）：${problems.join('；')}。请重新评分，引用必须是员工说过的原话，找不到原话的要点记 0 分。`;
     }
     throw new HrError('PRACTICE_EVALUATION_INVALID', 409);
@@ -1014,8 +1046,8 @@ export function createPracticeService(
       let sessionId = nullable(row.conversationSessionId);
       if (!last) {
         const coach = await coachReply(
-          row,
           scenario,
+          transcript.slice(0, -1),
           message,
           ctx.userId,
           turnNo,

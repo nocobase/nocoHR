@@ -36,6 +36,7 @@ import {
   today,
   str,
 } from './shared.js';
+import { closeWorkItems } from './work-item-store.js';
 import {
   EMPLOYMENT_TYPES,
   LEAVE_REASONS,
@@ -1102,6 +1103,10 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           })
           .where('id', '=', employee.id)
           .execute();
+        // The HR assistant's 转正准备 is done once the confirmation takes effect.
+        await closeWorkItems(connection.query, {
+          prefixes: [`hrAssistant:probationPrep:${employee.id}:`],
+        });
         affected.push(
           ...(await talent.applyCoreChange(connection, employee, {
             status: 'active',
@@ -2351,6 +2356,10 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             createdAt: stamp,
             updatedAt: stamp,
           },
+        });
+        // The HR assistant's 续签准备 for the old contract is done once it is renewed.
+        await closeWorkItems(connection.query, {
+          refIds: [`hrAssistant:renewalPrep:${id}`],
         });
         return record;
       });

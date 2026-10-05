@@ -77,11 +77,12 @@ export const DEFAULT_AI_ENTRY: AiEntrySettings = {
     // V3-10: 证书与复审 → 认证管家; 考试成绩 → 考官. Everyone may ask about their own; the tools scope it.
     {
       key: 'certificates',
-      description: '证书、持证、到期、复审',
+      // “证书到期”, not a bare “到期”: “李敏的合同什么时候到期” went to the steward instead of the HR assistant.
+      description: '证书、上岗证、持证、证书到期、复审（不含劳动合同）',
       employee: 'certificationSteward',
       permissionSets: [],
       enabled: true,
-      keywords: ['证书', '持证', '到期', '复审'],
+      keywords: ['证书', '上岗证', '持证', '证到期', '复审'],
     },
     {
       key: 'examResults',
@@ -98,11 +99,21 @@ export const DEFAULT_AI_ENTRY: AiEntrySettings = {
       employee: 'hrAssistant',
       permissionSets: [],
       enabled: true,
-      keywords: ['工资', '工资条', '薪资', '社保', '公积金', '个税', '扣税', '津贴怎么算'],
+      keywords: [
+        '工资',
+        '工资条',
+        '薪资',
+        '社保',
+        '公积金',
+        '个税',
+        '扣税',
+        '津贴怎么算',
+      ],
     },
     {
       key: 'myRecord',
-      description: '我的档案、合同、试用期、异动记录、考勤、假期、排班',
+      description:
+        '档案、劳动合同（到期、续签）、试用期、异动记录、考勤、假期、排班，包括问别人的这些信息',
       employee: 'hrAssistant',
       permissionSets: [],
       enabled: true,
@@ -144,7 +155,19 @@ export const DEFAULT_AI_ENTRY: AiEntrySettings = {
       employee: 'performanceAssistant',
       permissionSets: [],
       enabled: true,
-      keywords: ['我的考核', '考核进度', '考核到哪', '考核结果', '考核方案', '绩效', '自评', '互评', '评语', '校准', '申诉'],
+      keywords: [
+        '我的考核',
+        '考核进度',
+        '考核到哪',
+        '考核结果',
+        '考核方案',
+        '绩效',
+        '自评',
+        '互评',
+        '评语',
+        '校准',
+        '申诉',
+      ],
     },
     {
       key: 'hrData',

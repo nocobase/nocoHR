@@ -704,6 +704,52 @@ describe('HR assistant: probation and renewal preparation', () => {
       enabled: true,
     });
   });
+
+  it('closes the 转正准备 when the confirmation takes effect, and the 续签准备 when the contract is renewed', async () => {
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const db = server.application.container.resolve(databaseManagerToken);
+    const open = async (prefix: string) =>
+      (
+        await db
+          .query()
+          .selectFrom('workItems')
+          .select(['id'])
+          .where('refId', 'like', `${prefix}%`)
+          .where('status', '=', 'open')
+          .execute()
+      ).length;
+    expect(await open('hrAssistant:probationPrep:emp-sunli:')).toBeGreaterThan(
+      0,
+    );
+    const raised = await call('mgr_east', 'POST', '/actions', {
+      actionType: 'regularize',
+      employeeId: 'emp-sunli',
+      effectiveDate: todayInShanghai(),
+    });
+    expect(raised.status).toBe(201);
+    const done = await call(
+      'hr01',
+      'POST',
+      `/actions/${raised.json.data.id}/approve`,
+      {},
+    );
+    expect(done.json.data.status).toBe('effective');
+    expect(await open('hrAssistant:probationPrep:emp-sunli:')).toBe(0);
+
+    expect(await open('hrAssistant:renewalPrep:contract-mgr-njl')).toBe(1);
+    const renewed = await call(
+      'hr01',
+      'POST',
+      '/contracts/contract-mgr-njl/renew',
+      {
+        contractNo: 'HT-TEST-RENEW-1',
+        type: 'openEnded',
+        startDate: '2026-12-01',
+      },
+    );
+    expect(renewed.status).toBe(201);
+    expect(await open('hrAssistant:renewalPrep:contract-mgr-njl')).toBe(0);
+  });
 });
 
 describe('HR assistant: attachment suggestions', () => {
@@ -910,7 +956,8 @@ describe('工作台 · AI 员工已办完', () => {
         run(
           'ai-done-empty',
           await userIdOf('hr01'),
-          'certificationSteward.recertEscalation',
+          // A task key nothing else runs here, so only this empty run could show it.
+          'certificationSteward.emptyRunCheck',
           '复审未开始且临近到期 0 人',
           { escalated: 0, heads: 0 },
         ),
@@ -933,7 +980,7 @@ describe('工作台 · AI 员工已办完', () => {
     // The billing mailbox belongs to payroll01: it never shows on hr01's workbench.
     expect(tasks).not.toContain('hrAssistant.mailSortBilling');
     // A run that produced nothing is not work done.
-    expect(tasks).not.toContain('certificationSteward.recertEscalation');
+    expect(tasks).not.toContain('certificationSteward.emptyRunCheck');
     const renewal = (mine.json.data.groups as Json[]).find(
       (g) => g.task === 'hrAssistant.renewalPrep',
     );

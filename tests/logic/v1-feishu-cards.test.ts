@@ -698,5 +698,19 @@ describe('默认路由表', () => {
       question: '我的合同什么时候到期',
     });
     expect(contract.json.data.key).toBe('myRecord');
+    // Someone else's contract is still the HR assistant's (which refuses it), not the steward's “到期”.
+    const other = await call('emp_njl_1', 'POST', '/ai-entry/route', {
+      question: '李敏的合同什么时候到期',
+    });
+    expect(other.json.data.key).toBe('myRecord');
+    const permit = await call('emp_njl_1', 'POST', '/ai-entry/route', {
+      question: '我的上岗证什么时候到期',
+    });
+    expect(permit.json.data.key).toBe('certificates');
+    const descriptions = (
+      (await call('emp_njl_1', 'GET', '/ai-entry/routes')).json.data as Json[]
+    ).map((r) => String(r.description));
+    expect(descriptions[0]).toContain('证书到期');
+    expect(descriptions[3]).toContain('劳动合同');
   });
 });

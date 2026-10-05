@@ -26,6 +26,7 @@ import type { ActorContext } from './framework-service.js';
 import type { LearningService } from './learning-service.js';
 import { bool, json, type EmployeeSummary, type Platform } from './platform.js';
 import {
+  addDays,
   daysBetween,
   HrError,
   isRecord,
@@ -42,6 +43,8 @@ const EXTERNAL = 'talent.externalCertificate';
 export const CERTIFICATION_SUBJECT = 'hr.certification';
 /** Certificate states that carry the certification's permissions. */
 export const HOLDING_STATUSES = ['valid', 'expiring'] as const;
+/** Days a holder whose certificate expired has for the renewal tasks. */
+const RETRAINING_DAYS = 30;
 
 export interface RequirementStatus {
   readonly courses: readonly { id: string; title: string; done: boolean }[];
@@ -1295,7 +1298,9 @@ export function createCertificationService(
           courseIds: courses.map((c) => c.id),
           examIds: requirements.exams.map((e) => e.id),
           // V4-13
-          ...(gate?.recordIds.length ? { practicalRecordIds: gate.recordIds } : {}),
+          ...(gate?.recordIds.length
+            ? { practicalRecordIds: gate.recordIds }
+            : {}),
           at: new Date().toISOString(),
         };
         const certificateId = await issue(employee, certification, evidence);
@@ -1400,6 +1405,49 @@ export function createCertificationService(
 
     async runDaily(asOf) {
       const today = asOf ?? platform.currentDate();
+      /** The renewal tasks of one certificate: its exams, plus its courses in "full" mode or without exams. */
+      const assignRenewal = async (
+        row: Record<string, unknown>,
+        employeeId: string,
+        dueDate: string,
+      ) => {
+        const requirements = await requirementsOf(String(row.certificationId));
+        const courses =
+          str(row.recertMode ?? 'examOnly') === 'full' ||
+          !requirements.exams.length
+            ? requirements.courses
+            : [];
+        const stamp = new Date();
+        for (const target of [
+          ...courses.map((c) => ({ courseId: c.id, examId: null })),
+          ...requirements.exams.map((e) => ({
+            courseId: null,
+            examId: e.id,
+          })),
+        ]) {
+          await database
+            .query()
+            .insertInto('assignments')
+            .values({
+              id: newId(),
+              employeeId,
+              courseId: target.courseId,
+              examId: target.examId,
+              certificateId: String(row.id),
+              assignedByUserId: null,
+              dueDate,
+              status: 'notStarted',
+              progress: 0,
+              source: 'recertification',
+              completedAt: null,
+              cancelledAt: null,
+              lastRemindedAt: null,
+              createdAt: stamp,
+              updatedAt: stamp,
+            })
+            .execute();
+        }
+      };
       const report: CertificationDailyReport = {
         recertAssigned: 0,
         expiringCertificates: 0,
@@ -1479,44 +1527,7 @@ export function createCertificationService(
             .where('status', 'in', ['notStarted', 'inProgress', 'overdue'])
             .executeTakeFirst();
           if (!open) {
-            const requirements = await requirementsOf(
-              String(row.certificationId),
-            );
-            const courses =
-              str(row.recertMode ?? 'examOnly') === 'full' ||
-              !requirements.exams.length
-                ? requirements.courses
-                : [];
-            const stamp = new Date();
-            for (const target of [
-              ...courses.map((c) => ({ courseId: c.id, examId: null })),
-              ...requirements.exams.map((e) => ({
-                courseId: null,
-                examId: e.id,
-              })),
-            ]) {
-              await database
-                .query()
-                .insertInto('assignments')
-                .values({
-                  id: newId(),
-                  employeeId: employee.id,
-                  courseId: target.courseId,
-                  examId: target.examId,
-                  certificateId: String(row.id),
-                  assignedByUserId: null,
-                  dueDate: expiresAt,
-                  status: 'notStarted',
-                  progress: 0,
-                  source: 'recertification',
-                  completedAt: null,
-                  cancelledAt: null,
-                  lastRemindedAt: null,
-                  createdAt: stamp,
-                  updatedAt: stamp,
-                })
-                .execute();
-            }
+            await assignRenewal(row, employee.id, expiresAt);
             report.recertAssigned += 1;
             if (employee.userId)
               await platform.reminderOnce(
@@ -1580,6 +1591,72 @@ export function createCertificationService(
             );
           }
         }
+      }
+      // An internal certificate that has expired gets its renewal tasks once (复训安排), so the holder can be
+      // certified again from today; without them an exam passed before would refuse a new attempt.
+      const lapsed = await database
+        .query()
+        .selectFrom('employeeCertificates')
+        .innerJoin(
+          'certifications',
+          'certifications.id',
+          'employeeCertificates.certificationId',
+        )
+        .select([
+          'employeeCertificates.id as id',
+          'employeeCertificates.employeeId as employeeId',
+          'employeeCertificates.certificationId as certificationId',
+          'certifications.title as title',
+          'certifications.recertMode as recertMode',
+        ])
+        .where('employeeCertificates.status', '=', 'expired')
+        .where('employeeCertificates.source', '=', 'internal')
+        .where('certifications.kind', '!=', 'external')
+        .orderBy('employeeCertificates.issuedAt', 'desc')
+        .execute();
+      const seen = new Set<string>();
+      for (const row of lapsed) {
+        const employeeId = String(row.employeeId);
+        // Only the latest lapsed certificate of a programme.
+        const key = `${employeeId}|${String(row.certificationId)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const employee = await platform.employee(employeeId);
+        if (!employee || employee.status === 'leave') continue;
+        const [held, assigned] = await Promise.all([
+          database
+            .query()
+            .selectFrom('employeeCertificates')
+            .select(['id'])
+            .where('employeeId', '=', employeeId)
+            .where('certificationId', '=', String(row.certificationId))
+            .where('status', 'in', [...HOLDING_STATUSES])
+            .executeTakeFirst(),
+          // Once: whatever became of the tasks, a lapsed certificate is not assigned again.
+          database
+            .query()
+            .selectFrom('assignments')
+            .select(['id'])
+            .where('certificateId', '=', String(row.id))
+            .where('source', '=', 'recertification')
+            .executeTakeFirst(),
+        ]);
+        if (held || assigned) continue;
+        const due = addDays(today, RETRAINING_DAYS);
+        await assignRenewal(row, employeeId, due);
+        report.recertAssigned += 1;
+        if (employee.userId)
+          await platform.reminderOnce(
+            `certificate:${String(row.id)}:recert`,
+            () =>
+              notify({
+                key: `certificate:${String(row.id)}:recert`,
+                userIds: [employee.userId!],
+                message: 'recertificationAssigned',
+                params: { title: String(row.title), date: due },
+                path: '/talent/my-exams',
+              }),
+          );
       }
       return report;
     },
