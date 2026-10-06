@@ -177,6 +177,14 @@ export function createRecruitingContext(deps: RecruitingDeps) {
      * every message instead. Answers the delivery state; a channel that is
      * not configured is `channelNotConfigured`, recorded on the message.
      */
+    /** 匿名化: the candidate's mail in the 招聘邮箱 is cleared now (subject and links stay). */
+    async forgetMail(applicationIds: string[]): Promise<void> {
+      if (container.has(mailServiceToken))
+        await container
+          .resolve(mailServiceToken)
+          .forgetRecords('recruiting', 'application', applicationIds);
+    },
+
     async sendEmail(input: {
       key: string;
       to: string;

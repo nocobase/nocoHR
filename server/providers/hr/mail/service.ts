@@ -414,6 +414,48 @@ export function createMailService(deps: MailServiceDeps) {
     return toMail(found);
   }
 
+  async function clearBodies(ids: string[]) {
+    for (let i = 0; i < ids.length; i += 200)
+      await database
+        .query()
+        .updateTable('businessMailMessages')
+        .set({ bodyText: null, attachmentFileIds: [], updatedAt: new Date() })
+        .where('id', 'in', ids.slice(i, i + 200))
+        .execute();
+  }
+
+  /** The tables of the records mail is linked to, for “kept while the record exists”. */
+  const RECORD_TABLES: Record<string, string> = {
+    laborVendorBill: 'laborVendorBills',
+    auditRequest: 'auditRequests',
+    employee: 'employees',
+    application: 'applications',
+    jobPosting: 'jobPostings',
+  };
+
+  /** Whether mail linked to a record is past its keeping. */
+  async function recordExpired(
+    purpose: MailPurpose,
+    refType: string,
+    refId: string,
+    date: string,
+  ): Promise<boolean> {
+    const handler = handlers.get(purpose);
+    if (handler?.retentionOf) {
+      const until = await handler.retentionOf(refType, refId);
+      if (until !== null) return until < date;
+    }
+    const table = RECORD_TABLES[refType];
+    if (!table) return false;
+    const found = await database
+      .query()
+      .selectFrom(table)
+      .select(['id'])
+      .where('id', '=', refId)
+      .executeTakeFirst();
+    return !found;
+  }
+
   async function requireView(ctx: ActorContext, purpose: MailPurpose) {
     if (!(await handlerFor(purpose).canView(ctx)))
       throw new HrError('MAIL_NOT_FOUND', 404);
@@ -1462,31 +1504,70 @@ export function createMailService(deps: MailServiceDeps) {
       };
     },
 
-    /** Daily: bodies and attachments past their retention are cleared; subject, addresses and links stay. */
+    /**
+     * Daily (总纲 邮件约定: 邮件正文和附件按所挂单据的保存期限清理): mail not
+     * linked to a record is cleared after its mailbox's days (设置 / 邮件 ·
+     * 未挂单据的来信保存); linked mail follows its record — the step's own
+     * retention (a candidate's), else as long as the record exists. Subject,
+     * addresses and links stay.
+     */
     async sweepRetention(date: string) {
-      const expired = await database
+      const rows = await database
+        .query()
+        .selectFrom('businessMailMessages')
+        .select(['id', 'mailbox', 'refType', 'refId', 'retentionUntil'])
+        .where('bodyText', 'is not', null)
+        .execute();
+      const verdicts = new Map<string, boolean>();
+      const expired: string[] = [];
+      for (const r of rows) {
+        const refType = r.refType ? str(r.refType) : null;
+        const refId = r.refId ? str(r.refId) : null;
+        if (!refType || !refId) {
+          if (str(r.retentionUntil).slice(0, 10) < date)
+            expired.push(str(r.id));
+          continue;
+        }
+        const key = `${str(r.mailbox)}:${refType}:${refId}`;
+        let gone = verdicts.get(key);
+        if (gone === undefined) {
+          gone = await recordExpired(
+            str(r.mailbox) as MailPurpose,
+            refType,
+            refId,
+            date,
+          );
+          verdicts.set(key, gone);
+        }
+        if (gone) expired.push(str(r.id));
+      }
+      await clearBodies(expired);
+      return { cleared: expired.length };
+    },
+
+    /** The record's mail is cleared now (a candidate anonymized): subject, addresses and links stay. */
+    async forgetRecords(
+      purpose: MailPurpose,
+      refType: string,
+      refIds: string[],
+    ) {
+      if (!refIds.length) return { cleared: 0 };
+      const rows = await database
         .query()
         .selectFrom('businessMailMessages')
         .select(['id'])
-        .where('retentionUntil', '<', date)
+        .where('mailbox', '=', purpose)
+        .where('refType', '=', refType)
+        .where('refId', 'in', refIds)
         .where('bodyText', 'is not', null)
         .execute();
-      if (!expired.length) return { cleared: 0 };
-      await database
-        .query()
-        .updateTable('businessMailMessages')
-        .set({
-          bodyText: null,
-          attachmentFileIds: [],
-          updatedAt: new Date(),
-        })
-        .where(
-          'id',
-          'in',
-          expired.map((r) => str(r.id)),
-        )
-        .execute();
-      return { cleared: expired.length };
+      await clearBodies(rows.map((r) => str(r.id)));
+      return { cleared: rows.length };
+    },
+
+    /** One message's body and attachments go now (a resume mail once the resume is taken in). */
+    async forgetMessage(id: string) {
+      await clearBodies([id]);
     },
 
     row,

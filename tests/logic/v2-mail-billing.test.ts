@@ -571,6 +571,40 @@ describe('对账邮箱 (V2-06)', () => {
     expect(draft.bodyText.startsWith('你好：')).toBe(true);
   });
 
+  it('clears unlinked mail after its days and keeps linked mail while its record exists', async () => {
+    const { mailServiceToken } =
+      await import('../../server/providers/hr/tokens.ts');
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const database = server.application.container.resolve(databaseManagerToken);
+    const bodies = async () =>
+      new Map(
+        (
+          await database
+            .query()
+            .selectFrom('businessMailMessages')
+            .select(['id', 'refType', 'bodyText'])
+            .where('mailbox', '=', 'billing')
+            .where('direction', '=', 'inbound')
+            .execute()
+        ).map((r) => [String(r.id), r]),
+      );
+    const before = await bodies();
+    const linked = [...before.values()].find(
+      (r) => r.refType === 'laborVendorBill' && r.bodyText,
+    )!;
+    const unlinked = [...before.values()].find(
+      (r) => !r.refType && r.bodyText,
+    )!;
+    expect(linked && unlinked).toBeTruthy();
+    // Far past every mailbox's days: the bill still exists, so its mail stays.
+    await server.application.container
+      .resolve(mailServiceToken)
+      .sweepRetention('2099-01-01');
+    const after = await bodies();
+    expect(after.get(String(linked.id))?.bodyText).toBeTruthy();
+    expect(after.get(String(unlinked.id))?.bodyText).toBeNull();
+  });
+
   it('lets a person ignore a message waiting to be sorted', async () => {
     const list = await call(
       'payroll01',

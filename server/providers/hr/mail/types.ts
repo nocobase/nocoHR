@@ -98,6 +98,13 @@ export interface MailHandler {
     refType: string,
     refId: string,
   ): Promise<MailLinkTarget | null>;
+  /**
+   * 按所挂单据的保存期限 (总纲 邮件约定): the last day mail linked to this record
+   * is kept (YYYY-MM-DD; a past date clears it now), or null to keep it as long
+   * as the record exists. A step that leaves this out keeps linked mail while
+   * its record exists.
+   */
+  retentionOf?(refType: string, refId: string): Promise<string | null>;
   /** After a manual link: draft the step's own reply; answers whether it drafted one. */
   onLinked?(ctx: ActorContext, mail: MailMessage): Promise<boolean>;
   /** Users notified about new mail of this purpose. */

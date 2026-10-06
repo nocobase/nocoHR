@@ -360,6 +360,10 @@ export function createRecruitingMailHandler(deps: {
     refType: string,
     refId: string,
   ) => Promise<MailLinkTarget | null>;
+  /** A candidate's keeping (招聘设置 · 保存期限) through one of their applications; null when it is gone. */
+  candidateRetention: (
+    applicationId: string,
+  ) => Promise<{ until: string | null; anonymized: boolean } | null>;
   /** What the posting says, for answering a candidate's question. */
   postingFacts: (postingId: string) => Promise<PostingFacts | null>;
   /** The recruiting assistant's structured answer; throws AIUnavailableError without a model. */
@@ -542,6 +546,8 @@ export function createRecruitingMailHandler(deps: {
               ? `${outcome.candidateName}的简历（${resume.name}），已投递到「${posting.title}」并开始初筛。`
               : `${outcome.candidateName}再次发来简历（${resume.name}），已并入「${posting.title}」的原投递。`,
           });
+          // 邮件正文不留存: the resume now lives with the candidate (and their 保存期限); the mail keeps its subject and summary.
+          await mail.forgetMessage(message.id);
           const to = outcome.email ?? message.from.address;
           await receipt(
             outcome.applicationId,
@@ -872,6 +878,13 @@ export function createRecruitingMailHandler(deps: {
         return true;
       }
       return false;
+    },
+    // A candidate's mail is kept as long as the candidate (保存期限), and goes when they are anonymized.
+    async retentionOf(refType, refId) {
+      if (refType !== 'application') return null;
+      const kept = await deps.candidateRetention(refId);
+      if (!kept || kept.anonymized) return '0000-01-01';
+      return kept.until;
     },
     recipients: deps.recruiters,
     onUnmatched: sort,

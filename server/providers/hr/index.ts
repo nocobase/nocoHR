@@ -931,6 +931,22 @@ export default class HrProvider extends ServiceProvider<Application> {
                 hint: null,
               };
         },
+        candidateRetention: async (applicationId) => {
+          const services = recruiting();
+          const application = await services.candidates
+            .applicationRow(applicationId)
+            .catch(() => null);
+          if (!application) return null;
+          const candidate = await services.candidates.candidateRow(
+            application.candidateId,
+          );
+          return {
+            until: candidate.retentionUntil
+              ? String(candidate.retentionUntil).slice(0, 10)
+              : null,
+            anonymized: Boolean(candidate.anonymizedAt),
+          };
+        },
         postingFacts: async (postingId) => {
           const posting = await recruiting()
             .postings.get(postingId)

@@ -1228,6 +1228,8 @@ export function createCandidateService(
         .select(['id', 'screeningSuggestion'])
         .where('candidateId', '=', candidateId)
         .execute();
+      // Their correspondence in the 招聘邮箱 goes with them (subject and links stay).
+      await ctx.forgetMail(applications.map((a) => str(a.id)));
       for (const application of applications) {
         const suggestion = json<ScreeningSuggestion | null>(
           application.screeningSuggestion,

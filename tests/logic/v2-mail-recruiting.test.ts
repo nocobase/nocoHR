@@ -403,6 +403,24 @@ describe('招聘邮箱 (V2-07)', () => {
     expect(receipts[0]).not.toContain('13900007');
   });
 
+  it('keeps no body of a resume mail once the resume is with the candidate', async () => {
+    const resume = (
+      (await call('recruit01', 'GET', '/mail/messages?mailbox=recruiting')).json
+        .data as Json[]
+    ).find((m) => m.direction === 'inbound' && m.subject.includes('邹鹏'))!;
+    expect(resume.status).toBe('linked');
+    expect(resume.bodyText).toBeNull();
+    expect(resume.attachments).toEqual([]);
+    // The summary still says what came, and the resume is the candidate's.
+    expect(resume.aiSummary).toContain('邹鹏');
+    const detail = await call(
+      'recruit01',
+      'GET',
+      `/recruiting/candidates/${applicationId}`,
+    );
+    expect(detail.json.data.candidate.hasResume).toBe(true);
+  });
+
   it('does not take the same resume twice or send a second receipt', async () => {
     const again = await call(
       'recruit01',
@@ -923,6 +941,16 @@ describe('招聘邮箱 (V2-07)', () => {
     );
     expect(anonymized.status).toBe(200);
     expect((await pub('GET')).status).toBe(404);
+    // Their correspondence went with them: subjects and links stay, no body.
+    const thread = (
+      await call(
+        'recruit01',
+        'GET',
+        `/mail/by-record/application/${applicationId}?mailbox=recruiting`,
+      )
+    ).json.data as Json[];
+    expect(thread.length).toBeGreaterThan(0);
+    for (const m of thread) expect(m.bodyText).toBeNull();
     expect((await pub('POST')).status).toBe(404);
     expect((await pub('GET')).json.code ?? 'DELETION_LINK_INVALID').toBe(
       'DELETION_LINK_INVALID',
