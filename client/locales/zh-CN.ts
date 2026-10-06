@@ -1476,6 +1476,7 @@ const zhCN: AppResource = {
       machine: '设备 {{no}}',
       signFilling: '开工登记',
       signed: '已开工登记',
+      alreadySigned: '你刚才已登记过这道工序（{{time}}），不再重复记录。',
       notSignable: '本工序无需登记',
       cannotSign: '你没有有效的 CNC 岗位上岗证，不能开工登记。',
       signoffs: '登记记录',

@@ -94,7 +94,12 @@ export interface BatchSignoff {
   readonly signedAt: string;
   readonly certificateNo: string | null;
   readonly certificateStatusAtSigning: string | null;
+  /** The same person's registration of the same step moments ago, returned instead of a second one. */
+  readonly duplicate?: boolean;
 }
+
+/** A second press within this window is the same registration (a double click recorded two, 47 s apart). */
+const REPEAT_WINDOW_MS = 10 * 60_000;
 
 export interface BatchView {
   readonly batchNo: string;
@@ -252,6 +257,23 @@ export function createDemoBatchService(deps: {
       input.permissionSet,
     );
     const now = new Date();
+    const recent = await database
+      .query()
+      .selectFrom('demoBatchSignoffs')
+      .selectAll()
+      .where('kind', '=', input.kind)
+      .where('batchNo', '=', input.batchNo)
+      .where('step', '=', input.step)
+      .where('machineNo', '=', input.machineNo)
+      .where('employeeId', '=', employee.id)
+      .where('signedAt', '>=', new Date(now.getTime() - REPEAT_WINDOW_MS))
+      .orderBy('signedAt', 'desc')
+      .executeTakeFirst();
+    if (recent)
+      return {
+        ...(await toSignoff(recent)),
+        duplicate: true,
+      };
     const id = newId();
     // Only added, never changed or deleted: the registration is evidence.
     await database

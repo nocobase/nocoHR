@@ -67,11 +67,25 @@ export default function ForkliftDispatchPage(): ReactElement {
   async function dispatch(): Promise<void> {
     setBusy(true);
     try {
-      await api.request({
+      const result = await api.request<{
+        data: { duplicate?: boolean; signedAt: string };
+      }>({
         path: 'demo/forklift-dispatch/dispatch',
         method: 'POST',
       });
-      toast.add({ type: 'success', title: t('licensed.forklift.dispatched') });
+      // A second press moments later returns the first registration instead of recording another.
+      if (result.data.duplicate)
+        toast.add({
+          type: 'info',
+          title: t('licensed.forklift.alreadyDispatched', {
+            time: format(result.data.signedAt),
+          }),
+        });
+      else
+        toast.add({
+          type: 'success',
+          title: t('licensed.forklift.dispatched'),
+        });
       view.reload();
     } catch (cause) {
       toast.add({ type: 'error', title: errorMessage(cause, t) });

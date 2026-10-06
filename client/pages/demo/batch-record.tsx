@@ -74,11 +74,21 @@ export default function DemoBatchRecordPage(): ReactElement {
   async function sign(): Promise<void> {
     setBusy(true);
     try {
-      await api.request({
+      const result = await api.request<{
+        data: { duplicate?: boolean; signedAt: string };
+      }>({
         path: 'demo/batch-record/sign-filling',
         method: 'POST',
       });
-      toast.add({ type: 'success', title: t('demo.batch.signed') });
+      // A second press moments later returns the first registration instead of recording another.
+      if (result.data.duplicate)
+        toast.add({
+          type: 'info',
+          title: t('demo.batch.alreadySigned', {
+            time: format(result.data.signedAt),
+          }),
+        });
+      else toast.add({ type: 'success', title: t('demo.batch.signed') });
       batch.reload();
     } catch (cause) {
       toast.add({ type: 'error', title: errorMessage(cause, t) });

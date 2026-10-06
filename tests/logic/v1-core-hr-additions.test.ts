@@ -685,6 +685,34 @@ describe('用工合规检查', () => {
 });
 
 describe('一句话改配置、对话提交与权限说明', () => {
+  it('reads 厂长 as the head of the factory, however the model names it', async () => {
+    const drafts = server.application.container.resolve(
+      settingsDraftServiceToken,
+    );
+    for (const approver of [
+      { type: 'permissionSet', key: '厂长' },
+      { type: 'departmentHead', department: '厂长' },
+    ]) {
+      const change = await drafts.draft(
+        await actorOf('hr01'),
+        '成都机加工车间的入职单加一级厂长审批',
+        [
+          {
+            type: 'chainRule',
+            department: '成都机加工车间',
+            actionTypes: ['onboard'],
+            name: '厂长审批',
+            approver,
+            position: 'afterFirst',
+          },
+        ],
+      );
+      expect(JSON.stringify(change.items[0]!.resolved)).toContain(
+        '"approver":{"type":"departmentHead","departmentId":"cd"}',
+      );
+    }
+  });
+
   it('drafts a 成都工厂 厂长审批 rule with a merge warning, applies it and reverts it', async () => {
     const drafts = server.application.container.resolve(
       settingsDraftServiceToken,

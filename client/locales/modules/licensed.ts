@@ -109,6 +109,8 @@ const en = {
     quantity: 'Quantity',
     dispatch: 'Register dispatch',
     dispatched: 'Dispatch registered',
+    alreadyDispatched:
+      'You already registered this dispatch ({{time}}); it is not recorded twice.',
     cannotDispatch:
       'You do not hold a valid forklift certificate, so you cannot register a dispatch.',
     history: 'Registrations',
@@ -273,6 +275,7 @@ const zh: Shape<typeof en> = {
     quantity: '数量',
     dispatch: '登记出库',
     dispatched: '已登记出库',
+    alreadyDispatched: '你刚才已登记过这张出库单（{{time}}），不再重复记录。',
     cannotDispatch: '你没有有效的叉车证，不能登记出库。',
     history: '登记记录',
     none: '尚无登记',

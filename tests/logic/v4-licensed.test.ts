@@ -335,6 +335,24 @@ describe('认证即权限', () => {
       certificateStatusAtSigning: 'valid',
     });
     expect(started.json.data.certificateNo).toMatch(/^CNC-OP-/u);
+    // A second press moments later is the same registration, not another one.
+    const again = await sign('emp_njl_2');
+    expect(again.json.data).toMatchObject({
+      id: started.json.data.id,
+      duplicate: true,
+    });
+    const rows = await (
+      await import('@nocobase/db').then(async ({ databaseManagerToken }) =>
+        server.application.container.resolve(databaseManagerToken),
+      )
+    )
+      .query()
+      .selectFrom('demoBatchSignoffs')
+      .select(['id'])
+      .where('employeeId', '=', 'emp-limin')
+      .where('step', '=', 'op20')
+      .execute();
+    expect(rows).toHaveLength(1);
     const mine = await call('emp_njl_2', 'GET', '/licensed/my-grants');
     expect(mine.json.data.items).toEqual([
       expect.objectContaining({

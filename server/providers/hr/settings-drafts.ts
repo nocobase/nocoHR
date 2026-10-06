@@ -156,14 +156,45 @@ export function createSettingsDraftService(deps: {
     throw new HrError('SETTINGS_DRAFT_DEPARTMENT_UNKNOWN', 400, { name });
   }
 
+  /** “厂长”、“工厂负责人” and the like: the head of the factory a department belongs to (V1-02 一句话改配置). */
+  const FACTORY_HEAD =
+    /厂长|工厂负责人|工厂主管|factory (head|manager)|plant manager/iu;
+
+  /** The nearest department, from this one up, whose name is a factory (“…工厂”, “…厂”). */
+  async function factoryOf(departmentId: string): Promise<string> {
+    const tree = await deps.organization.listTree();
+    const byId = new Map(tree.map((d) => [d.id, d]));
+    for (
+      let d = byId.get(departmentId);
+      d;
+      d = d.parentId ? byId.get(d.parentId) : undefined
+    )
+      if (
+        /工厂$|厂$|factory|plant/iu.test(deps.organization.titleText(d.title))
+      )
+        return d.id;
+    return departmentId;
+  }
+
   async function resolve(
     ctx: ActorContext,
     input: DraftInput,
   ): Promise<Pick<DraftItem, 'resolved' | 'preview' | 'warnings'>> {
     if (input.type === 'chainRule') {
       const departmentId = await departmentByName(input.department);
-      const approver =
-        input.approver.type === 'departmentHead'
+      // “加一级厂长审批” names a person by role: the factory's head, not a permission set called 厂长 (which
+      // matched nobody) — whether the model sent it as a permission set or as a department named 厂长.
+      const roleWord =
+        input.approver.type === 'permissionSet'
+          ? input.approver.key
+          : (input.approver.department ?? '');
+      const factoryHead = FACTORY_HEAD.test(roleWord);
+      const approver = factoryHead
+        ? {
+            type: 'departmentHead' as const,
+            departmentId: await factoryOf(departmentId),
+          }
+        : input.approver.type === 'departmentHead'
           ? {
               type: 'departmentHead' as const,
               departmentId: input.approver.department

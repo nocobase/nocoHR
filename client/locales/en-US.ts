@@ -1604,6 +1604,8 @@ const enUS = {
       machine: 'Machine {{no}}',
       signFilling: 'Log start',
       signed: 'Start logged',
+      alreadySigned:
+        'You already logged this step ({{time}}); it is not recorded twice.',
       notSignable: 'No sign-off for this operation',
       cannotSign:
         'You do not hold a valid CNC operator certificate, so you cannot log a start.',

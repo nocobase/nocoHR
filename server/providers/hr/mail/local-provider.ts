@@ -19,6 +19,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -101,6 +102,7 @@ function normalize(
   id: string,
   parsed: ParsedMail,
   folder: string,
+  arrivedAt?: Date,
 ): NormalizedMailMessage {
   const references = Array.isArray(parsed.references)
     ? parsed.references
@@ -123,7 +125,9 @@ function normalize(
     preview: text.replace(/\s+/gu, ' ').slice(0, 200),
     text,
     ...(typeof parsed.html === 'string' ? { html: parsed.html } : {}),
-    receivedAt: (parsed.date ?? new Date()).toISOString(),
+    // When the file landed in the inbox, as a real mailbox stamps receipt: the “Date” header is the sender's
+    // clock, and a demo reply copied in now showed before the invitation it answered.
+    receivedAt: (arrivedAt ?? parsed.date ?? new Date()).toISOString(),
     read: false,
     starred: false,
     draft: false,
@@ -223,7 +227,12 @@ export const localMailProvider: MailProviderDefinition<LocalMailProviderConfig> 
         version: '1',
       });
       const read = async (id: string) =>
-        normalize(id, await parseFile(path.join(inbox, id)), INBOX);
+        normalize(
+          id,
+          await parseFile(path.join(inbox, id)),
+          INBOX,
+          statSync(path.join(inbox, id)).mtime,
+        );
       const adapter: MailProviderAdapter = {
         identity: account.provider,
         capabilities: CAPABILITIES,
