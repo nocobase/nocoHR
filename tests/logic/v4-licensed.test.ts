@@ -663,6 +663,15 @@ describe('排班资质校验', () => {
 
 describe('生命周期与演示业务', () => {
   it('writes what an expiring certificate will stop, and what an expired one stopped', async () => {
+    // The seed's “expires in a month” is 31 days in some months, outside the 30-day notice: put 赵阳's
+    // certificate 20 days out and let the daily run mark it, rather than depend on today's date.
+    await db()
+      .query()
+      .updateTable('employeeCertificates')
+      .set({ expiresAt: addDays(today(), 20), status: 'valid' })
+      .where('id', '=', 'certificate-zhaoyang-cnc')
+      .execute();
+    await call('hr01', 'POST', '/org/maintenance/run', {});
     expect(
       await inboxBody('certificate:certificate-zhaoyang-cnc:expiring'),
     ).toContain('到期后将不能使用：设备开工登记');

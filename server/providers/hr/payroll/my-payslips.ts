@@ -15,6 +15,7 @@ import type { ActorContext } from '../framework-service.js';
 import { HrError, str } from '../shared.js';
 import type { PayslipLine } from './calc.js';
 import { iso, json, MONTH, num } from './common.js';
+import { sourceLabels, withSourceLabels } from './source-labels.js';
 import type { PayrollContext } from './context.js';
 
 const RESOURCE = 'talent.myPayslip';
@@ -76,8 +77,12 @@ export function createMyPayslipService(ctx: PayrollContext) {
     };
   }
 
-  function present(row: Record<string, unknown>, month: string) {
-    const lines = json<PayslipLine[]>(row.lines, []);
+  function present(
+    row: Record<string, unknown>,
+    month: string,
+    label: (name: string) => string | undefined,
+  ) {
+    const lines = withSourceLabels(json<PayslipLine[]>(row.lines, []), label);
     return {
       id: str(row.id),
       month,
@@ -165,7 +170,7 @@ export function createMyPayslipService(ctx: PayrollContext) {
             filter: { id: str(found.row.id) },
             values: { viewedAt: new Date(), updatedAt: new Date() },
           });
-      return present(found.row, month);
+      return present(found.row, month, await sourceLabels(database));
     },
 
     /** 参保情况: city, bases, and each personal contribution of the latest published payslip. */

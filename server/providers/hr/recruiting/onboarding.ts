@@ -39,7 +39,9 @@ export function createOnboarding(
 ) {
   const { database, platform } = ctx;
 
-  async function offerForAction(actionId: string): Promise<OfferView | undefined> {
+  async function offerForAction(
+    actionId: string,
+  ): Promise<OfferView | undefined> {
     const row = await database
       .query()
       .selectFrom('offers')
@@ -125,7 +127,9 @@ export function createOnboarding(
           if (s.status !== 'pending' || !Object.keys(s.fields).length) continue;
           const fields = Object.fromEntries(
             Object.entries(s.fields)
-              .filter(([name]) => ['idNumber', 'birthDate', 'gender', 'address'].includes(name))
+              .filter(([name]) =>
+                ['idNumber', 'birthDate', 'gender', 'address'].includes(name),
+              )
               .map(([name, f]) => [name, f]),
           );
           if (!Object.keys(fields).length) continue;
@@ -137,7 +141,10 @@ export function createOnboarding(
               fields,
             })
             .catch((error: unknown) => {
-              ctx.log({ error, offerId: offer.id }, 'Onboarding suggestion failed');
+              ctx.log(
+                { error, offerId: offer.id },
+                'Onboarding suggestion failed',
+              );
               return null;
             });
           if (created) suggestionIds.push(created.id);
@@ -150,7 +157,10 @@ export function createOnboarding(
         .set({
           preboarding: {
             ...offer.preboarding,
-            suggestionIds: [...offer.preboarding.suggestionIds, ...suggestionIds],
+            suggestionIds: [
+              ...offer.preboarding.suggestionIds,
+              ...suggestionIds,
+            ],
             onboardedAt: now.toISOString(),
             onboardedEventId: event.id,
           },
@@ -190,6 +200,16 @@ export function createOnboarding(
         baseSalary: offer.salaryOffer.baseSalary,
         fixedAllowances: offer.salaryOffer.allowances,
         salaryStructureId: offer.salaryOffer.salaryStructureId,
+        // The structure's name for the page (it showed the internal id, struct-prod-cd).
+        salaryStructureTitle:
+          (
+            await database
+              .query()
+              .selectFrom('salaryStructures')
+              .select(['title'])
+              .where('id', '=', offer.salaryOffer.salaryStructureId)
+              .executeTakeFirst()
+          )?.title ?? null,
         startDate: offer.startDate,
         onboardedAt: iso(offer.preboarding.onboardedAt),
         filed: Boolean(existing),
@@ -197,17 +217,25 @@ export function createOnboarding(
     },
 
     /** 确认后写入: payroll's own file creation, with source=offer. */
-    async confirmSalaryPrefill(actor: ActorContext, employeeId: string, input: unknown) {
+    async confirmSalaryPrefill(
+      actor: ActorContext,
+      employeeId: string,
+      input: unknown,
+    ) {
       const prefill = await service.salaryPrefill(actor, employeeId);
       if (!prefill) throw new HrError('OFFER_NOT_FOUND', 404);
       if (prefill.filed) throw new HrError('SALARY_MONTH_TAKEN', 409);
       const body =
-        input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+        input && typeof input === 'object'
+          ? (input as Record<string, unknown>)
+          : {};
       return ctx.payroll().salaries.createFile(actor, {
         employeeId,
         effectiveMonth: prefill.effectiveMonth,
         baseSalary:
-          typeof body.baseSalary === 'number' ? body.baseSalary : prefill.baseSalary,
+          typeof body.baseSalary === 'number'
+            ? body.baseSalary
+            : prefill.baseSalary,
         fixedAllowances: prefill.fixedAllowances,
         salaryStructureId: prefill.salaryStructureId,
         ...(body.bankAccount ? { bankAccount: body.bankAccount } : {}),

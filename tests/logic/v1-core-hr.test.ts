@@ -999,3 +999,21 @@ describe('工作台 · AI 员工已办完', () => {
     ]);
   });
 });
+
+describe('部门选择的范围', () => {
+  it('offers a head the departments of the people they manage, with their parents', async () => {
+    const scope = async (username: string) =>
+      (await call(username, 'GET', '/lookups')).json.data.scopeDepartmentIds as
+        string[] | undefined;
+    const chen = new Set(await scope('mgr_njl'));
+    expect(chen.has('sz-mc')).toBe(true);
+    expect(chen.has('sz')).toBe(true);
+    for (const outside of ['cd', 'cd-mc', 'sz-as', 'hr', 'sales'])
+      expect(chen.has(outside)).toBe(false);
+    const zhou = new Set(await scope('mgr_east'));
+    expect(zhou.has('sz-mc') && zhou.has('sz-as')).toBe(true);
+    expect(zhou.has('cd-mc')).toBe(false);
+    // Someone who lists no employees gets no scope, and the pickers stay as they were.
+    expect(await scope('emp_njl_1')).toBeUndefined();
+  });
+});

@@ -752,6 +752,13 @@ describe('the exam → competency rule and the industry pack switch', () => {
 
 describe('certificate lifecycle, renewal and external certificates', () => {
   it('assigns renewal, marks expiring and expires once, whatever the repeats', async () => {
+    // The seed's “expires in a month” is 31 days in some months, outside the 30-day notice: 20 days out.
+    await db()
+      .query()
+      .updateTable('employeeCertificates')
+      .set({ expiresAt: addDays(today(), 20) })
+      .where('id', '=', 'certificate-zhaoyang-cnc')
+      .execute();
     expect(
       (await call('hr01', 'POST', '/org/maintenance/run', {})).status,
     ).toBe(200);

@@ -677,6 +677,15 @@ describe('考勤异常追问（人事助理）', () => {
     const asked = new Date(Date.now() - 3 * 86_400_000).toISOString();
     const stamp = new Date();
     const id = 'rec-test-wanglei-late';
+    // The demo's attendance can already cover that day (it moves with today): this record replaces it.
+    await (
+      await db()
+    )
+      .query()
+      .deleteFrom('attendanceRecords')
+      .where('employeeId', '=', 'emp-wanglei')
+      .where('date', '=', day(-6))
+      .execute();
     await (
       await db()
     )

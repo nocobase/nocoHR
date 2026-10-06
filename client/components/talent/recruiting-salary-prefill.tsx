@@ -22,6 +22,7 @@ export function RecruitingSalaryPrefill({
     filed: boolean;
     baseSalary: number;
     salaryStructureId: string;
+    salaryStructureTitle: string | null;
     effectiveMonth: string;
   } | null>(
     `talent/recruiting/salary-prefill/${encodeURIComponent(employeeId)}`,
@@ -35,7 +36,7 @@ export function RecruitingSalaryPrefill({
         {t('recruiting.prefill.title')} ·{' '}
         {t('recruiting.prefill.detail', {
           amount: Number(data.baseSalary).toLocaleString(),
-          structure: data.salaryStructureId,
+          structure: data.salaryStructureTitle ?? data.salaryStructureId,
           month: data.effectiveMonth,
         })}
       </span>

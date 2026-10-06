@@ -62,6 +62,7 @@ import {
   type StructureService,
   type StructureView,
 } from './structures.js';
+import { sourceLabels, withSourceLabels } from './source-labels.js';
 
 const PAYROLL = 'talent.payroll';
 export const EDITABLE = ['draft', 'calculated', 'reviewing'] as const;
@@ -254,6 +255,9 @@ const decisionSchema = z
     comment: z.string().trim().max(1000).nullish(),
   })
   .strict();
+
+/** How long 提交审批 waits for the anomaly check of a calculation (see submit). */
+const CHECK_WAIT_MS = 5 * 60_000;
 
 export function createCycleService(
   ctx: PayrollContext,
@@ -920,7 +924,8 @@ export function createCycleService(
         throw new HrError('INVALID_INPUT', 400);
       let title: string | null = null;
       if (value) {
-        if (!ctx.performance) throw new HrError('PAYROLL_BONUS_CYCLE_INVALID', 400);
+        if (!ctx.performance)
+          throw new HrError('PAYROLL_BONUS_CYCLE_INVALID', 400);
         title = (await ctx.performance().bonusCycle(value)).title;
       }
       await database
@@ -1008,6 +1013,9 @@ export function createCycleService(
       );
       return {
         ...slip,
+        lines: slip.lines
+          ? withSourceLabels(slip.lines, await sourceLabels(database))
+          : slip.lines,
         employeeNo: employee?.employeeNo ?? '',
         name: employee?.name ?? '',
         departmentTitle: await ctx.departmentTitle(slip.departmentId),
@@ -1264,12 +1272,10 @@ export function createCycleService(
       // V4-12: perf.coefficient from the bonus cycle's final ratings (0 without one).
       const perf =
         cycle.bonusCycleId && ctx.performance
-          ? await ctx
-              .performance()
-              .coefficientsFor(
-                cycle.bonusCycleId,
-                p.employees.map((e) => e.id),
-              )
+          ? await ctx.performance().coefficientsFor(
+              cycle.bonusCycleId,
+              p.employees.map((e) => e.id),
+            )
           : null;
       const calculationId = newId();
       const now = new Date();
@@ -1517,6 +1523,28 @@ export function createCycleService(
         );
       const slips = (await payslipsOf(cycle.id)).filter((s) => s.lines);
       if (!slips.length) throw new HrError('PAYROLL_RECALCULATE_REQUIRED', 409);
+      // The HR assistant's anomaly check runs in the background after 计算; until it has finished for this
+      // calculation the approver would see a cycle without its explanations. A finished run (also a skipped
+      // or failed one, e.g. the task switched off) releases it, and so does a calculation older than
+      // CHECK_WAIT_MS, so a check that never started cannot hold the cycle.
+      if (
+        cycle.calculationId &&
+        cycle.review?.calculationId !== cycle.calculationId
+      ) {
+        const finished = await database
+          .query()
+          .selectFrom('aiTaskRuns')
+          .select(['id'])
+          .where('task', '=', 'hrAssistant.payrollCheck')
+          .where('dedupeKey', '=', `${cycle.id}:${cycle.calculationId}`)
+          .where('status', '!=', 'running')
+          .executeTakeFirst();
+        const calculatedAt = cycle.calculatedAt
+          ? Date.parse(cycle.calculatedAt)
+          : 0;
+        if (!finished && Date.now() - calculatedAt < CHECK_WAIT_MS)
+          throw new HrError('PAYROLL_CHECK_PENDING', 409);
+      }
       const negative = slips.filter((s) => (s.net ?? 0) < 0);
       if (negative.length) {
         const employees = new Map(

@@ -35,7 +35,8 @@ export function DepartmentSelect({
     >
       <NativeSelectOption value=''>{emptyLabel}</NativeSelectOption>
       {lookups.departments
-        .filter((d) => d.active || d.id === value)
+        // Only the departments this user works with: a head saw all twelve, with empty data behind the rest.
+        .filter((d) => (d.active && lookups.inScope(d.id)) || d.id === value)
         .map((d) => (
           <NativeSelectOption key={d.id} value={d.id}>
             {`${'　'.repeat(d.depth)}${d.label}`}

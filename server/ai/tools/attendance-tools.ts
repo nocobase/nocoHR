@@ -208,7 +208,7 @@ export const draftLeaveRequest = defineTools({
   definition: {
     name: 'draftLeaveRequest',
     description:
-      "Create a DRAFT leave request for the signed-in user only (source hrAssistant). Returns the server-computed duration, the balances, the conflicts with the user's published schedule (scheduleConflicts: date and shift) and the draft link; it is not submitted and uses no balance until the employee submits it on the page or on the 本人提交 card. Times are ISO 8601 with offset; a whole day starts at 00:00 and ends at 00:00 of the next day; the server turns whole days into the employee's shift times (a night shift belongs to its start date), so report the returned startAt/endAt.",
+      "Create a DRAFT leave request for the signed-in user only (source hrAssistant). Returns the server-computed duration, the balances, the conflicts with the user's published schedule (scheduleConflicts: date and shift) and the draft link; it is not submitted and uses no balance until the employee submits it on the page or on the 本人提交 card. Times are ISO 8601 with offset; a whole day starts at 00:00 and ends at 00:00 of the next day; the server turns whole days into the employee's shift times (a night shift belongs to its start date), so report the returned startAt/endAt. Call it every time the employee asks for leave, also later in the same conversation: never answer from memory that a draft already exists — an earlier one may have been submitted, cancelled or discarded since.",
     schema: z.object({
       leaveType: z
         .string()

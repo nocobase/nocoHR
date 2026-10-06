@@ -269,16 +269,18 @@ function withholding(taxable: number): number {
   return Math.max(0, (t * rate) / 100 - quick);
 }
 
-function workdaysFrom(date: string): number {
+/** Working days from a date to the end of its month, by the attendance calendar (make-up workdays and holidays count). */
+async function workdaysFrom(date: string): Promise<number> {
+  const { readCalendar, isWorkday } =
+    await import('../../server/providers/hr/payroll/common.ts');
+  const calendar = await readCalendar((await db()).query());
   let count = 0;
   for (
     let d = new Date(`${date}T00:00:00Z`);
     d.toISOString().slice(0, 7) === date.slice(0, 7);
     d.setUTCDate(d.getUTCDate() + 1)
-  ) {
-    const w = d.getUTCDay();
-    if (w !== 0 && w !== 6) count += 1;
-  }
+  )
+    if (isWorkday(d.toISOString().slice(0, 10), calendar)) count += 1;
   return count;
 }
 
@@ -558,13 +560,30 @@ describe('V2-06 calculation', () => {
 
   it('prorates 杨帆 by the working days since her 15th-of-month start and insures her this month', async () => {
     const slip = await slipOf('emp-yangfan');
-    const days = workdaysFrom(`${MONTH}-15`);
+    const days = await workdaysFrom(`${MONTH}-15`);
     expect(slip?.inputs.payableDays.payableDays).toBe(days);
     expect(line(slip, 'base')?.amount).toBe(roundTo((5000 * days) / 21.75, 2));
     expect(slip?.inputs.insurance.planCity).toBe('苏州');
     expect(Number(slip?.socialEmployee)).toBeGreaterThan(0);
-    // 郭凡 joined after the 15th: insured from next month.
-    expect((await slipOf('emp-guofan'))?.inputs.insurance).toBeNull();
+    // Joining after the 15th of the month: insured from next month. 郭凡's hire date moves with today, so
+    // the expectation follows the rule rather than a fixed date.
+    const guofan = await (
+      await db()
+    )
+      .query()
+      .selectFrom('employees')
+      .select(['hireDate'])
+      .where('id', '=', 'emp-guofan')
+      .executeTakeFirstOrThrow();
+    const hired = String(
+      guofan.hireDate instanceof Date
+        ? guofan.hireDate.toISOString()
+        : guofan.hireDate,
+    ).slice(0, 10);
+    const insurance = (await slipOf('emp-guofan'))?.inputs.insurance;
+    if (hired.slice(0, 7) === MONTH && hired.slice(8, 10) > '15')
+      expect(insurance).toBeNull();
+    else expect(insurance).not.toBeNull();
   });
 
   it('withholds 王磊 cumulatively, his 子女教育 deduction included', async () => {
@@ -902,6 +921,49 @@ describe('V2-06 HR assistant: anomaly check', () => {
 });
 
 describe('V2-06 approval and publishing', () => {
+  it('waits for the anomaly check of the calculation before it can be submitted', async () => {
+    const q = (await db()).query();
+    const row = await q
+      .selectFrom('payrollCycles')
+      .select(['calculationId', 'review', 'calculatedAt'])
+      .where('id', '=', cycleId)
+      .executeTakeFirstOrThrow();
+    const runs = await q
+      .selectFrom('aiTaskRuns')
+      .selectAll()
+      .where('task', '=', 'hrAssistant.payrollCheck')
+      .where('dedupeKey', '=', `${cycleId}:${String(row.calculationId)}`)
+      .execute();
+    // As if the check had not finished yet: no review for this calculation and no finished run.
+    await q
+      .updateTable('payrollCycles')
+      .set({ review: null, calculatedAt: new Date() })
+      .where('id', '=', cycleId)
+      .execute();
+    await q
+      .deleteFrom('aiTaskRuns')
+      .where('task', '=', 'hrAssistant.payrollCheck')
+      .where('dedupeKey', '=', `${cycleId}:${String(row.calculationId)}`)
+      .execute();
+    const early = await call(
+      'payroll01',
+      'POST',
+      `/payroll/cycles/${cycleId}/submit`,
+    );
+    expect(early.json.code).toBe('PAYROLL_CHECK_PENDING');
+    // Restore the finished check; the next test submits normally.
+    for (const run of runs)
+      await q.insertInto('aiTaskRuns').values(run).execute();
+    await q
+      .updateTable('payrollCycles')
+      .set({
+        review: row.review as never,
+        calculatedAt: row.calculatedAt as never,
+      })
+      .where('id', '=', cycleId)
+      .execute();
+  });
+
   it('lets only fin01 approve; the approved sheet is locked', async () => {
     const submitted = await call(
       'payroll01',

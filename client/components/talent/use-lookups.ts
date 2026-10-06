@@ -45,8 +45,13 @@ export function useLookups() {
         ordered.push({ ...d, label: titleText(d.title, t), depth: 0 });
     const departmentLabel = new Map(ordered.map((d) => [d.id, d.label]));
     const positionLabel = new Map(positions.map((p) => [p.id, p.title]));
+    const scope = remote.data?.scopeDepartmentIds
+      ? new Set(remote.data.scopeDepartmentIds)
+      : null;
     return {
       departments: ordered,
+      /** Whether a department is one this user works with (filter pickers offer only these). */
+      inScope: (id: string) => !scope || scope.has(id),
       positions,
       departmentTitle: (id: string | null | undefined) =>
         id ? (departmentLabel.get(id) ?? id) : '',

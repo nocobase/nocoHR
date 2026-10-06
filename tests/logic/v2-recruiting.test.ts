@@ -1389,6 +1389,7 @@ describe('V2-07 录用与入职', () => {
     expect(prefill.json.data).toMatchObject({
       baseSalary: 9000,
       salaryStructureId: 'struct-prod-cd',
+      salaryStructureTitle: '成都生产一线薪资结构',
       filed: false,
     });
     expect(

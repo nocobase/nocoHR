@@ -5342,6 +5342,24 @@ const enUS = {
       param: 'Structure parameter',
       item: 'An earlier item',
     },
+    variable: {
+      base: 'Base salary',
+      dailyRate: 'Daily rate',
+      hourlyRate: 'Hourly rate',
+      payableDays: 'Payable days',
+      payDaysPerMonth: 'Pay days per month',
+      bonusBase: 'Bonus base',
+      att: {
+        nightShiftCount: 'Night shifts',
+        absentDays: 'Absent days',
+        overtime: {
+          workday: 'Workday overtime hours',
+          restDay: 'Rest-day overtime hours',
+          holiday: 'Public-holiday overtime hours',
+        },
+      },
+      perf: { coefficient: 'Performance coefficient' },
+    },
     payslip: {
       title: 'Payslip',
       items: 'Items',
@@ -5733,6 +5751,8 @@ const enUS = {
       PAYROLL_CYCLE_LOCKED:
         'The cycle is submitted or approved and can no longer change.',
       PAYROLL_RECALCULATE_REQUIRED: 'Calculate again before submitting.',
+      PAYROLL_CHECK_PENDING:
+        'The HR assistant is still checking this calculation for anomalies. Wait a moment and submit once the notes appear.',
       PAYROLL_NEGATIVE_NET: 'Net pay is negative for: {{names}}.',
       PAYROLL_NOT_PENDING: 'Nothing is waiting for approval.',
       PAYROLL_SELF_APPROVAL: 'You cannot approve what you submitted.',

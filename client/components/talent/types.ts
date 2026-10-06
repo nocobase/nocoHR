@@ -17,6 +17,8 @@ export interface LookupPosition {
 export interface Lookups {
   readonly departments: LookupDepartment[];
   readonly positions: LookupPosition[];
+  /** The departments of the employees this user may list, with their parents; absent when they list none. */
+  readonly scopeDepartmentIds?: string[];
 }
 
 export interface CompetencyLevel {

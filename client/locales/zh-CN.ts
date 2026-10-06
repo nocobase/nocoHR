@@ -5033,6 +5033,24 @@ const zhCN: AppResource = {
       param: '薪资结构参数',
       item: '前面的项目',
     },
+    variable: {
+      base: '基本工资',
+      dailyRate: '日薪',
+      hourlyRate: '时薪',
+      payableDays: '计薪天数',
+      payDaysPerMonth: '月计薪天数',
+      bonusBase: '奖金基数',
+      att: {
+        nightShiftCount: '夜班次数',
+        absentDays: '缺勤天数',
+        overtime: {
+          workday: '工作日加班小时',
+          restDay: '休息日加班小时',
+          holiday: '法定节假日加班小时',
+        },
+      },
+      perf: { coefficient: '绩效系数' },
+    },
     payslip: {
       title: '工资条',
       items: '工资项目',
@@ -5410,6 +5428,8 @@ const zhCN: AppResource = {
       PAYROLL_CYCLE_EXISTS: '该月份已有算薪周期。',
       PAYROLL_CYCLE_LOCKED: '周期已提交或已批准，不能再修改。',
       PAYROLL_RECALCULATE_REQUIRED: '请先重新计算再提交。',
+      PAYROLL_CHECK_PENDING:
+        '人事助理还在检查本次计算的异常，请稍等片刻、看到异常说明后再提交。',
       PAYROLL_NEGATIVE_NET: '以下员工实发为负数：{{names}}。',
       PAYROLL_NOT_PENDING: '没有待审批的内容。',
       PAYROLL_SELF_APPROVAL: '不能审批自己提交的内容。',

@@ -27,7 +27,8 @@ export interface PayslipLineView {
   unit: string | null;
   formula: string | null;
   expression: string | null;
-  sources: { name: string; value: number; source: string }[];
+  /** `label`: the structure's own name for a parameter, item or import (added when the payslip is read). */
+  sources: { name: string; value: number; source: string; label?: string }[];
 }
 
 export interface PayslipTotals {
@@ -41,6 +42,20 @@ export interface PayslipTotals {
 function LineDetail({ line }: { line: PayslipLineView }): ReactElement {
   const { t } = useTranslation();
   const number = useNumber();
+  // An employee reads “夜班次数 × 夜班津贴标准”, not `att.nightShiftCount × param.nightRate`.
+  const named = (source: PayslipLineView['sources'][number]) =>
+    source.label ??
+    t(`payroll.variable.${source.name}`, { defaultValue: source.name });
+  const formula = line.formula
+    ? [...line.sources]
+        .sort((a, b) => b.name.length - a.name.length)
+        .reduce(
+          (text, source) => text.split(source.name).join(named(source)),
+          line.formula,
+        )
+        .replace(/\*/gu, '×')
+        .replace(/\//gu, '÷')
+    : null;
   return (
     <div className='space-y-1 rounded-md bg-muted/50 p-3 text-sm'>
       <p>
@@ -54,7 +69,7 @@ function LineDetail({ line }: { line: PayslipLineView }): ReactElement {
           <span className='text-muted-foreground'>
             {t('payroll.payslip.formula')}：
           </span>
-          <code className='font-mono text-xs'>{line.formula}</code>
+          {formula}
         </p>
       ) : null}
       {line.expression ? (
@@ -69,7 +84,7 @@ function LineDetail({ line }: { line: PayslipLineView }): ReactElement {
         <ul className='space-y-0.5'>
           {line.sources.map((source) => (
             <li key={source.name} className='flex flex-wrap gap-x-2'>
-              <code className='font-mono text-xs'>{source.name}</code>
+              <span>{named(source)}</span>
               <span>= {number(source.value)}</span>
               <span className='text-muted-foreground'>
                 {t(`payroll.source.${source.source}`, {
@@ -91,7 +106,8 @@ function LineRow({ line }: { line: PayslipLineView }): ReactElement {
   const amount =
     line.kind === 'reference'
       ? `${number(line.value)}${line.unit ? ` ${line.unit}` : ''}`
-      : `${line.kind === 'deduction' ? '−' : ''}${money(line.amount)}`;
+      : // No minus sign on a deduction of zero (it read “−0.00”).
+        `${line.kind === 'deduction' && line.amount ? '−' : ''}${money(line.amount)}`;
   return (
     <Collapsible>
       <CollapsibleTrigger className='flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-muted'>

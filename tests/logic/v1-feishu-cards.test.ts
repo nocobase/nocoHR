@@ -553,6 +553,57 @@ describe('本人提交卡片', () => {
     expect(turns).toEqual([]);
   });
 
+  it('keeps a referring-back follow-up with the AI employee of the last turn (#73)', async () => {
+    const { createImChannel } =
+      await import('../../server/providers/hr/im-channel.ts');
+    const { AIUnavailableError } =
+      await import('../../server/providers/hr/ai-runner.ts');
+    const tokens = await import('../../server/providers/hr/tokens.ts');
+    const container = server.application.container;
+    const turns: { employee: string; sessionId?: string }[] = [];
+    const bot = createImChannel({
+      platform: container.resolve(tokens.platformToken),
+      entry: () => container.resolve(tokens.aiEntryServiceToken),
+      ai: {
+        structured: () => Promise.reject(new AIUnavailableError('test')),
+        reply: (input: { employee: string; sessionId?: string }) => {
+          turns.push(input);
+          return Promise.resolve({
+            text: '好的',
+            sessionId: `session-${input.employee}`,
+            paused: false,
+            pending: [],
+          });
+        },
+      } as never,
+      core: () => container.resolve(tokens.hrCoreServiceToken),
+      publicUrl: (p) => p,
+      translate: async () => (await channel()).cards.translate(),
+      warn: () => undefined,
+      production: false,
+    });
+    const ask = (id: string, text: string) =>
+      bot.handle({
+        provider: 'feishu',
+        messageId: id,
+        chatType: 'p2p',
+        senderExternalId: BOUND.emp_njl_1,
+        text,
+      });
+    const first = await ask('follow-1', '10 月 8 日请一天事假，家里有事');
+    expect(first.handledBy).toBe('hrAssistant');
+    // Routed on its own, this goes elsewhere; as a follow-up it stays, in the same conversation.
+    const again = await ask('follow-2', '那张已经撤销了，请重新起草');
+    expect(again.handledBy).toBe('hrAssistant');
+    expect(turns[1]).toMatchObject({
+      employee: 'hrAssistant',
+      sessionId: 'session-hrAssistant',
+    });
+    // A new topic is routed afresh.
+    const policy = await ask('follow-3', '夜班津贴多少');
+    expect(policy.handledBy).not.toBe('hrAssistant');
+  });
+
   it('refuses to draft a card for a field the employee cannot change', async () => {
     await expect(
       (await channel()).draftProfileChange(await userIdOf('emp_njl_1'), {

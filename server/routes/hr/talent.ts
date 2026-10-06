@@ -66,6 +66,25 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
               active: p.active,
               jobFamilyId: p.jobFamilyId,
             }));
+      // The departments this user works with: those of the employees they may list, with their parents so
+      // the tree reads correctly. Department pickers (排班、考勤) offer only these: a head saw all twelve,
+      // although the data behind the others was empty. Absent for someone who lists no employees.
+      let scopeDepartmentIds: string[] | undefined;
+      try {
+        const visible = await talent.listEmployees(ctx, {});
+        const parentOf = new Map(tree.map((d) => [d.id, d.parentId]));
+        const scope = new Set<string>();
+        for (const employee of visible.items)
+          for (
+            let id: string | null | undefined = employee.departmentId;
+            id && !scope.has(id);
+            id = parentOf.get(id)
+          )
+            scope.add(id);
+        scopeDepartmentIds = [...scope];
+      } catch (error) {
+        if (!(error instanceof HrError) || error.status !== 403) throw error;
+      }
       return c.json({
         data: {
           departments: tree.map((d) => ({
@@ -76,6 +95,7 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
             active: d.active,
           })),
           positions,
+          ...(scopeDepartmentIds ? { scopeDepartmentIds } : {}),
         },
       });
     });
