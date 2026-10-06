@@ -64,6 +64,11 @@ export const departedRoutes: AppApiRouteContribution<Application> =
         data: await departed().confirmTemplate(actor(c), await readJson(c)),
       }),
     );
+    guarded.get('/may-send/:document', async (c) =>
+      c.json({
+        data: await departed().maySend(actor(c), c.req.param('document')),
+      }),
+    );
     guarded.get('/income/:employeeId', async (c) =>
       c.json({
         data: await departed().incomePreview(

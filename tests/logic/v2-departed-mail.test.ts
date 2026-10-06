@@ -357,6 +357,19 @@ describe('离职员工的邮件往来 (V1-02 V2 增补)', () => {
     expect(
       (await call('hr01', 'POST', `/mail/messages/${draft.id}/send`)).json.code,
     ).toBe('DOCUMENT_PAYROLL_ONLY');
+    // The editor offers sending only to the role the document belongs to.
+    expect(
+      (await call('hr01', 'GET', '/departed/may-send/incomeCertificate')).json
+        .data.canSend,
+    ).toBe(false);
+    expect(
+      (await call('payroll01', 'GET', '/departed/may-send/incomeCertificate'))
+        .json.data.canSend,
+    ).toBe(true);
+    expect(
+      (await call('hr01', 'GET', '/departed/may-send/separationCertificate'))
+        .json.data.canSend,
+    ).toBe(true);
     const income = await call(
       'payroll01',
       'GET',

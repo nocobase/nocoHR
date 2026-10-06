@@ -8,7 +8,7 @@
  */
 import { useTranslation } from '@nocobase/i18n/client';
 import { FileTextIcon } from 'lucide-react';
-import { useState, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 
 import { errorMessage, isForbidden } from '@/components/talent/errors';
 import { useRemote } from '@/components/talent/use-remote';
@@ -131,11 +131,24 @@ function IncomePreview({
 /** Which document a reply draft carries, and that its link is made on send. */
 export function MailDocumentProposal({
   message,
+  onSendable,
 }: {
   message: MailMessage;
+  /** Told whether the viewer may send this document, so the editor offers sending only to them. */
+  onSendable?: (sendable: boolean) => void;
 }): ReactElement | null {
   const { t } = useTranslation();
   const proposal = documentProposal(message);
+  const allowed = useRemote<{ canSend: boolean }>(
+    proposal
+      ? `talent/departed/may-send/${encodeURIComponent(proposal.document)}`
+      : null,
+  );
+  const sendable = allowed.data ? allowed.data.canSend : !allowed.error;
+  const hasProposal = proposal !== null;
+  useEffect(() => {
+    if (hasProposal) onSendable?.(sendable);
+  }, [hasProposal, sendable, onSendable]);
   if (!proposal) return null;
   const amounts =
     proposal.document === 'incomeCertificate' ||
@@ -150,7 +163,13 @@ export function MailDocumentProposal({
       </p>
       <p className='text-muted-foreground'>
         {t('mail.document.linkOnSend')}{' '}
-        {amounts ? t('mail.document.payrollSends') : t('mail.document.hrSends')}
+        {sendable
+          ? amounts
+            ? t('mail.document.payrollSends')
+            : t('mail.document.hrSends')
+          : amounts
+            ? t('mail.document.notYoursPayroll')
+            : t('mail.document.notYoursHr')}
       </p>
       {proposal.document === 'incomeCertificate' ? (
         <IncomePreview employeeId={proposal.employeeId} />

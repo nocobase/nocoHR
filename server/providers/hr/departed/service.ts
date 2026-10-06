@@ -40,6 +40,7 @@ import {
   incomeCertificate,
   payslip,
   separationCertificate,
+  DOCUMENT_KINDS,
   type DocumentKind,
   type IncomeMonth,
   type PersonFacts,
@@ -584,6 +585,16 @@ export function createDepartedMail(deps: {
         confirmedBy: ctx.userId,
       });
       return template();
+    },
+    /** Whether the caller may send a reply carrying this document (payroll for amounts, else HR administrators). */
+    async maySend(ctx: ActorContext, document: string) {
+      if (!(DOCUMENT_KINDS as readonly string[]).includes(document))
+        throw new HrError('INVALID_INPUT', 400);
+      const amounts =
+        document === 'incomeCertificate' || document === 'payslip';
+      return {
+        canSend: amounts ? await canPay(ctx) : await canAdminister(ctx),
+      };
     },
     /** Payroll previews the income a certificate would state (never HR administrators). */
     async incomePreview(ctx: ActorContext, employeeId: string) {

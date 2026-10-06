@@ -273,6 +273,8 @@ const en = {
         linkOnSend:
           'The document and its link are made when you send: the link replaces “【文件链接在发送时生成】”, is valid for 7 days and opens with a code sent to the registered personal email.',
         hrSends: 'An HR administrator sends it.',
+        notYoursPayroll: 'You can read this draft; payroll confirms the amounts and sends it.',
+        notYoursHr: 'You can read this draft; an HR administrator sends it.',
         payrollSends:
           'It states pay, so payroll checks the amounts and sends it.',
         showAmounts: 'Show amounts',
@@ -973,6 +975,8 @@ const zh: Shape = {
         linkOnSend:
           '文件和链接在发送时生成：链接替换正文中的“【文件链接在发送时生成】”，7 天内有效，打开时需输入发到登记个人邮箱的验证码。',
         hrSends: '由 HR 管理员确认后发送。',
+        notYoursPayroll: '你可以查看这份草稿；由薪酬专员确认金额后发送。',
+        notYoursHr: '你可以查看这份草稿；由 HR 管理员发送。',
         payrollSends: '含薪资，由薪酬专员确认金额后发送。',
         showAmounts: '查看金额',
         hideAmounts: '收起金额',
