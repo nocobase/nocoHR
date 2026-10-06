@@ -67,6 +67,14 @@ export interface MailMessage {
  * threads every message; the handler decides who may see it and what a new or
  * replying message means for its records.
  */
+/** A record unsorted mail can be linked to by hand. */
+export interface MailLinkTarget {
+  readonly refType: string;
+  readonly refId: string;
+  readonly label: string;
+  readonly hint: string | null;
+}
+
 export interface MailHandler {
   /** Whether the user may read this purpose's mail. */
   canView(ctx: ActorContext): Promise<boolean>;
@@ -78,6 +86,20 @@ export interface MailHandler {
    * message is visible when a step leaves this out.
    */
   canSee?(ctx: ActorContext, mail: MailMessage): Promise<boolean>;
+  /**
+   * 待归类 · 挂到单据 (V2-06): the records a person may link this purpose's
+   * unsorted mail to, matching `query` (empty: the recent ones). A step that
+   * leaves this out offers no manual link.
+   */
+  linkTargets?(ctx: ActorContext, query: string): Promise<MailLinkTarget[]>;
+  /** The one record a manual link names, if the person may link to it. */
+  linkTarget?(
+    ctx: ActorContext,
+    refType: string,
+    refId: string,
+  ): Promise<MailLinkTarget | null>;
+  /** After a manual link: draft the step's own reply; answers whether it drafted one. */
+  onLinked?(ctx: ActorContext, mail: MailMessage): Promise<boolean>;
   /** Users notified about new mail of this purpose. */
   recipients(): Promise<string[]>;
   /**

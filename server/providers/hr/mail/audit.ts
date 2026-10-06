@@ -1052,6 +1052,30 @@ export function createAuditMail(deps: {
         await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.audit, 'send'),
       );
     },
+    // 待归类 · 挂到单据: an audit request (a customer's follow-up that lost its thread).
+    async linkTargets(ctx, query) {
+      return (await service.list(ctx))
+        .filter((r) => !query || r.customerName.includes(query))
+        .slice(0, 20)
+        .map((r) => ({
+          refType: 'auditRequest',
+          refId: r.id,
+          label: r.customerName,
+          hint: r.dueDate,
+        }));
+    },
+    async linkTarget(ctx, refType, refId) {
+      if (refType !== 'auditRequest') return null;
+      const request = await service.get(ctx, refId).catch(() => null);
+      return request
+        ? {
+            refType,
+            refId: request.id,
+            label: request.customerName,
+            hint: request.dueDate,
+          }
+        : null;
+    },
     recipients: deps.reviewers,
     onUnmatched: sort,
     onReply: reply,

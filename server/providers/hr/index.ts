@@ -547,6 +547,13 @@ export default class HrProvider extends ServiceProvider<Application> {
         mail: () => container.resolve(pluginMailServiceToken),
         localProvider: production ? null : 'local',
         // A mailbox connected automatically belongs to the owner of its sorting task, else a holder of its role.
+        userName: async (id) =>
+          (
+            await container
+              .resolve(userAdministrationServiceToken)
+              .get(id)
+              .catch(() => undefined)
+          )?.name ?? null,
         defaultOwner: async (purpose) => {
           const task = {
             billing: 'hrAssistant.mailSortBilling',
@@ -818,6 +825,112 @@ export default class HrProvider extends ServiceProvider<Application> {
           },
         },
         postingFacts: async (postingId) => {
+        linkables: async (userId, query) => {
+          const db = container.resolve(databaseManagerToken).query();
+          let applications = db
+            .selectFrom('applications')
+            .innerJoin(
+              'candidates',
+              'candidates.id',
+              'applications.candidateId',
+            )
+            .innerJoin(
+              'jobPostings',
+              'jobPostings.id',
+              'applications.postingId',
+            )
+            .innerJoin(
+              'jobRequisitions',
+              'jobRequisitions.id',
+              'jobPostings.requisitionId',
+            )
+            .select([
+              'applications.id as id',
+              'applications.stage as stage',
+              'candidates.name as name',
+              'jobPostings.title as title',
+            ])
+            .where('jobRequisitions.recruiterUserId', '=', userId)
+            .where('candidates.anonymizedAt', 'is', null);
+          if (query)
+            applications = applications.where((eb) =>
+              eb.or([
+                eb('candidates.name', 'like', `%${query}%`),
+                eb('jobPostings.title', 'like', `%${query}%`),
+              ]),
+            );
+          let postings = db
+            .selectFrom('jobPostings')
+            .innerJoin(
+              'jobRequisitions',
+              'jobRequisitions.id',
+              'jobPostings.requisitionId',
+            )
+            .select(['jobPostings.id as id', 'jobPostings.title as title'])
+            .where('jobRequisitions.recruiterUserId', '=', userId)
+            .where('jobPostings.status', '=', 'published');
+          if (query)
+            postings = postings.where(
+              'jobPostings.title',
+              'like',
+              `%${query}%`,
+            );
+          return [
+            ...(await postings.limit(10).execute()).map((p) => ({
+              refType: 'jobPosting',
+              refId: str(p.id),
+              label: str(p.title),
+              hint: 'posting',
+            })),
+            ...(
+              await applications
+                .orderBy('applications.updatedAt', 'desc')
+                .limit(20)
+                .execute()
+            ).map((a) => ({
+              refType: 'application',
+              refId: str(a.id),
+              label: `${str(a.name)} · ${str(a.title)}`,
+              hint: null,
+            })),
+          ];
+        },
+        linkable: async (userId, refType, refId) => {
+          const services = recruiting();
+          if (refType === 'jobPosting') {
+            const posting = await services.postings
+              .get(refId)
+              .catch(() => null);
+            if (!posting || posting.status !== 'published') return null;
+            const requisition = await services.requisitions.get(
+              posting.requisitionId,
+            );
+            return requisition.recruiterUserId === userId
+              ? { refType, refId, label: posting.title, hint: 'posting' }
+              : null;
+          }
+          if (refType !== 'application') return null;
+          const application = await services.candidates
+            .applicationRow(refId)
+            .catch(() => null);
+          if (!application) return null;
+          const posting = await services.postings.get(application.postingId);
+          const requisition = await services.requisitions.get(
+            posting.requisitionId,
+          );
+          if (requisition.recruiterUserId !== userId) return null;
+          const candidate = await services.candidates.candidateRow(
+            application.candidateId,
+          );
+          return candidate.anonymizedAt
+            ? null
+            : {
+                refType,
+                refId,
+                label: `${candidate.name} · ${posting.title}`,
+                hint: null,
+              };
+        },
           const posting = await recruiting()
             .postings.get(postingId)
             .catch(() => null);

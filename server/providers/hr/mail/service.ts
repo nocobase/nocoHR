@@ -168,6 +168,8 @@ export interface MailServiceDeps {
     path: string;
   }) => Promise<void>;
   readonly log: (fields: Record<string, unknown>, message: string) => void;
+  /** A user's name, for the note a manual link leaves on the message. */
+  readonly userName?: (userId: string) => Promise<string | null>;
 }
 
 export function createMailService(deps: MailServiceDeps) {
@@ -916,6 +918,70 @@ export function createMailService(deps: MailServiceDeps) {
         .where('id', '=', id)
         .execute();
       await handlerFor(purpose).onUnmatched(await row(id), randomUUID());
+      return row(id);
+    },
+
+    /** 待归类 · 挂到单据: the records this purpose's unsorted mail may be linked to. */
+    async linkTargets(ctx: ActorContext, purpose: MailPurpose, query: unknown) {
+      await requireView(ctx, purpose);
+      await requireAssign(ctx, purpose);
+      const handler = handlerFor(purpose);
+      if (!handler.linkTargets) return [];
+      return (
+        await handler.linkTargets(
+          ctx,
+          typeof query === 'string' ? query.trim().slice(0, 50) : '',
+        )
+      ).slice(0, 20);
+    },
+
+    /**
+     * 待归类 · 挂到单据 (V2-06): a person links an unsorted message to a record
+     * the AI could not find. The step then drafts its own reply when it has
+     * one (a candidate's question answered from the posting); otherwise a
+     * plain reply draft waits for the person to write.
+     */
+    async linkManually(ctx: ActorContext, id: string, input: unknown) {
+      const mail = await service.get(ctx, id);
+      await requireAssign(ctx, mail.mailbox);
+      if (mail.direction !== 'inbound' || mail.status !== 'unmatched')
+        throw new HrError('INVALID_INPUT', 400);
+      const { refType, refId } = (input ?? {}) as {
+        refType?: unknown;
+        refId?: unknown;
+      };
+      const handler = handlerFor(mail.mailbox);
+      const target =
+        typeof refType === 'string' && typeof refId === 'string'
+          ? await handler.linkTarget?.(ctx, refType, refId)
+          : null;
+      if (!target) throw new HrError('MAIL_LINK_TARGET_INVALID', 400);
+      const name = (await deps.userName?.(ctx.userId)) ?? '';
+      await service.link({
+        id,
+        refType: target.refType,
+        refId: target.refId,
+        summary: `${mail.aiSummary ? `${mail.aiSummary} ` : ''}${name}已手工挂到「${target.label}」。`,
+      });
+      const drafted = handler.onLinked
+        ? await handler.onLinked(ctx, await row(id))
+        : false;
+      if (!drafted) {
+        const open = await database
+          .query()
+          .selectFrom('businessMailMessages')
+          .select(['id'])
+          .where('draftOf', '=', id)
+          .where('status', '=', 'draft')
+          .executeTakeFirst();
+        if (!open) {
+          const settings = (await deps.settings.read()).value;
+          await service.draftReply({
+            replyTo: id,
+            body: ['你好：', '', '', settings.senderName].join('\n'),
+          });
+        }
+      }
       return row(id);
     },
 

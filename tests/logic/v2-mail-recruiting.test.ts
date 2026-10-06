@@ -928,4 +928,65 @@ describe('招聘邮箱 (V2-07)', () => {
       'DELETION_LINK_INVALID',
     );
   });
+
+  it('links an unsorted question to a posting by hand and answers it from the posting', async () => {
+    const inquiry = (
+      (
+        await call(
+          'recruit01',
+          'GET',
+          '/mail/messages?mailbox=recruiting&status=unmatched',
+        )
+      ).json.data as Json[]
+    ).find((m) => m.subject === '咨询')!;
+    expect(inquiry).toBeTruthy();
+    const targets = (
+      await call(
+        'recruit01',
+        'GET',
+        '/mail/link-targets?mailbox=recruiting&q=CNC',
+      )
+    ).json.data as Json[];
+    const posting = targets.find(
+      (t) => t.refType === 'jobPosting' && t.refId === 'post-cd-cnc-lastyear',
+    )!;
+    expect(posting).toBeTruthy();
+    // Only a record the recruiter may link to.
+    expect(
+      (
+        await call('recruit01', 'POST', `/mail/messages/${inquiry.id}/link`, {
+          refType: 'jobPosting',
+          refId: 'no-such-posting',
+        })
+      ).json.code,
+    ).toBe('MAIL_LINK_TARGET_INVALID');
+    const linked = await call(
+      'recruit01',
+      'POST',
+      `/mail/messages/${inquiry.id}/link`,
+      { refType: posting.refType, refId: posting.refId },
+    );
+    expect(linked.status).toBe(200);
+    expect(linked.json.data).toMatchObject({
+      status: 'linked',
+      refType: 'jobPosting',
+      refId: 'post-cd-cnc-lastyear',
+    });
+    expect(linked.json.data.aiSummary).toContain('已手工挂到');
+    const thread = await eventually(
+      async () =>
+        (
+          await call(
+            'recruit01',
+            'GET',
+            '/mail/by-record/jobPosting/post-cd-cnc-lastyear?mailbox=recruiting',
+          )
+        ).json.data as Json[],
+      (items) => items?.some((m) => m.status === 'draft'),
+    );
+    const draft = thread.find((m) => m.status === 'draft')!;
+    expect(draft.to).toEqual(['heyu1998@mail.test']);
+    expect(draft.bodyText).toContain('正在招聘');
+    expect(draft.bodyText).toContain('成都工厂');
+  });
 });

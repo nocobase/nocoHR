@@ -507,6 +507,39 @@ export function createDepartedMail(deps: {
       const about = typeof document === 'string' ? document : mail.aiIntent;
       return Boolean(about && PAY_DOCUMENTS.has(about));
     },
+    // 待归类 · 挂到单据: an employee (those who sort the 人事邮箱 are HR administrators).
+    async linkTargets(_ctx, query) {
+      let q = database
+        .query()
+        .selectFrom('employees')
+        .select(['id', 'name', 'employeeNo', 'status']);
+      if (query)
+        q = q.where((eb) =>
+          eb.or([
+            eb('name', 'like', `%${query}%`),
+            eb('employeeNo', 'like', `%${query}%`),
+          ]),
+        );
+      const rows = await q.orderBy('employeeNo', 'asc').limit(20).execute();
+      return rows.map((r) => ({
+        refType: 'employee',
+        refId: str(r.id),
+        label: `${str(r.name)}（${str(r.employeeNo)}）`,
+        hint: str(r.status) === 'leave' ? 'departed' : null,
+      }));
+    },
+    async linkTarget(_ctx, refType, refId) {
+      if (refType !== 'employee') return null;
+      const r = await employee(refId);
+      return r
+        ? {
+            refType,
+            refId,
+            label: `${str(r.name)}（${str(r.employeeNo)}）`,
+            hint: str(r.status) === 'leave' ? 'departed' : null,
+          }
+        : null;
+    },
     async recipients() {
       return deps.holdersOf('hr.admin');
     },

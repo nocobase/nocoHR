@@ -27,7 +27,7 @@ import { HrError } from '../shared.js';
 import type { MailService } from './service.js';
 import type { MailSettingsService } from './settings.js';
 import { MAIL_RESOURCE } from './resources.js';
-import type { MailHandler, MailMessage } from './types.js';
+import type { MailHandler, MailLinkTarget, MailMessage } from './types.js';
 
 export const MAIL_SORT_RECRUITING = 'recruitingAssistant.mailSortRecruiting';
 export const MAIL_REPLY_RECRUITING = 'recruitingAssistant.mailReplyRecruiting';
@@ -283,6 +283,10 @@ export function answerFromPosting(
   posting: PostingFacts,
 ): { lines: string[]; open: string[] } {
   const lines: string[] = [];
+  if (/招人|招聘|还要人|缺人|空缺|在招/u.test(question))
+    lines.push(
+      `「${posting.title}」正在招聘${posting.location ? `，工作地点是${posting.location}` : ''}。欢迎直接回复本邮件附上简历。`,
+    );
   if (/地点|地址|在哪|哪里|位置|城市/u.test(question) && posting.location)
     lines.push(`「${posting.title}」的工作地点是${posting.location}。`);
   if (
@@ -348,6 +352,14 @@ export function createRecruitingMailHandler(deps: {
   }) => Promise<'sent' | 'channelNotConfigured' | 'failed'>;
   /** Whether this address had a receipt in the last days. */
   receiptSince: (address: string, since: Date) => Promise<boolean>;
+  /** 待归类 · 挂到单据: the user's own applications and published postings matching a query. */
+  linkables: (userId: string, query: string) => Promise<MailLinkTarget[]>;
+  /** One of them by its reference, if it is the user's. */
+  linkable: (
+    userId: string,
+    refType: string,
+    refId: string,
+  ) => Promise<MailLinkTarget | null>;
   /** What the posting says, for answering a candidate's question. */
   postingFacts: (postingId: string) => Promise<PostingFacts | null>;
   /** The recruiting assistant's structured answer; throws AIUnavailableError without a model. */
@@ -645,6 +657,33 @@ export function createRecruitingMailHandler(deps: {
     };
   }
 
+  /** 挂到职位后回复: the question answered from the posting, for the recruiter to send. */
+  async function answerPosting(message: MailMessage, postingId: string) {
+    await deps.run(
+      MAIL_REPLY_RECRUITING,
+      {
+        dedupeKey: `${message.id}:posting:${postingId}`,
+        triggerRef: { mailId: message.id, postingId },
+      },
+      async (run) => {
+        const facts = await deps.postingFacts(postingId);
+        if (!facts) return { status: 'skipped' as const };
+        const settings = (await deps.settings.read()).value;
+        const answer = await answerQuestion(
+          run,
+          `${message.subject}\n${message.bodyText ?? ''}`.slice(0, 2000),
+          facts,
+        );
+        const draft = await mail.draftReply({
+          replyTo: message.id,
+          body: ['你好：', '', answer.text, '', settings.senderName].join('\n'),
+        });
+        run.summarize(`按职位「${facts.title}」起草了回复`);
+        return { output: { mailId: message.id, postingId, draftId: draft.id } };
+      },
+    );
+  }
+
   async function reply(message: MailMessage) {
     if (message.refType !== 'application' || !message.refId) return;
     const applicationId = message.refId;
@@ -798,6 +837,9 @@ export function createRecruitingMailHandler(deps: {
      */
     async canSee(ctx: ActorContext, mail: MailMessage) {
       if (!mail.refType || !mail.refId) return true;
+      // Linked by hand to a posting (“请问你们还招人吗”): its recruiter's.
+      if (mail.refType === 'jobPosting')
+        return (await deps.recruiterOf(mail.refId)) === ctx.userId;
       if (mail.refType !== 'application') return false;
       let owners = recruiterCache.get(ctx);
       if (!owners)
@@ -811,6 +853,25 @@ export function createRecruitingMailHandler(deps: {
         owners.set(mail.refId, owner);
       }
       return owner === ctx.userId;
+    },
+    // 待归类 · 挂到单据: the recruiter's own applications and published postings.
+    async linkTargets(ctx, query) {
+      return deps.linkables(ctx.userId, query);
+    },
+    async linkTarget(ctx, refType, refId) {
+      return deps.linkable(ctx.userId, refType, refId);
+    },
+    /** A candidate's mail is handled as their reply; a question about a posting is answered from it. */
+    async onLinked(_ctx, mail) {
+      if (mail.refType === 'application') {
+        await reply(mail);
+        return true;
+      }
+      if (mail.refType === 'jobPosting' && mail.refId) {
+        await answerPosting(mail, mail.refId);
+        return true;
+      }
+      return false;
     },
     recipients: deps.recruiters,
     onUnmatched: sort,

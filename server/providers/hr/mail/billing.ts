@@ -36,6 +36,11 @@ interface BillServices {
     actor: ActorContext,
     id: string,
   ): Promise<{ id: string; vendorName: string; month: string; status: string }>;
+  list(
+    actor: ActorContext,
+  ): Promise<
+    readonly { id: string; vendorName: string; month: string; status: string }[]
+  >;
   reconciliationFor(
     actor: ActorContext,
     id: string,
@@ -300,6 +305,37 @@ export function createBillingMailHandler(deps: {
       return Boolean(
         await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.billing, 'send'),
       );
+    },
+    // 待归类 · 挂到单据: a staffing agency's bill (vendor and month).
+    async linkTargets(ctx, query) {
+      const bills = await deps.bills().list(ctx);
+      return bills
+        .filter(
+          (b) =>
+            !query || b.vendorName.includes(query) || b.month.includes(query),
+        )
+        .slice(0, 20)
+        .map((b) => ({
+          refType: 'laborVendorBill',
+          refId: b.id,
+          label: `${b.vendorName} ${b.month}`,
+          hint: null,
+        }));
+    },
+    async linkTarget(ctx, refType, refId) {
+      if (refType !== 'laborVendorBill') return null;
+      const bill = await deps
+        .bills()
+        .get(ctx, refId)
+        .catch(() => null);
+      return bill
+        ? {
+            refType,
+            refId: bill.id,
+            label: `${bill.vendorName} ${bill.month}`,
+            hint: null,
+          }
+        : null;
     },
     recipients: deps.payrollUsers,
     onUnmatched: sort,

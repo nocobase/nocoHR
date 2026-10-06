@@ -35,6 +35,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
+import { LinkRecordButton } from './link-record.js';
 import { ReceiptTemplateControl } from './receipt-template.js';
 
 const FILTERS = ['all', 'unmatched', 'drafts'] as const;
@@ -341,6 +342,14 @@ export default function MailPage(): ReactElement {
                     <Button variant='outline' onClick={() => void resort(open)}>
                       {t('mail.resort')}
                     </Button>
+                    <LinkRecordButton
+                      message={open}
+                      mailbox={open.mailbox}
+                      onLinked={() => {
+                        messages.reload();
+                        mailboxes.reload();
+                      }}
+                    />
                     <Button variant='outline' onClick={() => void ignore(open)}>
                       {t('mail.ignore')}
                     </Button>

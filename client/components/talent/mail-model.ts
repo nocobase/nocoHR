@@ -79,6 +79,8 @@ export function recordPath(message: MailMessage): string | null {
     return `/talent/employees/${encodeURIComponent(message.refId)}`;
   if (message.refType === 'application')
     return `/talent/candidates/${encodeURIComponent(message.refId)}`;
+  if (message.refType === 'jobPosting')
+    return `/talent/postings/${encodeURIComponent(message.refId)}`;
   return null;
 }
 

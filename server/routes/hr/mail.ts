@@ -134,6 +134,25 @@ export const mailRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
     routes.post('/messages/:id/resort', async (c) =>
       c.json({ data: await mail().resort(actor(c), c.req.param('id')) }),
     );
+    // 待归类 · 挂到单据: the records to choose from, and the link.
+    routes.get('/link-targets', async (c) =>
+      c.json({
+        data: await mail().linkTargets(
+          actor(c),
+          purposeOf(c.req.query('mailbox')),
+          c.req.query('q'),
+        ),
+      }),
+    );
+    routes.post('/messages/:id/link', async (c) =>
+      c.json({
+        data: await mail().linkManually(
+          actor(c),
+          c.req.param('id'),
+          await readJson(c),
+        ),
+      }),
+    );
     routes.post('/messages/:id/transfer', async (c) => {
       const body = (await readJson(c)) as { mailbox?: unknown } | null;
       return c.json({

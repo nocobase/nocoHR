@@ -516,6 +516,61 @@ describe('对账邮箱 (V2-06)', () => {
     expect(again.json.data.refType).toBe('laborVendorBill');
   });
 
+  it('links an unsorted message to a bill by hand, leaving a reply for the person to write', async () => {
+    drop(
+      '05-note.eml',
+      composeMail({
+        from: { name: '蜀南劳务 财务', address: 'finance@shunan-labor.test' },
+        to: 'billing@qiheng.test',
+        subject: '关于上月的工时',
+        text: '你好，上月两位同事的工时我们核对过了，有疑问请联系。',
+        date: new Date(),
+      }),
+    );
+    await call('payroll01', 'POST', '/mail/poll?mailbox=billing');
+    const note = (
+      (
+        await call(
+          'payroll01',
+          'GET',
+          '/mail/messages?mailbox=billing&status=unmatched',
+        )
+      ).json.data as Json[]
+    ).find((m) => m.subject === '关于上月的工时')!;
+    expect(note).toBeTruthy();
+    // hr01 cannot open the billing mailbox at all.
+    expect(
+      (await call('hr01', 'GET', '/mail/link-targets?mailbox=billing')).status,
+    ).toBe(404);
+    const targets = (
+      await call('payroll01', 'GET', '/mail/link-targets?mailbox=billing')
+    ).json.data as Json[];
+    const bill = targets.find((t) => t.refId === billId)!;
+    expect(bill).toMatchObject({ refType: 'laborVendorBill' });
+    const linked = await call(
+      'payroll01',
+      'POST',
+      `/mail/messages/${note.id}/link`,
+      { refType: 'laborVendorBill', refId: billId },
+    );
+    expect(linked.json.data).toMatchObject({
+      status: 'linked',
+      refType: 'laborVendorBill',
+      refId: billId,
+    });
+    const thread = (
+      await call(
+        'payroll01',
+        'GET',
+        `/mail/by-record/laborVendorBill/${billId}?mailbox=billing`,
+      )
+    ).json.data as Json[];
+    const draft = thread.find(
+      (m) => m.status === 'draft' && m.to[0] === 'finance@shunan-labor.test',
+    )!;
+    expect(draft.bodyText.startsWith('你好：')).toBe(true);
+  });
+
   it('lets a person ignore a message waiting to be sorted', async () => {
     const list = await call(
       'payroll01',
