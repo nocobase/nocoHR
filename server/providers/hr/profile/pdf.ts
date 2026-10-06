@@ -57,7 +57,9 @@ export function wrap(text: string, size: number, width: number): string[] {
 function hex(text: string): string {
   let out = '';
   for (const char of text) {
-    const code = char.codePointAt(0) ?? 63;
+    // STSong-Light's UniGB-UCS2-H maps the middle dot U+00B7 to a triangle in
+    // common viewers (macOS Preview); U+30FB is the same dot and renders as one.
+    const code = char === '\u00b7' ? 0x30fb : (char.codePointAt(0) ?? 63);
     out += (code > 0xffff ? 63 : code).toString(16).padStart(4, '0');
   }
   return out;
@@ -209,8 +211,11 @@ export function pdfText(bytes: Uint8Array): string {
   const parts: string[] = [];
   for (const match of source.matchAll(/<([0-9a-f]+)> Tj/gu)) {
     let text = '';
-    for (let i = 0; i + 4 <= match[1].length; i += 4)
-      text += String.fromCharCode(parseInt(match[1].slice(i, i + 4), 16));
+    for (let i = 0; i + 4 <= match[1].length; i += 4) {
+      const code = parseInt(match[1].slice(i, i + 4), 16);
+      // hex() writes the middle dot as U+30FB; read it back as written.
+      text += code === 0x30fb ? '\u00b7' : String.fromCharCode(code);
+    }
     parts.push(text);
   }
   return parts.join('\n');
