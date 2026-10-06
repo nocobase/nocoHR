@@ -42,6 +42,7 @@ import type { AuditRisk, AuditScope } from '../profile/audit.js';
 import { HrError, newId, str } from '../shared.js';
 import type { MailService } from './service.js';
 import type { MailSettingsService } from './settings.js';
+import { MAIL_RESOURCE } from './resources.js';
 import type { MailHandler, MailMessage } from './types.js';
 
 export const MAIL_SORT_AUDIT = 'certificationSteward.mailSortAudit';
@@ -1040,11 +1041,16 @@ export function createAuditMail(deps: {
   // ---------- The mailbox ----------
 
   const handler: MailHandler = {
+    // 按邮箱用途授权 (mail/resources.ts): the 审核邮箱 is talent.mailAudit; sending a reply also needs share (prepareSend).
     async canView(ctx) {
-      return Boolean(await tryAuthorizeAction(ctx.authz, RESOURCE, 'view'));
+      return Boolean(
+        await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.audit, 'view'),
+      );
     },
     async canSend(ctx) {
-      return Boolean(await tryAuthorizeAction(ctx.authz, RESOURCE, 'share'));
+      return Boolean(
+        await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.audit, 'send'),
+      );
     },
     recipients: deps.reviewers,
     onUnmatched: sort,

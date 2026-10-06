@@ -18,6 +18,7 @@ import type { ReconciliationLine } from '../payroll/vendor-bills.js';
 import { HrError } from '../shared.js';
 import type { MailService } from './service.js';
 import type { MailSettingsService } from './settings.js';
+import { MAIL_RESOURCE } from './resources.js';
 import type { MailHandler, MailMessage } from './types.js';
 
 export const MAIL_SORT_BILLING = 'hrAssistant.mailSortBilling';
@@ -289,14 +290,15 @@ export function createBillingMailHandler(deps: {
   }
 
   const handler: MailHandler = {
+    // 按邮箱用途授权 (mail/resources.ts): the 对账邮箱 is talent.mailBilling.
     async canView(ctx) {
       return Boolean(
-        await tryAuthorizeAction(ctx.authz, 'talent.vendorBill', 'view'),
+        await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.billing, 'view'),
       );
     },
     async canSend(ctx) {
       return Boolean(
-        await tryAuthorizeAction(ctx.authz, 'talent.vendorBill', 'upload'),
+        await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.billing, 'send'),
       );
     },
     recipients: deps.payrollUsers,

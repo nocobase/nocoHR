@@ -30,6 +30,7 @@ import type { ActorContext } from '../framework-service.js';
 import type { JobEvent } from '../job-events.js';
 import type { MailService } from '../mail/service.js';
 import type { MailSettingsService } from '../mail/settings.js';
+import { MAIL_RESOURCE } from '../mail/resources.js';
 import type { MailHandler, MailMessage } from '../mail/types.js';
 import { PERSONNEL_SETTINGS_AUTH } from '../personnel-settings.js';
 import { HrError, str } from '../shared.js';
@@ -486,19 +487,25 @@ export function createDepartedMail(deps: {
   const PAY_DOCUMENTS = new Set<string>(['incomeCertificate', 'payslip']);
 
   const handler: MailHandler = {
+    // 按邮箱用途授权 (mail/resources.ts): the 人事邮箱 is talent.mailHr.
     async canView(ctx) {
-      return (await canAdminister(ctx)) || (await canPay(ctx));
+      return Boolean(
+        await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.hr, 'view'),
+      );
     },
     async canSend(ctx) {
-      return (await canAdminister(ctx)) || (await canPay(ctx));
+      return Boolean(
+        await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.hr, 'send'),
+      );
     },
-    // HR administrators see the whole mailbox; payroll only the mail about pay (收入证明, 工资条).
+    // Those who sort the mailbox (assign: HR administrators) see all of it; payroll only the mail about pay.
     async canSee(ctx, mail) {
-      if (await canAdminister(ctx)) return true;
+      if (await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.hr, 'assign'))
+        return true;
       const document = (mail.proposal as { document?: unknown } | null)
         ?.document;
       const about = typeof document === 'string' ? document : mail.aiIntent;
-      return Boolean(about && PAY_DOCUMENTS.has(about)) && (await canPay(ctx));
+      return Boolean(about && PAY_DOCUMENTS.has(about));
     },
     async recipients() {
       return deps.holdersOf('hr.admin');

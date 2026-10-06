@@ -4930,6 +4930,7 @@ const enUS = {
     },
   },
   collections: {
+    businessMailMessages: 'Business mail',
     // V3-11
     ...profileAdditions.en.collections,
     // V3-08
@@ -5140,6 +5141,15 @@ const enUS = {
       framework: 'Framework',
       people: 'People',
       hrCore: 'Core HR',
+    },
+    // 邮件往来, one composite per mailbox purpose (server/providers/hr/mail/resources.ts).
+    mail: {
+      billing: 'Billing mailbox',
+      recruiting: 'Recruiting mailbox',
+      audit: 'Audit mailbox',
+      hr: 'HR mailbox',
+      send: 'Send replies',
+      assign: 'Sort unsorted mail',
     },
     actions: {
       use: 'Use',

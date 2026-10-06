@@ -41,6 +41,8 @@ import {
   type MailPurpose,
   type MailStatus,
 } from './types.js';
+import { MAIL_RESOURCE } from './resources.js';
+import { tryAuthorizeAction } from '../authorize.js';
 
 /** Office files that can carry macros, executables and archives are never kept. */
 const ALWAYS_REJECTED =
@@ -424,6 +426,14 @@ export function createMailService(deps: MailServiceDeps) {
     for (const mail of mails)
       if (await handler.canSee(ctx, mail)) out.push(mail);
     return out;
+  }
+
+  /** 归类: sorting the unsorted mail of a purpose (talent.mail* assign). */
+  async function requireAssign(ctx: ActorContext, purpose: MailPurpose) {
+    if (
+      !(await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE[purpose], 'assign'))
+    )
+      throw new HrError('FORBIDDEN', 403);
   }
 
   async function requireSend(ctx: ActorContext, purpose: MailPurpose) {
@@ -834,7 +844,7 @@ export function createMailService(deps: MailServiceDeps) {
     /** 待归类 · 重新识别: after a cause is fixed (a sender domain added, a file problem solved), recognise it again. */
     async resort(ctx: ActorContext, id: string) {
       const mail = await service.get(ctx, id);
-      await requireSend(ctx, mail.mailbox);
+      await requireAssign(ctx, mail.mailbox);
       if (mail.direction !== 'inbound' || mail.status !== 'unmatched')
         throw new HrError('INVALID_INPUT', 400);
       await database
@@ -850,7 +860,7 @@ export function createMailService(deps: MailServiceDeps) {
     /** 待归类: a person marks a message as not needing anything. */
     async ignore(ctx: ActorContext, id: string) {
       const mail = await service.get(ctx, id);
-      await requireSend(ctx, mail.mailbox);
+      await requireAssign(ctx, mail.mailbox);
       if (mail.direction !== 'inbound') throw new HrError('INVALID_INPUT', 400);
       await database
         .query()

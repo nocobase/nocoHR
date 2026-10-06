@@ -26,6 +26,7 @@ import type { ActorContext } from '../framework-service.js';
 import { HrError } from '../shared.js';
 import type { MailService } from './service.js';
 import type { MailSettingsService } from './settings.js';
+import { MAIL_RESOURCE } from './resources.js';
 import type { MailHandler, MailMessage } from './types.js';
 
 export const MAIL_SORT_RECRUITING = 'recruitingAssistant.mailSortRecruiting';
@@ -779,14 +780,15 @@ export function createRecruitingMailHandler(deps: {
   >();
 
   const handler: MailHandler = {
+    // 按邮箱用途授权 (mail/resources.ts): the 招聘邮箱 is talent.mailRecruiting.
     async canView(ctx: ActorContext) {
       return Boolean(
-        await tryAuthorizeAction(ctx.authz, 'talent.candidate', 'manage'),
+        await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.recruiting, 'view'),
       );
     },
     async canSend(ctx: ActorContext) {
       return Boolean(
-        await tryAuthorizeAction(ctx.authz, 'talent.candidate', 'manage'),
+        await tryAuthorizeAction(ctx.authz, MAIL_RESOURCE.recruiting, 'send'),
       );
     },
     /**

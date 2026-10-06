@@ -4621,6 +4621,7 @@ const zhCN: AppResource = {
     },
   },
   collections: {
+    businessMailMessages: '业务邮件',
     // V3-11
     ...profileAdditions.zh.collections,
     // V3-08
@@ -4831,6 +4832,14 @@ const zhCN: AppResource = {
       framework: '岗位能力体系',
       people: '员工与评定',
       hrCore: '核心人事',
+    },
+    mail: {
+      billing: '对账邮箱',
+      recruiting: '招聘邮箱',
+      audit: '审核邮箱',
+      hr: '人事邮箱',
+      send: '发送回复',
+      assign: '归类待归类来信',
     },
     actions: {
       use: '使用',

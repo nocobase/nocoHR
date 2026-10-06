@@ -138,6 +138,7 @@ import {
 import { createDepartedMail } from './departed/service.js';
 import { createDocumentShares } from './departed/shares.js';
 import { createAuditMail } from './mail/audit.js';
+import { MAIL_COMPOSITES } from './mail/resources.js';
 import { localMailProvider } from './mail/local-provider.js';
 import {
   createRecruitingMailHandler,
@@ -2381,6 +2382,15 @@ export default class HrProvider extends ServiceProvider<Application> {
       name: 'documentConflicts',
       title: label('collections.documentConflicts'),
     });
+    // 邮件往来: one composite per mailbox purpose (mail/resources.ts).
+    authz.database.collections.add({
+      name: 'businessMailMessages',
+      title: label('collections.businessMailMessages'),
+    });
+    for (const resource of MAIL_COMPOSITES) {
+      const reference = authz.compositeResources.define(resource.build());
+      authz.ui.place(reference, { section: 'talent', group: 'talent.hrCore' });
+    }
     for (const resource of [
       ...HR_COMPOSITES,
       documentConflictResource,
