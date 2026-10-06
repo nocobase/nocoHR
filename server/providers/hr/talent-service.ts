@@ -151,6 +151,8 @@ export interface EmployeeRecord {
   idNumber?: string | null;
   birthDate?: string | null;
   address?: string | null;
+  /** V1-02 V2 增补: sensitive; HR administrators and the person. */
+  personalEmail?: string | null;
   note?: string | null;
   /** 界面追加字段: values the caller may read, keyed by the field's internal key. */
   customFields?: Record<string, unknown>;
@@ -435,6 +437,7 @@ const BASE_FIELDS = [
   'idNumber',
   'birthDate',
   'address',
+  'personalEmail',
   'note',
 ] as const;
 
@@ -474,6 +477,7 @@ export function toEmployee(row: Record<string, unknown>): EmployeeRecord {
   if ('birthDate' in row)
     record.birthDate = toDateOnly(row.birthDate as string | null);
   if ('address' in row) record.address = opt('address');
+  if ('personalEmail' in row) record.personalEmail = opt('personalEmail');
   if ('note' in row) record.note = opt('note');
   return record;
 }
@@ -668,6 +672,8 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         employee.idNumber = row.idNumber == null ? null : str(row.idNumber);
         employee.birthDate = toDateOnly(row.birthDate as string | null);
         employee.address = row.address == null ? null : str(row.address);
+        employee.personalEmail =
+          row.personalEmail == null ? null : str(row.personalEmail);
       }
     }
     // Added fields: the record is readable (the scoped read above found it); sensitive ones need the capability.

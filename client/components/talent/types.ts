@@ -77,6 +77,8 @@ export interface Employee {
   readonly idNumber?: string | null;
   readonly birthDate?: string | null;
   readonly address?: string | null;
+  /** V1-02 V2 增补: where the employee is reached after leaving (HR administrators and the person). */
+  readonly personalEmail?: string | null;
   readonly note?: string | null;
   /** 界面追加字段: values the viewer may read, keyed by internal key. */
   readonly customFields?: Record<string, unknown>;
@@ -205,6 +207,8 @@ export interface PersonnelAction {
   readonly effectiveDate: string;
   readonly reason: string | null;
   readonly leaveReason: string | null;
+  /** V1-02 V2 增补: the contact address given on a 离职单; present only when the viewer may read it. */
+  readonly personalEmail?: string | null;
   readonly status: string;
   readonly applicantUserId: string;
   readonly applicantName: string | null;

@@ -1,6 +1,6 @@
 import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { useState, type ReactElement } from 'react';
+import { Fragment, useState, type ReactElement } from 'react';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
@@ -32,6 +32,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
+
+import { SeparationTemplateCard } from './separation-template.js';
 
 interface MailboxSettings {
   enabled: boolean;
@@ -308,124 +310,128 @@ function MailSettingsForm({
         const purpose = connection.purpose;
         const mailbox = draft.mailboxes[purpose];
         return (
-          <Card key={purpose}>
-            <CardHeader>
-              <CardTitle className='flex flex-wrap items-center gap-2'>
-                {t(`mail.purposes.${purpose}`)}
-                <Badge variant='outline'>
-                  {t(`mailSettings.adapters.${connection.adapter}`)}
-                </Badge>
-              </CardTitle>
-              <CardDescription>{connection.address}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor={`mail-account-${purpose}`}>
-                    {t('mailSettings.account')}
-                  </FieldLabel>
-                  <NativeSelect
-                    id={`mail-account-${purpose}`}
-                    value={mailbox.accountId}
-                    onChange={(e) => {
-                      const account = accounts.data?.find(
-                        (a) => a.id === e.target.value,
-                      );
-                      setMailbox(purpose, {
-                        accountId: account?.id ?? '',
-                        ownerUserId: account?.ownerUserId ?? '',
-                      });
-                    }}
-                  >
-                    <NativeSelectOption value=''>
-                      {t('mailSettings.noAccount')}
-                    </NativeSelectOption>
-                    {(accounts.data ?? []).map((a) => (
-                      <NativeSelectOption key={a.id} value={a.id}>
-                        {`${a.address}（${a.ownerName ?? a.ownerUserId}）`}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                  <FieldDescription>
-                    {t('mailSettings.accountHint')}
-                  </FieldDescription>
-                </Field>
-                <Field orientation='horizontal'>
-                  <Switch
-                    id={`mail-enabled-${purpose}`}
-                    checked={mailbox.enabled}
-                    onCheckedChange={(checked) =>
-                      setMailbox(purpose, { enabled: checked })
-                    }
-                  />
-                  <FieldLabel htmlFor={`mail-enabled-${purpose}`}>
-                    {t('mailSettings.enabled')}
-                  </FieldLabel>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor={`mail-domains-${purpose}`}>
-                    {t('mailSettings.senderDomains')}
-                  </FieldLabel>
-                  <Input
-                    id={`mail-domains-${purpose}`}
-                    value={texts[`domains.${purpose}`] ?? ''}
-                    onChange={(e) =>
-                      setTexts({
-                        ...texts,
-                        [`domains.${purpose}`]: e.target.value,
-                      })
-                    }
-                  />
-                  <FieldDescription>
-                    {t('mailSettings.senderDomainsHint')}
-                  </FieldDescription>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor={`mail-retention-${purpose}`}>
-                    {t('mailSettings.retentionDays')}
-                  </FieldLabel>
-                  <Input
-                    id={`mail-retention-${purpose}`}
-                    type='number'
-                    min={7}
-                    max={3650}
-                    value={mailbox.retentionDays}
-                    onChange={(e) =>
-                      setMailbox(purpose, {
-                        retentionDays: Number(e.target.value),
-                      })
-                    }
-                  />
-                </Field>
-                {/* billing: 派遣公司 by sender domain; audit (V3-11): 客户 by sender domain. */}
-                {purpose === 'billing' || purpose === 'audit' ? (
+          <Fragment key={purpose}>
+            <Card>
+              <CardHeader>
+                <CardTitle className='flex flex-wrap items-center gap-2'>
+                  {t(`mail.purposes.${purpose}`)}
+                  <Badge variant='outline'>
+                    {t(`mailSettings.adapters.${connection.adapter}`)}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>{connection.address}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor={`mail-vendors-${purpose}`}>
-                      {purpose === 'billing'
-                        ? t('mailSettings.vendors')
-                        : t('mailSettings.customers')}
+                    <FieldLabel htmlFor={`mail-account-${purpose}`}>
+                      {t('mailSettings.account')}
                     </FieldLabel>
-                    <Textarea
-                      id={`mail-vendors-${purpose}`}
-                      rows={3}
-                      value={texts[`vendors.${purpose}`] ?? ''}
+                    <NativeSelect
+                      id={`mail-account-${purpose}`}
+                      value={mailbox.accountId}
+                      onChange={(e) => {
+                        const account = accounts.data?.find(
+                          (a) => a.id === e.target.value,
+                        );
+                        setMailbox(purpose, {
+                          accountId: account?.id ?? '',
+                          ownerUserId: account?.ownerUserId ?? '',
+                        });
+                      }}
+                    >
+                      <NativeSelectOption value=''>
+                        {t('mailSettings.noAccount')}
+                      </NativeSelectOption>
+                      {(accounts.data ?? []).map((a) => (
+                        <NativeSelectOption key={a.id} value={a.id}>
+                          {`${a.address}（${a.ownerName ?? a.ownerUserId}）`}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    <FieldDescription>
+                      {t('mailSettings.accountHint')}
+                    </FieldDescription>
+                  </Field>
+                  <Field orientation='horizontal'>
+                    <Switch
+                      id={`mail-enabled-${purpose}`}
+                      checked={mailbox.enabled}
+                      onCheckedChange={(checked) =>
+                        setMailbox(purpose, { enabled: checked })
+                      }
+                    />
+                    <FieldLabel htmlFor={`mail-enabled-${purpose}`}>
+                      {t('mailSettings.enabled')}
+                    </FieldLabel>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor={`mail-domains-${purpose}`}>
+                      {t('mailSettings.senderDomains')}
+                    </FieldLabel>
+                    <Input
+                      id={`mail-domains-${purpose}`}
+                      value={texts[`domains.${purpose}`] ?? ''}
                       onChange={(e) =>
                         setTexts({
                           ...texts,
-                          [`vendors.${purpose}`]: e.target.value,
+                          [`domains.${purpose}`]: e.target.value,
                         })
                       }
                     />
                     <FieldDescription>
-                      {purpose === 'billing'
-                        ? t('mailSettings.vendorsHint')
-                        : t('mailSettings.customersHint')}
+                      {t('mailSettings.senderDomainsHint')}
                     </FieldDescription>
                   </Field>
-                ) : null}
-              </FieldGroup>
-            </CardContent>
-          </Card>
+                  <Field>
+                    <FieldLabel htmlFor={`mail-retention-${purpose}`}>
+                      {t('mailSettings.retentionDays')}
+                    </FieldLabel>
+                    <Input
+                      id={`mail-retention-${purpose}`}
+                      type='number'
+                      min={7}
+                      max={3650}
+                      value={mailbox.retentionDays}
+                      onChange={(e) =>
+                        setMailbox(purpose, {
+                          retentionDays: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                  {/* billing: 派遣公司 by sender domain; audit (V3-11): 客户 by sender domain. */}
+                  {purpose === 'billing' || purpose === 'audit' ? (
+                    <Field>
+                      <FieldLabel htmlFor={`mail-vendors-${purpose}`}>
+                        {purpose === 'billing'
+                          ? t('mailSettings.vendors')
+                          : t('mailSettings.customers')}
+                      </FieldLabel>
+                      <Textarea
+                        id={`mail-vendors-${purpose}`}
+                        rows={3}
+                        value={texts[`vendors.${purpose}`] ?? ''}
+                        onChange={(e) =>
+                          setTexts({
+                            ...texts,
+                            [`vendors.${purpose}`]: e.target.value,
+                          })
+                        }
+                      />
+                      <FieldDescription>
+                        {purpose === 'billing'
+                          ? t('mailSettings.vendorsHint')
+                          : t('mailSettings.customersHint')}
+                      </FieldDescription>
+                    </Field>
+                  ) : null}
+                </FieldGroup>
+              </CardContent>
+            </Card>
+            {/* V1-02 V2 增补: the 人事邮箱 mails separation certificates from this template. */}
+            {purpose === 'hr' ? <SeparationTemplateCard /> : null}
+          </Fragment>
         );
       })}
       <div>

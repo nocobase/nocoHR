@@ -37,11 +37,17 @@ export interface MailMessage {
   readonly sentAt: string | null;
   readonly deliveryError: string | null;
   readonly receivedAt: string | null;
-  readonly createdAt: string; /** A reschedule reply: the times the interview could move to and the one the text names. */
+  readonly createdAt: string;
+  /**
+   * A reschedule reply: the times the interview could move to and the one the text names.
+   * A document reply (人事邮箱, V1-02 V2 增补): the document whose link is made when the reply is sent.
+   */
   readonly proposal: {
     readonly kind: string;
     readonly options?: readonly { start: string; label?: string }[];
     readonly chosen?: number;
+    readonly document?: string;
+    readonly employeeId?: string;
   } | null;
 }
 
@@ -67,6 +73,8 @@ export function recordPath(message: MailMessage): string | null {
     return `/talent/payroll/vendor-bills/${encodeURIComponent(message.refId)}`;
   if (message.refType === 'auditRequest')
     return `/talent/audit?tab=requests&request=${encodeURIComponent(message.refId)}`;
+  if (message.refType === 'employee')
+    return `/talent/employees/${encodeURIComponent(message.refId)}`;
   if (message.refType === 'application')
     return `/talent/candidates/${encodeURIComponent(message.refId)}`;
   return null;

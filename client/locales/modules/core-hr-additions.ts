@@ -132,6 +132,46 @@ const en = {
       invalid:
         'This link is not valid: it has expired, was revoked, or is wrong.',
     },
+    // V1-02 V2 增补: a departed employee's document link (client/pages/hr-document).
+    hrDocument: {
+      description:
+        '{{company}} prepared your {{title}}. Download it once you have entered the code.',
+      expires: 'The link is valid until {{at}}.',
+      codeHint: 'To open it, enter the code sent to {{address}}.',
+      sendCode: 'Send code',
+      codeSent: 'Code sent to {{address}}; valid for 10 minutes.',
+      code: 'Code',
+      download: 'Download',
+      downloaded: 'Download started',
+      invalid:
+        'This link is not valid: it has expired, was revoked, or is wrong.',
+    },
+    // V1-02 V2 增补: the separation certificate template on Settings / Mail.
+    departedTemplate: {
+      title: 'Leaving certificate template',
+      description:
+        'When a resignation takes effect and the employee left a contact email, the HR mailbox sends a link to the leaving certificate made from this template. The certificate never shows an ID number.',
+      text: 'Certificate text',
+      placeholders: 'Placeholders: {{list}}',
+      placeholder: {
+        name: 'name',
+        employeeNo: 'employee no.',
+        department: 'department',
+        position: 'position',
+        hireDate: 'hire date',
+        leaveDate: 'leave date',
+        company: 'company',
+        today: 'date issued',
+      },
+      confirmedBy: 'Confirmed by {{name}} on {{at}}.',
+      unconfirmedWarning:
+        'Not confirmed yet: no leaving certificate is mailed until an HR administrator confirms the template.',
+      changedWarning:
+        'The text has changed. Confirm it again; until then certificates use the confirmed version.',
+      confirm: 'Confirm template',
+      confirmed: 'Template confirmed',
+      required: 'Enter the certificate text.',
+    },
     // V2-06 邮件往来 (client/pages/talent/mail, client/components/talent/mail-thread.tsx)
     mail: {
       title: 'Business mail',
@@ -173,11 +213,18 @@ const en = {
         erasure: 'Erasure request',
         question: 'Question',
         other: 'Other',
+        // V1-02 V2 增补: a departed employee's request (人事邮箱).
+        separationCertificate: 'Leaving certificate',
+        employmentCertificate: 'Employment certificate',
+        incomeCertificate: 'Income certificate',
+        payslip: 'Payslip',
+        documentRequest: 'Certificate request',
       },
       refTypes: {
         laborVendorBill: 'Vendor bill',
         application: 'Application',
         auditRequest: 'Audit request',
+        employee: 'Employee',
       },
       openRecord: 'Open the record',
       assistants: {
@@ -214,6 +261,26 @@ const en = {
         'It goes to {{to}} from the {{mailbox}}. Sent mail cannot be recalled.',
       sent: 'Sent to {{to}}',
       sentAt: 'Sent {{time}} by {{name}}',
+      // V1-02 V2 增补: a reply that carries a document link (人事邮箱).
+      document: {
+        attached: 'Carries: {{document}}',
+        titles: {
+          separationCertificate: 'Leaving certificate',
+          employmentCertificate: 'Employment certificate',
+          incomeCertificate: 'Income certificate',
+          payslip: 'Payslip',
+        },
+        linkOnSend:
+          'The document and its link are made when you send: the link replaces “【文件链接在发送时生成】”, is valid for 7 days and opens with a code sent to the registered personal email.',
+        hrSends: 'An HR administrator sends it.',
+        payrollSends:
+          'It states pay, so payroll checks the amounts and sends it.',
+        showAmounts: 'Show amounts',
+        hideAmounts: 'Hide amounts',
+        month: 'Month',
+        gross: 'Gross pay',
+        net: 'Net pay',
+      },
     },
     mailSettings: {
       title: 'Mail',
@@ -397,6 +464,7 @@ const en = {
         learning: 'Learning',
         certificate: 'Certificates',
         grants: 'Operating permissions',
+        departedContact: 'Contact after leaving',
       },
       items: {
         orgAccessPending:
@@ -459,6 +527,10 @@ const en = {
           '{{days}} days of annual leave unused: settle them in the final pay.',
         salaryFinalSettlement:
           'Final settlement: the last payroll and stopping social insurance.',
+        personalEmailGiven:
+          'A contact email after leaving was given; the leaving certificate and the last payslip are sent there.',
+        personalEmailMissing:
+          'No contact email after leaving: ask for a personal address so the leaving certificate and the last payslip can be sent.',
       },
       profileFields: {
         idNumber: 'ID details',
@@ -599,6 +671,26 @@ const en = {
     AUDIT_CODE_INVALID: 'The code is wrong or has expired.',
     AUDIT_CODE_LOCKED: 'Too many wrong codes. Ask for a new one.',
     AUDIT_CODE_UNAVAILABLE: 'The code could not be sent. Contact the sender.',
+    // V1-02 V2 增补: a departed employee's documents.
+    DOCUMENT_LINK_INVALID:
+      'This link is not valid: it has expired, was revoked, or is wrong.',
+    DOCUMENT_LINK_LIMITED: 'Too many attempts. Try again later.',
+    DOCUMENT_CODE_TOO_SOON:
+      'A code was just sent. Wait a minute before asking again.',
+    DOCUMENT_CODE_INVALID: 'The code is wrong or has expired.',
+    DOCUMENT_CODE_LOCKED: 'Too many wrong codes. Ask for a new one.',
+    DOCUMENT_CODE_UNAVAILABLE:
+      'The code could not be sent. Contact the HR department.',
+    DOCUMENT_PAYROLL_ONLY:
+      'Only payroll may check and send a document that states pay.',
+    DOCUMENT_HR_ONLY: 'Only HR administrators may send this document.',
+    DOCUMENT_NO_PAYSLIPS: 'There are no published payslips to certify.',
+    DOCUMENT_RECIPIENT_NOT_REGISTERED:
+      'Documents go only to the employee’s registered contact email after leaving.',
+    DOCUMENT_REPLY_LINK_NOT_ALLOWED:
+      'The reply may not contain links: the document link is added when it is sent.',
+    ACTION_PERSONAL_EMAIL_INVALID:
+      'Enter a valid contact email after leaving, or leave it empty.',
     CUSTOM_FIELD_INVALID: 'Some added fields are not valid.',
     CUSTOM_FIELD_TYPE: 'Wrong format.',
     CUSTOM_FIELD_TOO_LONG: 'Too long.',
@@ -748,6 +840,42 @@ const zh: Shape = {
       downloaded: '已开始下载',
       invalid: '链接无效：已过期、已撤销或地址不正确。',
     },
+    hrDocument: {
+      description: '{{company}}为你开具的{{title}}，输入验证码后即可下载。',
+      expires: '链接有效期至 {{at}}。',
+      codeHint: '打开前请输入发到 {{address}} 的验证码。',
+      sendCode: '发送验证码',
+      codeSent: '验证码已发到 {{address}}，10 分钟内有效。',
+      code: '验证码',
+      download: '下载',
+      downloaded: '已开始下载',
+      invalid: '链接无效：已过期、已撤销或地址不正确。',
+    },
+    departedTemplate: {
+      title: '离职证明模板',
+      description:
+        '离职单生效时，员工留了离职后联系邮箱的，人事邮箱按这个模板开具离职证明，并把链接发到该邮箱。证明上不出现证件号。',
+      text: '证明正文',
+      placeholders: '可用占位符：{{list}}',
+      placeholder: {
+        name: '姓名',
+        employeeNo: '工号',
+        department: '部门',
+        position: '岗位',
+        hireDate: '入职日期',
+        leaveDate: '离职日期',
+        company: '公司名称',
+        today: '开具日期',
+      },
+      confirmedBy: '{{name}} 已于 {{at}} 确认。',
+      unconfirmedWarning:
+        '模板尚未确认：HR 管理员确认之前，不会给离职员工发送离职证明。',
+      changedWarning:
+        '正文已修改，请重新确认；确认之前仍按上次确认的版本开具。',
+      confirm: '确认模板',
+      confirmed: '模板已确认',
+      required: '请填写证明正文。',
+    },
     mail: {
       title: '邮件往来',
       description:
@@ -788,11 +916,17 @@ const zh: Shape = {
         erasure: '删除申请',
         question: '问题',
         other: '其他',
+        separationCertificate: '离职证明',
+        employmentCertificate: '工作经历证明',
+        incomeCertificate: '收入证明',
+        payslip: '工资条',
+        documentRequest: '证明申请',
       },
       refTypes: {
         laborVendorBill: '派遣账单',
         application: '投递',
         auditRequest: '审核请求',
+        employee: '员工',
       },
       openRecord: '查看单据',
       assistants: {
@@ -828,6 +962,24 @@ const zh: Shape = {
       sendDescription: '将从{{mailbox}}发给 {{to}}，发出后不能撤回。',
       sent: '已发给 {{to}}',
       sentAt: '{{name}} 于 {{time}} 发送',
+      document: {
+        attached: '随信发送：{{document}}',
+        titles: {
+          separationCertificate: '离职证明',
+          employmentCertificate: '工作经历证明',
+          incomeCertificate: '收入证明',
+          payslip: '工资条',
+        },
+        linkOnSend:
+          '文件和链接在发送时生成：链接替换正文中的“【文件链接在发送时生成】”，7 天内有效，打开时需输入发到登记个人邮箱的验证码。',
+        hrSends: '由 HR 管理员确认后发送。',
+        payrollSends: '含薪资，由薪酬专员确认金额后发送。',
+        showAmounts: '查看金额',
+        hideAmounts: '收起金额',
+        month: '月份',
+        gross: '应发',
+        net: '实发',
+      },
     },
     mailSettings: {
       title: '邮件',
@@ -1009,6 +1161,7 @@ const zh: Shape = {
         learning: '学习',
         certificate: '证书',
         grants: '操作权限',
+        departedContact: '离职后联系',
       },
       items: {
         orgAccessPending:
@@ -1058,6 +1211,10 @@ const zh: Shape = {
           '离职日之后的 {{count}} 个班次（{{from}} 至 {{to}}）将在生效时清除。',
         annualLeaveRemaining: '未休年假 {{days}} 天，需在离职结算中折算。',
         salaryFinalSettlement: '离职结算：核对最后一期工资并办理社保减员。',
+        personalEmailGiven:
+          '已填写离职后联系邮箱，离职证明和最后一个月的工资条会发到这里。',
+        personalEmailMissing:
+          '未填写离职后联系邮箱：请向员工要一个个人邮箱，以便发送离职证明和最后一个月的工资条。',
       },
       profileFields: {
         idNumber: '证件信息',
@@ -1189,6 +1346,19 @@ const zh: Shape = {
     AUDIT_CODE_INVALID: '验证码不正确或已过期。',
     AUDIT_CODE_LOCKED: '验证码错误次数过多，请重新获取。',
     AUDIT_CODE_UNAVAILABLE: '验证码没有发出，请联系发件方。',
+    DOCUMENT_LINK_INVALID: '链接无效：已过期、已撤销或地址不正确。',
+    DOCUMENT_LINK_LIMITED: '尝试次数过多，请稍后再试。',
+    DOCUMENT_CODE_TOO_SOON: '验证码刚刚发出，请 1 分钟后再试。',
+    DOCUMENT_CODE_INVALID: '验证码不正确或已过期。',
+    DOCUMENT_CODE_LOCKED: '验证码错误次数过多，请重新获取。',
+    DOCUMENT_CODE_UNAVAILABLE: '验证码没有发出，请联系人事部。',
+    DOCUMENT_PAYROLL_ONLY: '含薪资的证明只能由薪酬专员确认金额后发送。',
+    DOCUMENT_HR_ONLY: '这份证明只能由 HR 管理员发送。',
+    DOCUMENT_NO_PAYSLIPS: '没有已发布的工资条，无法开具。',
+    DOCUMENT_RECIPIENT_NOT_REGISTERED: '证明只能发到员工登记的离职后联系邮箱。',
+    DOCUMENT_REPLY_LINK_NOT_ALLOWED:
+      '回复正文中不能有链接：文件链接会在发送时自动加上。',
+    ACTION_PERSONAL_EMAIL_INVALID: '离职后联系邮箱格式不正确，请修改或留空。',
     CUSTOM_FIELD_INVALID: '有追加字段填写不正确。',
     CUSTOM_FIELD_TYPE: '格式不正确。',
     CUSTOM_FIELD_TOO_LONG: '内容太长。',

@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -92,6 +93,7 @@ export function ProfileChangeDialog({
     mobile: employee.mobile ?? '',
     email: employee.email ?? '',
     address: employee.address ?? '',
+    personalEmail: employee.personalEmail ?? '',
     educations: rowsOf(profile.educations, [
       'school',
       'degree',
@@ -147,7 +149,7 @@ export function ProfileChangeDialog({
 
   async function submit(): Promise<void> {
     const changes: Record<string, unknown> = {};
-    for (const key of ['mobile', 'email', 'address'] as const)
+    for (const key of ['mobile', 'email', 'address', 'personalEmail'] as const)
       if (draft[key] !== initial[key]) changes[key] = draft[key].trim() || null;
     const clean = (rows: Row[]) =>
       rows.map((row) =>
@@ -265,6 +267,25 @@ export function ProfileChangeDialog({
                     setDraft((d) => ({ ...d, address: e.target.value }))
                   }
                 />
+              </Field>
+            ) : null}
+            {allowed('personalEmail') ? (
+              <Field>
+                <FieldLabel htmlFor='change-personal-email'>
+                  {t('talent.fields.personalEmail')}
+                </FieldLabel>
+                <Input
+                  id='change-personal-email'
+                  type='email'
+                  value={draft.personalEmail}
+                  maxLength={320}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, personalEmail: e.target.value }))
+                  }
+                />
+                <FieldDescription>
+                  {t('talent.fields.personalEmailHint')}
+                </FieldDescription>
               </Field>
             ) : null}
 

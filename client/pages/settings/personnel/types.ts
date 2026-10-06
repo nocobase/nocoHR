@@ -17,6 +17,7 @@ export const SELF_SERVICE_FIELDS = [
   'mobile',
   'email',
   'address',
+  'personalEmail',
   'educations',
   'experiences',
   'emergencyContacts',

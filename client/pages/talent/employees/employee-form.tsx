@@ -37,6 +37,9 @@ import { EMPLOYMENT_TYPES, GENDERS, ID_TYPES } from './types.js';
 
 type Draft = Record<string, string>;
 
+/** The same shape the server checks for `personalEmail`. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+
 const FIELDS = [
   'employeeNo',
   'name',
@@ -54,6 +57,7 @@ const FIELDS = [
   'employmentType',
   'workLocation',
   'address',
+  'personalEmail',
   'note',
 ] as const;
 
@@ -125,6 +129,12 @@ export function EmployeeForm({
       draft.careerStartDate > draft.hireDate
     )
       next.careerStartDate = t('talent.errors.EMPLOYEE_CAREER_DATE_INVALID');
+    if (
+      canEditSensitive &&
+      draft.personalEmail.trim() &&
+      !EMAIL.test(draft.personalEmail.trim())
+    )
+      next.personalEmail = t('talent.fields.personalEmailInvalid');
     setErrors(next);
     if (Object.keys(next).length) return;
     const values: Record<string, unknown> = {};
@@ -135,7 +145,8 @@ export function EmployeeForm({
           f === 'note' ||
           f === 'idNumber' ||
           f === 'birthDate' ||
-          f === 'address')
+          f === 'address' ||
+          f === 'personalEmail')
       )
         continue;
       if (coreLocked && (f === 'departmentId' || f === 'positionId')) continue;
@@ -435,6 +446,25 @@ export function EmployeeForm({
                 maxLength={500}
                 onChange={(e) => set('address', e.target.value)}
               />
+            </Field>
+            <Field data-invalid={Boolean(errors.personalEmail)}>
+              <FieldLabel htmlFor='emp-personal-email'>
+                {t('talent.fields.personalEmail')}
+              </FieldLabel>
+              <Input
+                id='emp-personal-email'
+                type='email'
+                value={draft.personalEmail}
+                maxLength={320}
+                aria-invalid={Boolean(errors.personalEmail)}
+                onChange={(e) => set('personalEmail', e.target.value)}
+              />
+              <FieldDescription>
+                {t('talent.fields.personalEmailHint')}
+              </FieldDescription>
+              {errors.personalEmail ? (
+                <FieldError>{errors.personalEmail}</FieldError>
+              ) : null}
             </Field>
             <Field>
               <FieldLabel htmlFor='emp-note'>

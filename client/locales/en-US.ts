@@ -1693,6 +1693,11 @@ const enUS = {
         description:
           'Recognises staffing-agency bills arriving in the billing mailbox and creates the vendor bill; a corrected bill is attached to the original and reconciled again; anything else waits to be sorted.',
       },
+      'hrAssistant.mailSortHr': {
+        title: 'Sort the HR mailbox',
+        description:
+          'When a former employee writes from their registered personal email, links the message to their profile, recognises the document asked for and drafts the reply for HR (or payroll, for income certificates) to confirm; the document goes out only as a code-protected link. Messages from other addresses wait to be sorted, and their drafts name no one.',
+      },
       'certificationSteward.mailSortAudit': {
         title: 'Sort audit requests',
         description:
@@ -3174,6 +3179,11 @@ const enUS = {
       status: 'Status',
       tenure: 'Tenure',
       workLocation: 'Work location',
+      // V1-02 V2 增补: sensitive, HR administrators and the person.
+      personalEmail: 'Contact email after leaving',
+      personalEmailHint:
+        'A personal address, not the company one: the leaving certificate, the last payslip and later certificates are sent here by link.',
+      personalEmailInvalid: 'Enter a valid email address.',
     },
     employeeStatus: {
       pending: 'Pending',
@@ -3876,6 +3886,7 @@ const enUS = {
         mobile: 'Mobile',
         email: 'Email',
         address: 'Address',
+        personalEmail: 'Contact email after leaving',
         educations: 'Education',
         experiences: 'Work experience',
         emergencyContacts: 'Emergency contacts',
@@ -4026,6 +4037,8 @@ const enUS = {
       prefillStale:
         'The pre-filled employee has left, finished probation or is outside your scope. Choose again.',
       leaveReasonRequired: 'Choose a leave reason.',
+      personalEmailHint:
+        'Optional. The leaving certificate and the last payslip are sent to this personal address by link once the employee has left.',
       prefillingFromSync: 'Filling in from the office suite…',
       prefilledFromSync:
         'Filled in from the office suite. Check the details before submitting.',

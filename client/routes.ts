@@ -1427,6 +1427,14 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
     authz: 'skip',
     componentLoader: () => import('./pages/audit-pack/index.js'),
   },
+  // V1-02 V2 增补: a departed employee's document link; /api/public/hr-document enforces the token and the code.
+  {
+    name: 'public-hr-document',
+    path: '/hr-document/:token',
+    auth: 'optional',
+    authz: 'skip',
+    componentLoader: () => import('./pages/hr-document/index.js'),
+  },
   {
     auth: 'guest',
     authz: 'skip',

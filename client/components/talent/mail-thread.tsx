@@ -34,6 +34,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 
+import { MailDocumentProposal } from './mail-document.js';
 import {
   displaySubject,
   recordPath,
@@ -183,6 +184,8 @@ function DraftEditor({
           <FieldDescription>{t('mail.rescheduleHint')}</FieldDescription>
         </Field>
       ) : null}
+      {/* 人事邮箱 (V1-02 V2 增补): the document whose link replaces the placeholder on send. */}
+      <MailDocumentProposal message={message} />
       <Field>
         <FieldLabel htmlFor={id}>{t('mail.draftTitle')}</FieldLabel>
         <Textarea

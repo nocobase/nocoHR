@@ -28,6 +28,8 @@ export interface PayrollDeps {
   readonly onBillUploaded: (billId: string) => void;
   /** V2-06 邮件往来: the reconciliation notes of a bill were written (the billing mailbox drafts the vendor's reply). */
   readonly onBillReviewed?: (billId: string) => void;
+  /** V1-02 V2 增补: a cycle was published (employees who left get their last payslip by mail). */
+  readonly onPublished?: (cycleId: string) => void;
   /** A salary adjustment related to a personnel action was decided: refresh its change checklist. */
   readonly onAdjustmentDecided: (actionId: string) => void;
   /** Import, export and publish events for the server log (the application has no audit-log plugin). */
