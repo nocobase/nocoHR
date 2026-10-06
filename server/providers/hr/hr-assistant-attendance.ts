@@ -173,7 +173,11 @@ export function createHrAssistantAttendance(deps: {
     const nameOf = new Map(names);
     // “刘洋：当天空闲、休息间隔 16 小时、本月加班最少”: who and why, not only a link.
     const lines = chosen
-      .map((c) => `${nameOf.get(c.employeeId) ?? ''}：${c.line}`)
+      // The notice adds its own full stop: a reason's closing “。” or “；” read “夜班 0 次。。”.
+      .map(
+        (c) =>
+          `${nameOf.get(c.employeeId) ?? ''}：${c.line.trim().replace(/[。；;.，,\s]+$/u, '')}`,
+      )
       .join('；');
     if (head)
       await platform.notify({

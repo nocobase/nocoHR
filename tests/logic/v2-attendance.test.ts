@@ -442,6 +442,8 @@ describe('V2-05 leave conflicts and cover suggestions', () => {
       (row) => Boolean(row),
     );
     expect(`${notice?.detail ?? notice?.summary ?? ''}`).toMatch(/李敏：.+/u);
+    // One full stop at the end of the list, never “。。”.
+    expect(`${notice?.detail ?? notice?.summary ?? ''}`).not.toContain('。。');
     expect(suggested?.shiftId).toBe('shift-mc-early');
     expect(await notified(`leaveConflict:${String(cell?.id)}:${leaveId}`)).toBe(
       true,
