@@ -6,6 +6,10 @@
  * meets minRestHours, and it would not exceed the consecutive-night limit.
  * Each comes with the month's approved overtime and night count, fewest
  * overtime hours first. Rules decide; the HR assistant only words reasons.
+ *
+ * Only peers in the absent employee's position are offered, and never the
+ * department's head: a leave of a CNC operator once suggested 车间主任 陈静,
+ * who was also its approver.
  */
 import type { DatabaseConnection } from '@nocobase/db';
 
@@ -69,6 +73,7 @@ export async function replacementCandidates(input: {
       'shiftSchedules.shiftId as shiftId',
       'shiftSchedules.checkResult as checkResult',
       'employees.departmentId as departmentId',
+      'employees.positionId as positionId',
     ])
     .where('shiftSchedules.id', '=', input.scheduleId)
     .executeTakeFirst();
@@ -124,13 +129,30 @@ export async function replacementCandidates(input: {
       },
       candidates: [],
     };
-  const peers = await q
+  const head = await q
+    .selectFrom('departments')
+    .select(['managerId'])
+    .where('id', '=', departmentId)
+    .executeTakeFirst();
+  let peerQuery = q
     .selectFrom('employees')
-    .select(['id', 'name', 'employeeNo', 'status', 'hireDate', 'leaveDate'])
+    .select([
+      'id',
+      'name',
+      'employeeNo',
+      'status',
+      'hireDate',
+      'leaveDate',
+      'userId',
+    ])
     .where('departmentId', '=', departmentId)
     .where('id', '!=', str(cell.employeeId))
-    .where('status', '!=', 'leave')
-    .execute();
+    .where('status', '!=', 'leave');
+  if (cell.positionId)
+    peerQuery = peerQuery.where('positionId', '=', str(cell.positionId));
+  const peers = (await peerQuery.execute()).filter(
+    (p) => !head?.managerId || str(p.userId) !== str(head.managerId),
+  );
   const window = shiftInterval(
     date,
     {
@@ -210,16 +232,19 @@ export async function replacementCandidates(input: {
     const id = str(peer.id);
     if (peer.hireDate && day(peer.hireDate) > date) continue;
     if (peer.leaveDate && day(peer.leaveDate) < date) continue;
-    const covering = required.map((certification) =>
-      holdings
-        .filter(
-          (h) =>
-            h.employeeId === id &&
-            h.certificationId === certification.id &&
-            coversShift(h, window.end, input.timeZone),
-        )
-        .map((h) => h.expiresAt)
-        .sort((a, b) => (a === null ? 1 : b === null ? -1 : b.localeCompare(a)))[0],
+    const covering = required.map(
+      (certification) =>
+        holdings
+          .filter(
+            (h) =>
+              h.employeeId === id &&
+              h.certificationId === certification.id &&
+              coversShift(h, window.end, input.timeZone),
+          )
+          .map((h) => h.expiresAt)
+          .sort((a, b) =>
+            a === null ? 1 : b === null ? -1 : b.localeCompare(a),
+          )[0],
     );
     if (covering.some((expiry) => expiry === undefined)) continue;
     const own = schedules
@@ -292,23 +317,34 @@ export async function replacementCandidates(input: {
       ...(required.length
         ? {
             certificateExpiresAt:
-              covering
-                .filter((d): d is string => d !== null)
-                .sort()[0] ?? null,
+              covering.filter((d): d is string => d !== null).sort()[0] ?? null,
           }
         : {}),
       reasons: [
         ...(required.length
           ? [
               `持有${required.map((c) => c.title).join('、')}，有效期至 ${
-                covering
-                  .filter((d): d is string => d !== null)
-                  .sort()[0] ?? '长期'
+                covering.filter((d): d is string => d !== null).sort()[0] ??
+                '长期'
               }`,
             ]
           : []),
         '当天空闲',
-        `前后休息 ${restBefore === null ? '—' : Math.round(restBefore * 10) / 10} / ${restAfter === null ? '—' : Math.round(restAfter * 10) / 10} 小时（不少于 ${rule.minRestHours} 小时）`,
+        // Only the rest that can be worked out (a neighbouring shift exists); never “— / —”.
+        ...(restBefore === null && restAfter === null
+          ? []
+          : [
+              [
+                restBefore === null
+                  ? null
+                  : `上一班后休息 ${Math.round(restBefore * 10) / 10} 小时`,
+                restAfter === null
+                  ? null
+                  : `距下一班 ${Math.round(restAfter * 10) / 10} 小时`,
+              ]
+                .filter(Boolean)
+                .join('、') + `（不少于 ${rule.minRestHours} 小时）`,
+            ]),
         `本月加班 ${Math.round(hours * 100) / 100} 小时、夜班 ${nights} 次`,
       ],
     });

@@ -196,11 +196,11 @@ export const recruitingServerEn = {
 export const recruitingServerZh: typeof recruitingServerEn = {
   notifications: {
     recruitingWorkforceGap: n(
-      '{{department}}{{month}}用工缺口 {{count}} 人',
+      '{{department}} {{month}} 用工缺口 {{count}} 人',
       '人事助理已算出用工缺口，并准备了加班、借调、招聘三种方案，请确定方案。',
     ),
     recruitingTransferCoordination: n(
-      '借调协调：{{department}}{{month}}',
+      '借调协调：{{department}} {{month}}',
       '{{department}}{{position}}用工不足，已选择从{{from}}借调（最多 {{count}} 人），请确认人选后按调岗或临时排班办理。',
     ),
     recruitingRequisitionDrafted: n(

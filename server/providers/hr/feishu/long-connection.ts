@@ -43,6 +43,13 @@ export interface FeishuLongConnectionDeps {
   ) => Promise<CardCallbackResult>;
   /** Shown to a member who sent something other than text. */
   readonly textOnly: () => Promise<string>;
+  /** The toast while a slow button press is still being handled. */
+  readonly working: () => Promise<string>;
+  /** Feishu's delayed card update (`/interactive/v1/card/update`) with the callback token. */
+  readonly delayedUpdate: (
+    token: string,
+    card: Record<string, unknown>,
+  ) => Promise<void>;
   readonly log: {
     info(detail: Record<string, unknown>, message: string): void;
     warn(detail: Record<string, unknown>, message: string): void;
@@ -60,17 +67,37 @@ export function messageText(content: string): string | null {
   }
 }
 
+// The SDK logs objects as well as strings; keep an error's message and Feishu's code and msg (never the
+// whole object, which can carry request headers), so a failure no longer logs as a bare "feishu: ".
+export function feishuLogText(...parts: unknown[]): string {
+  const part = (p: unknown): string => {
+    if (typeof p === 'string') return p;
+    if (p instanceof Error) return p.message;
+    if (Array.isArray(p)) return p.map(part).filter(Boolean).join(' ');
+    if (p && typeof p === 'object') {
+      const o = p as Record<string, unknown>;
+      const nested = (o.response as { data?: unknown } | undefined)?.data;
+      const fields = [o.code, o.msg, o.message]
+        .filter((v) => typeof v === 'string' || typeof v === 'number')
+        .join(' ');
+      return fields || (nested ? part(nested) : '');
+    }
+    return '';
+  };
+  return parts.map(part).filter(Boolean).join(' ').slice(0, 300);
+}
+
+/** Feishu waits 3 seconds for a card callback's answer; leave room for the round trip. */
+const ANSWER_MS = 2_500;
+
 export function startFeishuLongConnection(deps: FeishuLongConnectionDeps): {
   close(): void;
 } {
-  const quiet = (...parts: unknown[]) =>
-    parts
-      .map((p) => (typeof p === 'string' ? p : ''))
-      .join(' ')
-      .slice(0, 300);
   const logger = {
-    error: (...m: unknown[]) => deps.log.warn({}, `feishu: ${quiet(...m)}`),
-    warn: (...m: unknown[]) => deps.log.warn({}, `feishu: ${quiet(...m)}`),
+    error: (...m: unknown[]) =>
+      deps.log.warn({}, `feishu: ${feishuLogText(...m)}`),
+    warn: (...m: unknown[]) =>
+      deps.log.warn({}, `feishu: ${feishuLogText(...m)}`),
     info: () => undefined,
     debug: () => undefined,
     trace: () => undefined,
@@ -137,7 +164,11 @@ export function startFeishuLongConnection(deps: FeishuLongConnectionDeps): {
         !operatorId
       )
         return { toast: { type: 'error', content: 'Unsupported button' } };
-      const result = await deps.handleCardAction({
+      const cardId = value.cardId;
+      // Feishu drops a callback answer that takes longer than 3 seconds: an approval that also checks the
+      // schedule and drafts cover suggestions did, and the approver's card kept its buttons. Answer within
+      // ANSWER_MS; when the work takes longer, the card is updated afterwards with the callback token.
+      const work = deps.handleCardAction({
         provider: 'feishu',
         callbackId: String(
           data.token ??
@@ -145,11 +176,11 @@ export function startFeishuLongConnection(deps: FeishuLongConnectionDeps): {
             `${data.context?.open_message_id ?? ''}:${value.button}`,
         ).slice(0, 128),
         operatorId,
-        cardId: value.cardId,
+        cardId,
         button: value.button,
         comment: null,
       });
-      return {
+      const answer = (result: CardCallbackResult) => ({
         toast: {
           type: result.ok ? 'success' : 'info',
           content: result.message,
@@ -158,11 +189,33 @@ export function startFeishuLongConnection(deps: FeishuLongConnectionDeps): {
           ? {
               card: {
                 type: 'raw',
-                data: renderFeishuCard(value.cardId, result.card, deps.link),
+                data: renderFeishuCard(cardId, result.card, deps.link),
               },
             }
           : {}),
-      };
+      });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<'late'>((resolve) => {
+        timer = setTimeout(() => resolve('late'), ANSWER_MS);
+      });
+      const first = await Promise.race([work, late]);
+      clearTimeout(timer);
+      if (first !== 'late') return answer(first);
+      void work
+        .then(async (result) => {
+          if (!result.card || !data.token) return;
+          await deps.delayedUpdate(
+            data.token,
+            renderFeishuCard(cardId, result.card, deps.link),
+          );
+        })
+        .catch((error: unknown) =>
+          deps.log.warn(
+            { error: feishuLogText(error) },
+            'feishu delayed card update failed',
+          ),
+        );
+      return { toast: { type: 'info', content: await deps.working() } };
     },
   } as Parameters<EventDispatcher['register']>[0]);
 

@@ -12,6 +12,7 @@
  */
 import { z } from 'zod';
 
+import { AIShapeError } from './ai-runner.js';
 import type { AutomationRunContext } from './automation.js';
 import type {
   Checklist,
@@ -25,6 +26,26 @@ import {
 } from './compliance.js';
 import type { Platform } from './platform.js';
 import { describeWorkItems } from './work-item-store.js';
+
+/** A change checklist's totals, given to the HR assistant so it does not count by itself. */
+export function checklistCounts(items: readonly { status: string }[]) {
+  return {
+    total: items.length,
+    hrTodo: items.filter((i) => i.status === 'todo').length,
+    systemDone: items.filter((i) => i.status !== 'todo').length,
+  };
+}
+
+/** Whether a note states a number of items (“N 项”) that is none of the list's own totals. */
+export function miscounts(
+  summary: string,
+  counts: ReturnType<typeof checklistCounts>,
+): boolean {
+  const allowed = new Set(Object.values(counts));
+  return [...summary.matchAll(/(\d+)\s*项/gu)].some(
+    (m) => !allowed.has(Number(m[1])),
+  );
+}
 
 type Structured = <T>(
   run: AutomationRunContext,
@@ -143,6 +164,8 @@ export function createHrAssistantChanges(deps: {
     if (!checklist) return { status: 'skipped' as const, output: {} };
     const fallback = checklistFallback(checklist);
     let notes = fallback;
+    // The counts come from the list; the model miscounted them (“需处理 6 项，自动完成 3 项” for 5 and 4).
+    const counts = checklistCounts(checklist.items);
     const text = await worded(
       run,
       async () => {
@@ -150,10 +173,11 @@ export function createHrAssistantChanges(deps: {
           run,
           'hrAssistant',
           '变动影响清单说明',
-          `下面是一名员工${KIND_TEXT[checklist.kind]}的变动影响清单。请写一段不超过 120 字的说明：先说最容易漏的一项（通常是直属上级或合同），再说需要 HR 做的事；然后为每一项写一句话说明要做什么（不超过 40 字），不要重复已写明的事实，不要增删清单项，不要给法律结论。status=auto 的项由系统自动完成。数据：${JSON.stringify(
+          `下面是一名员工${KIND_TEXT[checklist.kind]}的变动影响清单。请写一段不超过 120 字的说明：先说最容易漏的一项（通常是直属上级或合同），再说需要 HR 做的事；然后为每一项写一句话说明要做什么（不超过 40 字），不要重复已写明的事实，不要增删清单项，不要给法律结论。status=auto 的项由系统自动完成。要说项数时只用 counts 里的数字（total 共几项、hrTodo 需要 HR 处理几项、systemDone 已由系统完成或已处理几项），不要自己数。数据：${JSON.stringify(
             {
               employee: checklist.employeeName,
               kind: checklist.kind,
+              counts,
               items: checklist.items.map((i) => ({
                 key: i.key,
                 status: i.status,
@@ -168,6 +192,9 @@ export function createHrAssistantChanges(deps: {
               .max(30),
           }),
         );
+        // A count that is not one of the list's own: the rule text is used instead.
+        if (miscounts(result.summary, counts))
+          throw new AIShapeError('checklist summary miscounts the items');
         notes = {
           summary: result.summary,
           items: {

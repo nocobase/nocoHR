@@ -244,7 +244,12 @@ export function createImPush(deps: {
               );
             }
           } catch (cause) {
-            error = cause instanceof HrError ? cause.code : 'IM_SEND_FAILED';
+            // The provider's code and message (Feishu: `FEISHU_API_<code>: <msg>`), not a bare IM_SEND_FAILED.
+            error = (
+              cause instanceof HrError
+                ? cause.code
+                : `IM_SEND_FAILED: ${cause instanceof Error ? cause.message : String(cause)}`
+            ).slice(0, 255);
             deps.warn(
               { error: cause, key: input.key },
               'HR office-suite push failed',

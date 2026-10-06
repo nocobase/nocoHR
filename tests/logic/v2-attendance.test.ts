@@ -430,6 +430,18 @@ describe('V2-05 leave conflicts and cover suggestions', () => {
     expect(ids).not.toContain('emp-wanglei');
     for (const c of suggestion.candidates)
       expect(c.reasons.length).toBeGreaterThan(0);
+    // The head's notice names each person with the reason, not only a link.
+    const notice = await until(
+      async () =>
+        (await db())
+          .query()
+          .selectFrom('workItems')
+          .select(['summary', 'detail'])
+          .where('refId', 'like', `replacement:${String(suggested?.id)}:%`)
+          .executeTakeFirst(),
+      (row) => Boolean(row),
+    );
+    expect(`${notice?.detail ?? notice?.summary ?? ''}`).toMatch(/李敏：.+/u);
     expect(suggested?.shiftId).toBe('shift-mc-early');
     expect(await notified(`leaveConflict:${String(cell?.id)}:${leaveId}`)).toBe(
       true,
@@ -440,9 +452,28 @@ describe('V2-05 leave conflicts and cover suggestions', () => {
       `/schedules/${String(cell?.id)}/candidates`,
     );
     expect(candidates.status).toBe(200);
-    expect(
-      candidates.json.data.candidates.map((c: Json) => c.employeeId),
-    ).toContain('emp-limin');
+    const offered = candidates.json.data.candidates as Json[];
+    expect(offered.map((c) => c.employeeId)).toContain('emp-limin');
+    // Only CNC operators like 钱进, never 车间主任 陈静 (the head, who approves the leave).
+    expect(offered.map((c) => c.employeeId)).not.toContain('emp-mgr-njl');
+    const positions = await (
+      await db()
+    )
+      .query()
+      .selectFrom('employees')
+      .select(['positionId'])
+      .where(
+        'id',
+        'in',
+        offered.map((c) => String(c.employeeId)),
+      )
+      .execute();
+    expect(new Set(positions.map((p) => p.positionId))).toEqual(
+      new Set(['pos-cnc-operator']),
+    );
+    // A rest that cannot be worked out is left out, never shown as “—”.
+    for (const c of offered)
+      expect((c.reasons as string[]).join('')).not.toContain('—');
   });
 
   it('does not suggest or notify again for the same conflict on the 09:00 run', async () => {

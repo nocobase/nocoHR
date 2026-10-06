@@ -649,6 +649,7 @@ const enUS = {
   imBot: {
     textOnly:
       'I can only answer text messages for now. Please type your question.',
+    working: 'Working on it; the card will update shortly.',
     payLinkOnly:
       'Please open your payslip in NocoHR and verify your identity there: {{link}}',
     groupOnly:

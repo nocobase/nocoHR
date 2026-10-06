@@ -199,6 +199,39 @@ export function createHrAssistantSync(deps: HrAssistantSyncDeps) {
       );
       if (hits.length === 1) ruleMatch.set(title, hits[0]);
     }
+    // NocoHR's own department and position names beside their ids: given ids only, the model invented
+    // names such as “制造部” for 机加工车间.
+    const departmentTitles = new Map(
+      (
+        await platform.database
+          .query()
+          .selectFrom('departments')
+          .select(['id', 'title'])
+          .execute()
+      ).map((d) => [str(d.id), platform.organization.titleText(str(d.title))]),
+    );
+    const positionTitles = new Map(
+      (
+        await platform.database
+          .query()
+          .selectFrom('positions')
+          .select(['id', 'title'])
+          .execute()
+      ).map((p) => [str(p.id), str(p.title)]),
+    );
+    const named = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(named);
+      if (!value || typeof value !== 'object') return value;
+      const out: Record<string, unknown> = {};
+      for (const [key, inner] of Object.entries(value)) {
+        out[key] = named(inner);
+        if (key === 'departmentId' && typeof inner === 'string')
+          out.departmentName = departmentTitles.get(inner) ?? null;
+        if (key === 'positionId' && typeof inner === 'string')
+          out.positionName = positionTitles.get(inner) ?? null;
+      }
+      return out;
+    };
     let notes = pending.map((issue) => ({
       key: issue.key,
       aiExplanation: describe(issue),
@@ -215,12 +248,12 @@ export function createHrAssistantSync(deps: HrAssistantSyncDeps) {
         run,
         'hrAssistant',
         '同步问题说明',
-        `以下是组织同步的待处理项（已脱敏）和启用的岗位。请逐条写 explanation（哪里不一致、为什么同步没有处理，不超过 120 字）和 suggestedAction（对应页面上已有的处理按钮），并为 unmappedTitle 中职责明显一致的职务给出 aliases（externalTitle、positionId、reason）；没有合适岗位就不给，并在说明中建议 HR 先新建岗位。不猜测人员身份，不出现手机号。\n待处理项：${JSON.stringify(
+        `以下是组织同步的待处理项（已脱敏）和启用的岗位。请逐条写 explanation（哪里不一致、为什么同步没有处理，不超过 120 字）和 suggestedAction（对应页面上已有的处理按钮），并为 unmappedTitle 中职责明显一致的职务给出 aliases（externalTitle、positionId、reason）；没有合适岗位就不给，并在说明中建议 HR 先新建岗位。不猜测人员身份，不出现手机号。部门和岗位只用 departmentName、positionName 给出的名称，不要自己起名。\n待处理项：${JSON.stringify(
           pending.map((i) => ({
             key: i.key,
             type: i.type,
             // Mobile numbers and email addresses never reach the model.
-            detail: maskedDetail(i.detail),
+            detail: named(maskedDetail(i.detail)),
             rule: ADVICE[i.type],
           })),
         )}\n岗位：${JSON.stringify(positions)}`,

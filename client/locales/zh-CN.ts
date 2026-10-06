@@ -13,9 +13,12 @@ import { performanceAdditions } from './modules/performance.js';
 import { talentReviewAdditions } from './modules/talent-review.js';
 // V4-14
 import { licensedAdditions } from './modules/licensed.js';
+import { aiToolNames } from './modules/ai-tools.js';
 import type { AppResource } from './en-US.js';
 
 const zhCN: AppResource = {
+  // AI chat tool-call cards (client/extensions/nocobase-ai/components/chat/tool-call-card.tsx).
+  aiTools: aiToolNames.zh,
   // V1-02 additions (client/locales/modules/core-hr-additions.ts).
   ...coreHrAdditions.zh.top,
   // V3-10: 变动影响清单 · 证书 items, added to the V1-02 checklist wording.
@@ -316,7 +319,8 @@ const zhCN: AppResource = {
         suggested: '人事助理推荐',
         candidates: '可顶班的同事',
         none: '当天没有空闲且休息时间满足的同事。',
-        rest: '前后休息 {{before}} / {{after}} 小时',
+        restBefore: '上一班后休息 {{hours}} 小时',
+        restAfter: '距下一班 {{hours}} 小时',
         load: '本月加班 {{hours}} 小时、夜班 {{nights}} 次',
         pick: '排入',
         picked: '已填入顶班，保存后校验并生效。',
@@ -3920,6 +3924,18 @@ const zhCN: AppResource = {
     title: '组织同步',
     description:
       '让部门和人员与办公软件保持一致，并处理同步无法自动解决的问题。',
+    failedCards: {
+      title: '发送失败的卡片',
+      description:
+        '审批、补卡等卡片没能发到办公软件时列在这里，附办公软件返回的原因。原因处理好之后（例如把员工加进应用的可用范围），点“重新发送”。',
+      empty: '没有发送失败的卡片。',
+      recipient: '收件人',
+      reason: '原因',
+      sentAt: '时间',
+      resend: '重新发送',
+      resent: '已重新发送',
+      stillFailed: '仍然发送失败：{{error}}',
+    },
     tabs: {
       label: '组织同步分区',
       connection: '连接设置',

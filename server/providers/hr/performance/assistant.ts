@@ -413,6 +413,7 @@ export function createPerformanceAssistant(deps: {
             `为上级起草 ${context.employee.name} 的考核评语初稿。`,
             '只写有数据支撑的事实，每条事实后用括号标注来源；不写对性格、态度、家庭的评价；不给总评等级，只给各项的参考意见。',
             '描述问题要具体、可改进，例如“考核期内两起首件检验类质量问题（QI-2026-0301、0457）”，而不是“质量意识差”。',
+            '下面 JSON 的字段名（如 current、required、progress）只是给你看的，不要写进评语。能力项的 current 为 null 表示当前没有评定记录，写“当前没有评定记录”；能力等级写成 L1、L2 这样，没有评定的写“未评定”，不要写“L-”。',
             `目标（JSON）：${JSON.stringify(context.goals.map((g) => ({ goalId: g.id, title: g.title, measure: g.measure, progress: g.progress })))}`,
             `能力项（JSON）：${JSON.stringify(context.requirements.map((r) => ({ competencyId: r.competencyId, title: r.title, required: r.requiredLevel, current: r.currentLevel })))}`,
             `过程数据（JSON）：${JSON.stringify(known.filter((f) => !f.ref))}`,

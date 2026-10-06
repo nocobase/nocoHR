@@ -430,6 +430,20 @@ function ContentEditor({
               </NativeSelect>
               {q.answerType === 'shortText' ? (
                 <span />
+              ) : q.answerType === 'yesNo' ? (
+                // Stored as yes / no, shown as 能 / 不能 (the raw value read "yes").
+                <NativeSelect
+                  aria-label={t('recruiting.postings.expected')}
+                  value={q.expected === 'no' ? 'no' : 'yes'}
+                  onChange={(e) => setQ(i, { expected: e.target.value })}
+                >
+                  <NativeSelectOption value='yes'>
+                    {t('recruiting.common.yes')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='no'>
+                    {t('recruiting.common.no')}
+                  </NativeSelectOption>
+                </NativeSelect>
               ) : (
                 <Input
                   aria-label={t('recruiting.postings.expected')}

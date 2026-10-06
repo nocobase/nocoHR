@@ -553,7 +553,7 @@ export function templateSummary(snapshot: EvidenceSnapshot): string {
   const c = snapshot.competencies;
   parts.push(
     c.length
-      ? `能力：${c.map((x) => `${x.title}${x.from ?? '-'}→${x.to}`).join('、')}`
+      ? `能力：${c.map((x) => `${x.title} ${x.from == null ? '未评定' : `L${x.from}`}→L${x.to}`).join('、')}`
       : '能力评定无变化',
   );
   const text = `${parts.join('；')}。`;

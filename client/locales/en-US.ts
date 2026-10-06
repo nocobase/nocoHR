@@ -13,9 +13,12 @@ import { performanceAdditions } from './modules/performance.js';
 import { talentReviewAdditions } from './modules/talent-review.js';
 // V4-14
 import { licensedAdditions } from './modules/licensed.js';
+import { aiToolNames } from './modules/ai-tools.js';
 import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
+  // AI chat tool-call cards (client/extensions/nocobase-ai/components/chat/tool-call-card.tsx).
+  aiTools: aiToolNames.en,
   // V1-02 additions (client/locales/modules/core-hr-additions.ts).
   ...coreHrAdditions.en.top,
   // V3-10: 变动影响清单 · 证书 items, added to the V1-02 checklist wording.
@@ -359,7 +362,8 @@ const enUS = {
         suggested: 'Suggested by the HR assistant',
         candidates: 'Available colleagues',
         none: 'No colleague is free with enough rest that day.',
-        rest: 'Rest before / after: {{before}} / {{after}} h',
+        restBefore: 'Rest since the last shift: {{hours}} h',
+        restAfter: 'Until the next shift: {{hours}} h',
         load: 'This month: {{hours}} h overtime, {{nights}} nights',
         pick: 'Assign',
         picked: 'Cover filled in. Save to check and keep it.',
@@ -4197,6 +4201,18 @@ const enUS = {
     title: 'Organization sync',
     description:
       'Keep departments and people in step with the office suite, and work through what the sync could not settle.',
+    failedCards: {
+      title: 'Cards that failed to send',
+      description:
+        'Approval, missed-punch and other cards that did not reach the office suite, with the reason it returned. Once the cause is fixed (for example, the employee is added to the app’s availability range), choose Send again.',
+      empty: 'No cards failed to send.',
+      recipient: 'Recipient',
+      reason: 'Reason',
+      sentAt: 'Time',
+      resend: 'Send again',
+      resent: 'Sent again',
+      stillFailed: 'Still not sent: {{error}}',
+    },
     tabs: {
       label: 'Organization sync sections',
       connection: 'Connection',

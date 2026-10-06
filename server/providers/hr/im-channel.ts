@@ -109,6 +109,7 @@ export function createImChannel(deps: {
     authz: platform.authz,
     transport,
     translate: deps.translate,
+    warn: deps.warn,
   });
   cards.register(
     approvalCardKind({ organization: platform.organization, core: deps.core }),

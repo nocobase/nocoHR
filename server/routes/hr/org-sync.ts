@@ -1,6 +1,7 @@
 import { authenticationToken } from '@nocobase/app-plugin-authentication';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import type { Application } from '@nocobase/app-server/application';
+import { databaseManagerToken } from '@nocobase/db';
 import {
   defineApiRoutes,
   type AppApiRouteContribution,
@@ -8,9 +9,12 @@ import {
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
+import { authorizeAction } from '../../providers/hr/authorize.js';
+import { ORG_SYNC } from '../../providers/hr/org-sync/sync-service.js';
 import { HrError, isRecord } from '../../providers/hr/shared.js';
 import {
   hrCoreServiceToken,
+  imChannelToken,
   orgSyncServiceToken,
   positionAliasServiceToken,
 } from '../../providers/hr/tokens.js';
@@ -66,6 +70,39 @@ export const orgSyncRoutes: AppApiRouteContribution<Application> =
     routes.post('/org-sync/master', async (c) =>
       c.json({ data: await sync().switchMaster(actor(c), await readJson(c)) }),
     );
+    // 发送失败的飞书卡片: listed with the provider's reason, and sent again once the cause (such as the app's
+    // availability range) is fixed. Whoever may run the sync manages the office-suite connection.
+    routes.get('/org-sync/failed-cards', async (c) => {
+      await authorizeAction(actor(c).authz, ORG_SYNC, 'run');
+      const cards = await app.container.resolve(imChannelToken).cards.failed();
+      const userIds = [...new Set(cards.map((card) => card.recipientUserId))];
+      const rows = userIds.length
+        ? await app.container
+            .resolve(databaseManagerToken)
+            .query()
+            .selectFrom('employees')
+            .select(['userId', 'name'])
+            .where('userId', 'in', userIds)
+            .execute()
+        : [];
+      const names = new Map(
+        rows.map((e) => [String(e.userId), String(e.name)]),
+      );
+      return c.json({
+        data: cards.map((card) => ({
+          ...card,
+          recipientName: names.get(card.recipientUserId) ?? null,
+        })),
+      });
+    });
+    routes.post('/org-sync/failed-cards/:id/resend', async (c) => {
+      await authorizeAction(actor(c).authz, ORG_SYNC, 'run');
+      return c.json({
+        data: await app.container
+          .resolve(imChannelToken)
+          .cards.resend(c.req.param('id')),
+      });
+    });
     routes.post('/org-sync/run', async (c) =>
       c.json({ data: await sync().runNow(actor(c)) }),
     );

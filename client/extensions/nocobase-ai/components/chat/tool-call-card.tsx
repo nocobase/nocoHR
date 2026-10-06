@@ -13,13 +13,14 @@ import {
   LoaderCircle,
   Wrench,
 } from 'lucide-react';
+import { useTranslation } from '@nocobase/i18n/client';
 import { useState, type ReactNode } from 'react';
 import { useAIToolRenderer } from '../tools/tool-renderer-context.js';
 import { useAITranslate } from '../../locales/use-ai-translate.js';
 import { getToolCallName, type ToolCallPart } from './tool-call-utils.js';
 
-const toolLabel = (part: ToolCallPart) =>
-  getToolCallName(part)
+const spelledOut = (name: string) =>
+  name
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[-_]+/g, ' ')
     .replace(/^./, (character) => character.toUpperCase());
@@ -101,6 +102,11 @@ export function ToolCallCard({
   readOnly = false,
 }: ToolCallCardProps) {
   const t = useAITranslate();
+  // Application-added: the tool's name in the user's language (`aiTools.<name>` in client/locales), else the
+  // code name spelled out — which read “Draft Settings Change” in a Chinese chat.
+  const { t: appT } = useTranslation();
+  const toolLabel = (name: string) =>
+    appT(`aiTools.${name}`, { defaultValue: spelledOut(name) });
   const resolvedApproval = approval ?? approvalFromPart(part);
   const [approvalStatus, setApprovalStatus] = useState(
     resolvedApproval?.status ?? 'pending',
@@ -191,7 +197,9 @@ export function ToolCallCard({
       <div className='flex items-center'>
         <CollapsibleTrigger className='group/tool-call flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'>
           <Wrench className='size-3.5 shrink-0' />
-          <span className='min-w-0 flex-1 truncate'>{toolLabel(part)}</span>
+          <span className='min-w-0 flex-1 truncate'>
+            {toolLabel(getToolCallName(part))}
+          </span>
           <span
             className={cn(
               'flex shrink-0 items-center gap-1.5 font-normal',

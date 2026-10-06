@@ -55,6 +55,7 @@ import {
   type OrgSyncStatus,
   type SettingsSnapshot,
 } from './types.js';
+import { FailedCardsCard } from './failed-cards.js';
 
 /** Tab 连接设置: sync settings, the data source's state and the data master. */
 export default function OrgSyncConnectionTab(): ReactElement {
@@ -73,6 +74,7 @@ export default function OrgSyncConnectionTab(): ReactElement {
         onReload={reload}
       />
       <SourceCard status={data} />
+      <FailedCardsCard />
       <MasterCard snapshot={data.settings} onChanged={reload} />
     </div>
   );

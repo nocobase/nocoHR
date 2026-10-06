@@ -1125,6 +1125,7 @@ export function createRecruitingAssistant(
         'hrAssistant',
         `用工测算 · ${plan.departmentTitle}`,
         [
+          '数字的单位：outputPerShift 是每人每班的件数（件/班），hoursPerShift 是每班小时数，shiftsPerMonth 是每人每月班数，capacity 和 plannedOutput 是件，headcount 和 gapHeadcount 是人；列算式时按这些单位写，不要写成“件/小时”。',
           '只解释下面服务端算出的数字，不自行估算。先说缺口有多大、原因（计划产量增加多少），再逐个方案说清能补多少、什么时候能补上、有什么风险；超过法定加班上限的方案明确写“不可行”，不建议变通；是否招聘、借调谁由用人部门负责人决定，不评价具体员工。',
           JSON.stringify({
             plan: {

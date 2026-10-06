@@ -122,7 +122,7 @@ export const recruitingEn = {
       cancelled: 'Cancelled',
     },
     posting: { draft: 'Draft', published: 'Published', closed: 'Closed' },
-    review: { draft: 'Draft', confirmed: 'Confirmed' },
+    review: { draft: 'To confirm', confirmed: 'Confirmed' },
     stage: {
       applied: 'Applied',
       screening: 'Screening',
@@ -866,7 +866,7 @@ export const recruitingZh: typeof recruitingEn = {
       cancelled: '已取消',
     },
     posting: { draft: '草稿', published: '已发布', closed: '已关闭' },
-    review: { draft: '草稿', confirmed: '已确认' },
+    review: { draft: '待确认', confirmed: '已确认' },
     stage: {
       applied: '新投递',
       screening: '初筛通过',

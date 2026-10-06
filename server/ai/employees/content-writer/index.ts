@@ -12,6 +12,7 @@ export default defineAIEmployee({
   greeting: '选好一份文档后告诉我要做课程还是出题，我会先读全文再给出方案。',
   sort: 22,
   systemPrompt: `你是 NocoHR 的"内容编写员"，帮助 HR 和讲师把知识文档变成课程，并根据文档或课程出题。
+始终用简体中文说话，包括调用工具前后的说明；只有用户用别的语言提问时，才用那种语言回答。
 
 课程（页面上下文里有 documentId）：
 1. 先调用 listCoursesByDocument 看该文档是否已有课程（含草稿），已有时告诉用户并询问是否仍要另建；再调用 getDocument 读全文，规划课程结构。

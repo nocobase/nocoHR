@@ -90,9 +90,11 @@ export function createHrAssistantAttendance(deps: {
     const result = found ?? (await candidatesFor(run, scheduleId));
     const { schedule, candidates } = result;
     run.summarize(`排班 ${schedule.date} · 候选 ${candidates.length} 人`);
+    // `line`: the one sentence the head reads in the notice (and in Feishu) for this person.
     let chosen = candidates.slice(0, 3).map((c) => ({
       employeeId: c.employeeId,
       reasons: c.reasons,
+      line: c.reasons.join('，'),
     }));
     if (candidates.length) {
       try {
@@ -101,7 +103,7 @@ export function createHrAssistantAttendance(deps: {
           'hrAssistant',
           '顶班推荐',
           [
-            '以下是规则筛出的可顶班人员（已按当月加班少者优先排序）。只从中选，最多 3 人，逐人用一句话说明理由（当天空闲、前后休息时间、当月加班与夜班数），只陈述事实、不评价员工。',
+            '以下是规则筛出的可顶班人员（已按当月加班少者优先排序）。只从中选，最多 3 人，逐人用一句话说明理由（当天空闲、前后休息时间、当月加班与夜班数），只陈述事实、不评价员工；restBeforeHours 或 restAfterHours 为 null 表示那一侧没有相邻班次，不要写这一项，也不要写“—”。',
             JSON.stringify(
               candidates.slice(0, 10).map((c) => ({
                 employeeId: c.employeeId,
@@ -131,6 +133,7 @@ export function createHrAssistantAttendance(deps: {
           .map((c) => ({
             employeeId: c.employeeId,
             reasons: [c.reason, ...allowed.get(c.employeeId)!.reasons],
+            line: c.reason,
           }));
         if (picked.length) chosen = picked;
         else run.markFallback();
@@ -140,7 +143,10 @@ export function createHrAssistantAttendance(deps: {
       }
     }
     await deps.schedules().saveSuggestion(run.owner, scheduleId, {
-      candidates: chosen,
+      candidates: chosen.map(({ employeeId, reasons }) => ({
+        employeeId,
+        reasons,
+      })),
       runId: run.runId,
     });
     const employee = await database
@@ -162,10 +168,13 @@ export function createHrAssistantAttendance(deps: {
               chosen.map((c) => c.employeeId),
             )
             .execute()
-        )
-          .map((row) => str(row.name))
-          .join('、')
-      : '';
+        ).map((row) => [str(row.id), str(row.name)] as const)
+      : [];
+    const nameOf = new Map(names);
+    // “刘洋：当天空闲、休息间隔 16 小时、本月加班最少”: who and why, not only a link.
+    const lines = chosen
+      .map((c) => `${nameOf.get(c.employeeId) ?? ''}：${c.line}`)
+      .join('；');
     if (head)
       await platform.notify({
         key: `replacement:${scheduleId}:${run.runId}`,
@@ -174,7 +183,7 @@ export function createHrAssistantAttendance(deps: {
         params: {
           name: str(employee?.name ?? ''),
           date: schedule.date,
-          candidates: names,
+          candidates: lines,
         },
         path: `/talent/schedules?department=${schedule.departmentId}&from=${schedule.date}`,
       });

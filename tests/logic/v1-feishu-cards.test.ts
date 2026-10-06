@@ -714,3 +714,78 @@ describe('默认路由表', () => {
     expect(descriptions[3]).toContain('劳动合同');
   });
 });
+
+describe('发送失败的卡片', () => {
+  it('lists an open card that failed with the provider’s reason, and sends it again for whoever runs the sync', async () => {
+    const card = await (
+      await db()
+    )
+      .query()
+      .selectFrom('imCards')
+      .select(['id'])
+      .where('status', '=', 'open')
+      .executeTakeFirst();
+    expect(card).toBeDefined();
+    const reason =
+      'IM_SEND_FAILED: FEISHU_API_230013: Bot has NO availability to this user.';
+    await (
+      await db()
+    )
+      .query()
+      .updateTable('imCards')
+      .set({ sendError: reason })
+      .where('id', '=', String(card!.id))
+      .execute();
+    expect((await call(null, 'GET', '/org-sync/failed-cards')).status).toBe(
+      401,
+    );
+    expect(
+      (await call('mgr_njl', 'GET', '/org-sync/failed-cards')).status,
+    ).toBe(403);
+    const listed = await call('hr01', 'GET', '/org-sync/failed-cards');
+    expect(listed.status).toBe(200);
+    const row = (listed.json.data as Json[]).find((c) => c.id === card!.id);
+    expect(row).toMatchObject({ error: reason });
+    expect(typeof row!.title).toBe('string');
+    expect(
+      (
+        await call(
+          'mgr_njl',
+          'POST',
+          `/org-sync/failed-cards/${card!.id}/resend`,
+        )
+      ).status,
+    ).toBe(403);
+    const resent = await call(
+      'hr01',
+      'POST',
+      `/org-sync/failed-cards/${card!.id}/resend`,
+    );
+    expect(resent.json.data).toEqual({ status: 'sent' });
+    const after = await call('hr01', 'GET', '/org-sync/failed-cards');
+    expect((after.json.data as Json[]).some((c) => c.id === card!.id)).toBe(
+      false,
+    );
+    // Sent again: nothing left to resend.
+    expect(
+      (await call('hr01', 'POST', `/org-sync/failed-cards/${card!.id}/resend`))
+        .json.code,
+    ).toBe('IM_CARD_NOT_RESENDABLE');
+  });
+
+  it('keeps Feishu’s code and message in the long connection’s log line', async () => {
+    const { feishuLogText } =
+      await import('../../server/providers/hr/feishu/long-connection.ts');
+    expect(
+      feishuLogText('[ws]', { code: 230013, msg: 'Bot has NO availability' }),
+    ).toBe('[ws] 230013 Bot has NO availability');
+    expect(feishuLogText(new Error('socket closed'))).toBe('socket closed');
+    expect(
+      feishuLogText({
+        response: { data: { code: 99991663, msg: 'token invalid' } },
+      }),
+    ).toBe('99991663 token invalid');
+    // Never the whole object.
+    expect(feishuLogText({ headers: { authorization: 'Bearer x' } })).toBe('');
+  });
+});

@@ -199,7 +199,7 @@ const zhCN: AppServerResource = {
     },
     replacementSuggested: {
       title: '{{name}} {{date}} 的顶班推荐',
-      body: '人事助理推荐：{{candidates}}。排班在你保存之前不会改变。',
+      body: '推荐 {{candidates}}。排班在你保存之前不会改变。',
     },
     replacementNone: {
       title: '{{name}} {{date}} 没有找到合适的顶班人选',
@@ -637,6 +637,7 @@ const zhCN: AppServerResource = {
   // V1-04 办公软件机器人与飞书卡片 (server/providers/hr/im-channel.ts, im-cards/)
   imBot: {
     textOnly: '目前只能回答文字消息，请直接用文字提问。',
+    working: '正在处理，卡片稍后会更新。',
     payLinkOnly: '请在 NocoHR 工资条页验证身份后查看：{{link}}',
     groupOnly: '请私聊提问，避免在群里发出个人信息。',
     unbound:

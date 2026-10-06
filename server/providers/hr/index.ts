@@ -1550,8 +1550,9 @@ export default class HrProvider extends ServiceProvider<Application> {
           userIds: recipients,
           title: t(`notifications.${message}.title`, values),
           // V2-07: recruiting notices reach the office suite as a title and a NocoHR link only (no candidate data).
+          // Cover suggestions are the exception: the head needs the names and reasons in the chat itself.
           summary:
-            fromHrAssistant ||
+            (fromHrAssistant && !message.startsWith('replacement')) ||
             message.startsWith('recruiting') ||
             // V4-12: performance notices reach the office suite as a to-do title and a link only.
             message.startsWith('performance') ||
@@ -2381,6 +2382,13 @@ export default class HrProvider extends ServiceProvider<Application> {
         handleMessage: (message) => channel.handle(message),
         handleCardAction: (callback) => channel.cards.handleCallback(callback),
         textOnly: async () => (await channel.translate())('imBot.textOnly'),
+        working: async () => (await channel.translate())('imBot.working'),
+        delayedUpdate: async (token, card) => {
+          await feishu.api.call('/interactive/v1/card/update', {
+            method: 'POST',
+            body: { token, card },
+          });
+        },
         log: {
           info: (detail, message) => logger.info(detail, message),
           warn: (detail, message) => logger.warn(detail, message),

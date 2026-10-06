@@ -116,8 +116,25 @@ export function createImCards(deps: {
   readonly authz: AppAuthorization;
   readonly transport: ImTransport;
   readonly translate: () => Promise<Translate>;
+  /** Send failures are logged with the provider's own code and message. */
+  readonly warn?: (detail: Record<string, unknown>, message: string) => void;
 }) {
   const { database } = deps;
+
+  /**
+   * What a failed send stores and logs: an HrError's code, else the provider's
+   * error (the Feishu client words it `FEISHU_API_<code>: <msg>`, without
+   * tokens), so 发送失败 can be traced to its cause, such as a recipient
+   * outside the app's availability range.
+   */
+  function sendFailure(error: unknown, cardId: string): string {
+    const detail =
+      error instanceof HrError
+        ? error.code
+        : `IM_SEND_FAILED: ${error instanceof Error ? error.message : String(error)}`;
+    deps.warn?.({ cardId, error: detail }, 'Office-suite card send failed');
+    return detail.slice(0, 255);
+  }
   const bindings = createBindings(database);
   const kinds = new Map<string, CardKindDefinition<unknown>>();
 
@@ -207,8 +224,9 @@ export function createImCards(deps: {
         str(row.id),
         await renderRow(row),
       );
-    } catch {
-      // The card shows its latest state the next time it is opened or pressed.
+    } catch (error) {
+      // The card shows its latest state the next time it is opened or pressed; the reason is logged.
+      sendFailure(error, str(row.id));
     }
   }
 
@@ -315,9 +333,61 @@ export function createImCards(deps: {
         );
         return { status: 'sent', cardId: id };
       } catch (error) {
-        const code = error instanceof HrError ? error.code : 'IM_SEND_FAILED';
+        const code = sendFailure(error, id);
         await update(id, { sendError: code });
         return { status: 'failed', cardId: id, error: code };
+      }
+    },
+
+    /** Open cards whose send failed, newest first: 设置 · 组织同步 lists them for a resend. */
+    async failed(limit = 50) {
+      const rows = await database
+        .query()
+        .selectFrom('imCards')
+        .selectAll()
+        .where('status', '=', 'open')
+        .where('sendError', 'is not', null)
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .execute();
+      return Promise.all(
+        rows.map(async (row) => {
+          const card = toCard(row);
+          return {
+            id: card.id,
+            kind: card.kind,
+            title: (await renderRow(row)).title,
+            recipientUserId: card.recipientUserId,
+            error: str(row.sendError),
+            createdAt: card.createdAt,
+          };
+        }),
+      );
+    },
+
+    /** Sends an open card again, after the cause (such as the availability range) was fixed. */
+    async resend(
+      cardId: string,
+    ): Promise<{ status: 'sent' | 'failed'; error?: string }> {
+      const row = await load(cardId);
+      if (!row) throw new HrError('NOT_FOUND', 404);
+      if (row.status !== 'open' || !row.sendError)
+        throw new HrError('IM_CARD_NOT_RESENDABLE', 409);
+      try {
+        await deps.transport.sendCard(
+          {
+            provider: str(row.provider) as ImProvider,
+            externalUserId: str(row.externalUserId),
+          },
+          cardId,
+          await renderRow(row),
+        );
+        await update(cardId, { sendError: null });
+        return { status: 'sent' };
+      } catch (error) {
+        const code = sendFailure(error, cardId);
+        await update(cardId, { sendError: code });
+        return { status: 'failed', error: code };
       }
     },
 

@@ -271,12 +271,21 @@ function CoverDialogBody({
                   <div className='min-w-0 space-y-1'>
                     <p className='font-medium'>{candidate.name}</p>
                     <div className='flex flex-wrap gap-1'>
-                      <Badge variant='outline'>
-                        {t('attendance.scheduling.cover.rest', {
-                          before: candidate.restBeforeHours ?? '—',
-                          after: candidate.restAfterHours ?? '—',
-                        })}
-                      </Badge>
+                      {/* Only the rest that can be worked out; never “— / —”. */}
+                      {candidate.restBeforeHours !== null ? (
+                        <Badge variant='outline'>
+                          {t('attendance.scheduling.cover.restBefore', {
+                            hours: candidate.restBeforeHours,
+                          })}
+                        </Badge>
+                      ) : null}
+                      {candidate.restAfterHours !== null ? (
+                        <Badge variant='outline'>
+                          {t('attendance.scheduling.cover.restAfter', {
+                            hours: candidate.restAfterHours,
+                          })}
+                        </Badge>
+                      ) : null}
                       <Badge variant='outline'>
                         {t('attendance.scheduling.cover.load', {
                           hours: candidate.monthOvertimeHours,
