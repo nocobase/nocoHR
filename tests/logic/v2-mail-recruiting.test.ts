@@ -582,4 +582,82 @@ describe('招聘邮箱 (V2-07)', () => {
       'recruiting',
     );
   });
+
+  it('shows a recruiter only the mail of their own requisitions, and the unsorted mail', async () => {
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const database = server.application.container.resolve(databaseManagerToken);
+    const requisition = await database
+      .query()
+      .selectFrom('applications')
+      .innerJoin('jobPostings', 'jobPostings.id', 'applications.postingId')
+      .select(['jobPostings.requisitionId as id'])
+      .where('applications.id', '=', applicationId)
+      .executeTakeFirstOrThrow();
+    const thread = async () =>
+      (await call('recruit01', 'GET', '/mail/messages?mailbox=recruiting')).json
+        .data as Json[];
+    const before = await thread();
+    expect(before.some((m) => m.refId === applicationId)).toBe(true);
+    const unsorted = before.filter((m) => !m.refType);
+    expect(unsorted.length).toBeGreaterThan(0);
+    const one = before.find((m) => m.refId === applicationId)!;
+
+    // The requisition passes to another recruiter: its mail leaves recruit01's view, 待归类 stays.
+    const other = String(
+      (
+        await database
+          .query()
+          .selectFrom('user')
+          .select(['id'])
+          .where('username', '=', 'hr01')
+          .executeTakeFirstOrThrow()
+      ).id,
+    );
+    const owner = (
+      await database
+        .query()
+        .selectFrom('jobRequisitions')
+        .select(['recruiterUserId'])
+        .where('id', '=', requisition.id)
+        .executeTakeFirstOrThrow()
+    ).recruiterUserId;
+    await database
+      .query()
+      .updateTable('jobRequisitions')
+      .set({ recruiterUserId: other })
+      .where('id', '=', requisition.id)
+      .execute();
+    try {
+      const after = await thread();
+      expect(after.some((m) => m.refId === applicationId)).toBe(false);
+      expect(
+        after
+          .filter((m) => !m.refType)
+          .map((m) => m.id)
+          .sort(),
+      ).toEqual(unsorted.map((m) => m.id).sort());
+      expect(
+        (await call('recruit01', 'GET', `/mail/messages/${one.id}`)).status,
+      ).toBe(404);
+      expect(
+        (
+          (
+            await call(
+              'recruit01',
+              'GET',
+              `/mail/by-record/application/${applicationId}?mailbox=recruiting`,
+            )
+          ).json.data as Json[]
+        ).length,
+      ).toBe(0);
+    } finally {
+      await database
+        .query()
+        .updateTable('jobRequisitions')
+        .set({ recruiterUserId: owner })
+        .where('id', '=', requisition.id)
+        .execute();
+    }
+    expect((await thread()).some((m) => m.refId === applicationId)).toBe(true);
+  });
 });

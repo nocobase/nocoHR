@@ -551,6 +551,11 @@ export function createRecruitingMailHandler(deps: {
     );
   }
 
+  const recruiterCache = new WeakMap<
+    ActorContext,
+    Map<string, string | null>
+  >();
+
   const handler: MailHandler = {
     async canView(ctx: ActorContext) {
       return Boolean(
@@ -561,6 +566,27 @@ export function createRecruitingMailHandler(deps: {
       return Boolean(
         await tryAuthorizeAction(ctx.authz, 'talent.candidate', 'manage'),
       );
+    },
+    /**
+     * V2-07 权限: a recruiter sees the mail of the requisitions they are responsible for, and the
+     * mailbox's 待归类 (mail not linked to an application yet). Each application's recruiter is
+     * looked up once per request.
+     */
+    async canSee(ctx: ActorContext, mail: MailMessage) {
+      if (!mail.refType || !mail.refId) return true;
+      if (mail.refType !== 'application') return false;
+      let owners = recruiterCache.get(ctx);
+      if (!owners)
+        recruiterCache.set(ctx, (owners = new Map<string, string | null>()));
+      let owner = owners.get(mail.refId);
+      if (owner === undefined) {
+        const application = await deps.application(mail.refId);
+        owner = application
+          ? await deps.recruiterOf(application.postingId)
+          : null;
+        owners.set(mail.refId, owner);
+      }
+      return owner === ctx.userId;
     },
     recipients: deps.recruiters,
     onUnmatched: sort,
