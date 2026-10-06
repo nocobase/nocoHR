@@ -1567,6 +1567,11 @@ const zhCN: AppResource = {
         description:
           '对账邮箱收到来信后，认出派遣公司的账单并生成派遣账单，更正账单挂回原账单重新核对；认不出的放入待归类。',
       },
+      'hrAssistant.mailSortHr': {
+        title: '人事邮箱分拣',
+        description:
+          '离职员工从登记的个人邮箱来信时，挂到其档案，认出申请的证明并起草回复，交人事（收入证明交薪酬）确认后发送；文件只以需验证码的链接发出。其他地址的来信放入待归类，回复草稿不含任何个人信息。',
+      },
       'certificationSteward.mailSortAudit': {
         title: '审核问询分拣与准备',
         description:
@@ -2991,6 +2996,10 @@ const zhCN: AppResource = {
       status: '状态',
       tenure: '司龄',
       workLocation: '工作地点',
+      personalEmail: '离职后联系邮箱',
+      personalEmailHint:
+        '个人邮箱，不是公司邮箱：离职证明、最后一个月的工资条和之后申请的证明都以链接发到这里。',
+      personalEmailInvalid: '请填写正确的邮箱地址。',
     },
     employeeStatus: {
       pending: '待入职',
@@ -3620,6 +3629,7 @@ const zhCN: AppResource = {
         mobile: '手机',
         email: '邮箱',
         address: '现住址',
+        personalEmail: '离职后联系邮箱',
         educations: '教育经历',
         experiences: '工作经历',
         emergencyContacts: '紧急联系人',
@@ -3763,6 +3773,8 @@ const zhCN: AppResource = {
     actions: {
       prefillStale: '预填的员工已离职、已转正或不在你的范围内，请重新选择。',
       leaveReasonRequired: '请选择离职原因。',
+      personalEmailHint:
+        '选填。员工离职后，离职证明和最后一个月的工资条会以链接发到这个个人邮箱。',
       prefillingFromSync: '正在按办公软件的数据预填…',
       prefilledFromSync: '已按办公软件的数据预填，请核对后提交。',
       title: '人事异动',

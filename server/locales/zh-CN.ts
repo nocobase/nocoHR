@@ -624,6 +624,15 @@ const zhCN: AppServerResource = {
       title: '{{customer}} 审核请求的回复已起草',
       body: '请核对后发送；分享链接在发送时生成。',
     },
+    // V1-02 V2 增补 · 人事邮箱 (server/providers/hr/departed/): never amounts or ID numbers in the text.
+    mailDepartedRequest: {
+      title: '离职员工申请：{{request}}',
+      body: '回复已起草；文件链接在发送时生成。',
+    },
+    departedTemplateRequired: {
+      title: '请确认离职证明模板',
+      body: '{{name}} 已离职并登记了个人邮箱；模板确认后才会发送离职证明。',
+    },
     // V2-07 招聘邮箱 (server/providers/hr/mail/recruiting.ts)
     mailResumeReceived: {
       title: '招聘邮箱收到一份简历',

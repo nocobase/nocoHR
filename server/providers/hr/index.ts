@@ -128,9 +128,17 @@ import {
 } from './payroll/resources.js';
 import { payrollServicesToken } from './tokens.js';
 // V2-06 邮件往来
-import type { MailConfig } from '../../config/mail.js';
+import type { MailConfig } from '../../config/business-mail.js';
 import { createBillingMailHandler } from './mail/billing.js';
+import {
+  mailProviderRegistryToken,
+  mailServiceToken as pluginMailServiceToken,
+} from '@nocobase/app-plugin-mail/server';
+
+import { createDepartedMail } from './departed/service.js';
+import { createDocumentShares } from './departed/shares.js';
 import { createAuditMail } from './mail/audit.js';
+import { localMailProvider } from './mail/local-provider.js';
 import { createRecruitingMailHandler } from './mail/recruiting.js';
 import { extractResumeText, readIdentity } from './recruiting/resume-text.js';
 import { createMailService } from './mail/service.js';
@@ -139,6 +147,8 @@ import {
   billingMailToken,
   recruitingMailToken,
   auditMailToken,
+  departedMailToken,
+  documentSharesToken,
   mailServiceToken,
   mailSettingsToken,
 } from './tokens.js';
@@ -492,6 +502,7 @@ export default class HrProvider extends ServiceProvider<Application> {
     this.registerMail();
     this.registerRecruitingMail();
     this.registerAuditMail();
+    this.registerDepartedMail();
     // V2-06 邮件往来 end
     // V2-07 用工计划与招聘入职
     this.registerRecruiting();
@@ -515,6 +526,9 @@ export default class HrProvider extends ServiceProvider<Application> {
   private registerMail(): void {
     const container = this.app.container;
     const production = process.env.NODE_ENV === 'production';
+    // 本地文件邮箱: the Mail plugin provider used for development, tests and the demo (never in production).
+    if (!production)
+      container.resolve(mailProviderRegistryToken).register(localMailProvider);
     container.singleton(mailSettingsToken, () =>
       createMailSettingsService(container.resolve(databaseManagerToken)),
     );
@@ -523,36 +537,38 @@ export default class HrProvider extends ServiceProvider<Application> {
         database: container.resolve(databaseManagerToken),
         settings: container.resolve(mailSettingsToken),
         config: () => this.mailConfig(),
-        storageDir: () => this.app.paths.storage(),
         drive: () => container.resolve(driveManagerToken),
         production,
-        sendEmail: async (input) => {
-          if (!container.has(notificationServiceToken))
-            return 'channelNotConfigured';
-          try {
-            await container.resolve(notificationServiceToken).send({
-              idempotencyKey: input.idempotencyKey,
-              source: { type: 'hr.mail', referenceId: input.idempotencyKey },
-              messages: {
-                [input.channel]: {
-                  to: input.to,
-                  replyTo: input.replyTo,
-                  subject: input.subject,
-                  text: input.text,
-                },
-              },
-            });
-            return 'sent';
-          } catch (error) {
-            const code = str(
-              (error as { code?: unknown }).code ??
-                (error as Error).message ??
-                '',
-            );
-            return /CHANNEL|UNKNOWN|DISABLED|NOT_FOUND/iu.test(code)
-              ? 'channelNotConfigured'
-              : 'failed';
+        mail: () => container.resolve(pluginMailServiceToken),
+        localProvider: production ? null : 'local',
+        // A mailbox connected automatically belongs to the owner of its sorting task, else a holder of its role.
+        defaultOwner: async (purpose) => {
+          const task = {
+            billing: 'hrAssistant.mailSortBilling',
+            recruiting: 'recruitingAssistant.mailSortRecruiting',
+            audit: 'certificationSteward.mailSortAudit',
+            hr: null,
+          }[purpose];
+          if (task) {
+            const owner = await container
+              .resolve(databaseManagerToken)
+              .query()
+              .selectFrom('aiAutomationSettings')
+              .select(['ownerUserId'])
+              .where('id', '=', task)
+              .executeTakeFirst();
+            if (owner?.ownerUserId) return str(owner.ownerUserId);
           }
+          const role = {
+            billing: 'hr.payroll',
+            recruiting: 'hr.recruiter',
+            audit: 'hr.admin',
+            hr: 'hr.admin',
+          }[purpose];
+          const holders = await container
+            .resolve(hrCoreServiceToken)
+            .holdersOf(role);
+          return holders[0] ?? null;
         },
         notify: this.notifier(),
         log: (fields, message) =>
@@ -592,14 +608,14 @@ export default class HrProvider extends ServiceProvider<Application> {
           // The latest message from the vendor in that thread: a correction is answered in turn.
           const source = await database
             .query()
-            .selectFrom('mailMessages')
+            .selectFrom('businessMailMessages')
             .select(['id', 'threadKey'])
             .where('id', '=', str(bill.sourceMailId))
             .executeTakeFirst();
           if (!source) return null;
           const latest = await database
             .query()
-            .selectFrom('mailMessages')
+            .selectFrom('businessMailMessages')
             .select(['id'])
             .where('threadKey', '=', String(source.threadKey))
             .where('direction', '=', 'inbound')
@@ -749,7 +765,7 @@ export default class HrProvider extends ServiceProvider<Application> {
           Boolean(
             await database
               .query()
-              .selectFrom('mailMessages')
+              .selectFrom('businessMailMessages')
               .select(['id'])
               .where('mailbox', '=', 'recruiting')
               .where(
@@ -847,8 +863,66 @@ export default class HrProvider extends ServiceProvider<Application> {
     });
   }
 
+  /**
+   * V1-02 V2 增补 · 已离职员工的邮件往来: documents by link to the personal
+   * address and the 人事邮箱's requests (departed/).
+   */
+  private registerDepartedMail(): void {
+    const container = this.app.container;
+    container.singleton(documentSharesToken, () =>
+      createDocumentShares({
+        database: container.resolve(databaseManagerToken),
+        mail: () => container.resolve(mailServiceToken),
+        storeFile: (file) =>
+          container
+            .resolve(profileServicesToken)
+            .reads.storeFile(container.resolve(driveManagerToken), {
+              folder: 'departed',
+              name: file.name,
+              bytes: file.bytes,
+              mimeType: 'application/pdf',
+            }),
+        readFile: async (fileId) => {
+          const file = await container
+            .resolve(profileServicesToken)
+            .reads.readFile(container.resolve(driveManagerToken), fileId);
+          return file ? { bytes: file.bytes, filename: file.filename } : null;
+        },
+        publicUrl: (path) =>
+          `${String(this.app.config.get<{ publicOrigin?: string }>('app')?.publicOrigin ?? '').replace(/\/$/u, '')}${this.app.publicBasePath.replace(/\/$/u, '')}${path}`,
+        companyName: () => this.talentConfig().companyName,
+        now: () => new Date(),
+      }),
+    );
+    container.singleton(departedMailToken, () => {
+      const platform = container.resolve(platformToken);
+      return createDepartedMail({
+        database: container.resolve(databaseManagerToken),
+        mail: () => container.resolve(mailServiceToken),
+        settings: container.resolve(mailSettingsToken),
+        shares: container.resolve(documentSharesToken),
+        run: (key, options, work) =>
+          container
+            .resolve(automationServiceToken)
+            .run(key, 'event', options, work),
+        departmentTitle: async (id) => {
+          if (!id) return '';
+          const department = await platform.organization.getDepartment(id);
+          return department
+            ? platform.organization.titleText(department.title)
+            : '';
+        },
+        companyName: () => this.talentConfig().companyName,
+        today: () => platform.currentDate(),
+        holdersOf: (key) =>
+          container.resolve(hrCoreServiceToken).holdersOf(key),
+        notify: this.notifier(),
+      });
+    });
+  }
+
   private mailConfig(): MailConfig {
-    const raw = this.app.config.get<Partial<MailConfig>>('mail') ?? {};
+    const raw = this.app.config.get<Partial<MailConfig>>('businessMail') ?? {};
     const fallback = (purpose: string) => ({
       adapter: 'mock' as const,
       address: `${purpose}@qiheng.test`,
@@ -1044,6 +1118,11 @@ export default class HrProvider extends ServiceProvider<Application> {
         onBillReviewed: (billId) =>
           this.inBackground('hrAssistant.mailReplyBilling', () =>
             container.resolve(billingMailToken).draftForBill(billId),
+          ),
+        // V1-02 V2 增补: employees who left in the month get their last payslip's link by mail.
+        onPublished: (cycleId) =>
+          this.inBackground('departed.payslips', () =>
+            container.resolve(departedMailToken).onPayslipsPublished(cycleId),
           ),
         onAdjustmentDecided: (actionId) => this.syncChecklist(actionId),
         // V4-12: perf.coefficient, the bonus cycle and the review result an adjustment links to.
@@ -1316,6 +1395,9 @@ export default class HrProvider extends ServiceProvider<Application> {
         // V3-11 审核邮箱: a customer's request to prepare, the reply drafted after the pack.
         mailAuditRequest: 'mailSort',
         mailAuditDraftReady: 'mailReply',
+        // V1-02 V2 增补: a departed employee's request; the separation certificate template to confirm.
+        mailDepartedRequest: 'mailReply',
+        departedTemplateRequired: 'mailSort',
         // V3-11: the talent analyst's suggestions, rule drafts and failed write-backs; the writer's revisions.
         competencySuggestionDrafted: 'aiDecision',
         trainingRecommendationPending: 'aiDecision',
@@ -1413,6 +1495,7 @@ export default class HrProvider extends ServiceProvider<Application> {
         mailCandidateReplied: 'recruitingAssistant',
         mailAuditRequest: 'certificationSteward',
         mailAuditDraftReady: 'certificationSteward',
+        departedTemplateRequired: 'hrAssistant',
         recruitingDigest: 'recruitingAssistant',
         recruitingNewHireIssue: 'hrAssistant',
         recruitingPreboardingExtracted: 'hrAssistant',
@@ -2115,6 +2198,10 @@ export default class HrProvider extends ServiceProvider<Application> {
     container
       .resolve(mailServiceToken)
       .registerHandler('audit', container.resolve(auditMailToken).handler);
+    // V1-02 V2 增补: the 人事邮箱 (departed employees' requests).
+    container
+      .resolve(mailServiceToken)
+      .registerHandler('hr', container.resolve(departedMailToken).handler);
     const database = container.resolve(databaseManagerToken);
     const organization = container.resolve(organizationServiceToken);
 
@@ -2915,6 +3002,15 @@ export default class HrProvider extends ServiceProvider<Application> {
       container
         .resolve(checklistServiceToken)
         .register(scheduleChecklistProvider()),
+      // V1-02 V2 增补: the separation certificate by mail, and the checklist's 离职后联系邮箱.
+      processor.register({
+        key: 'departed.offboard',
+        handle: (event) =>
+          container.resolve(departedMailToken).onOffboard(event),
+      }),
+      container
+        .resolve(checklistServiceToken)
+        .register(container.resolve(departedMailToken).checklist),
     );
     // V2-06 end
     // V3-08: targets achieved on a position change; the change checklist's 能力差距 items; to-dos on first confirmation.

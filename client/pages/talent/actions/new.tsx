@@ -44,6 +44,8 @@ import { ActionChainPreview } from './chain-preview.js';
 import { ACTION_TYPES, type ActionsOutletContext } from './types.js';
 
 const FORM_ID = 'action-new-form';
+/** The same shape the server checks for the contact address after leaving. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
 /** What `talent/org-sync/issues/prefill` answers with (V1-03). */
 interface IssuePrefill {
@@ -164,6 +166,7 @@ function ActionForm({
   }));
   const [positionError, setPositionError] = useState<string>();
   const [leaveReasonError, setLeaveReasonError] = useState<string>();
+  const [personalEmailError, setPersonalEmailError] = useState<string>();
   const [createAccount, setCreateAccount] = useState(false);
   // 界面追加字段 placed on the onboarding form (工服尺码, 宿舍号…).
   const { definitions: onboardFields } = useCustomFieldDefinitions(
@@ -308,6 +311,15 @@ function ActionForm({
       document.getElementById('action-leave')?.focus();
       return;
     }
+    if (
+      type === 'offboard' &&
+      draft.personalEmail?.trim() &&
+      !EMAIL.test(draft.personalEmail.trim())
+    ) {
+      setPersonalEmailError(t('talent.errors.ACTION_PERSONAL_EMAIL_INVALID'));
+      document.getElementById('action-personal-email')?.focus();
+      return;
+    }
     const json: Record<string, unknown> = {
       actionType: type,
       effectiveDate: draft.effectiveDate,
@@ -343,8 +355,12 @@ function ActionForm({
           toDepartmentId: draft.toDepartmentId || null,
           toPositionId: draft.toPositionId,
         });
-      if (type === 'offboard')
+      if (type === 'offboard') {
         Object.assign(json, { leaveReason: draft.leaveReason });
+        // V1-02 V2 增补: optional; sent only when given.
+        const personalEmail = draft.personalEmail?.trim();
+        if (personalEmail) json.personalEmail = personalEmail;
+      }
     }
     onSubmittingChange(true);
     setError(undefined);
@@ -363,6 +379,8 @@ function ActionForm({
       // A promotion to a position that is not higher in the family: shown under the target position.
       if (errorCode(cause) === 'ACTION_PROMOTE_NOT_HIGHER')
         setPositionError(errorMessage(cause, t));
+      else if (errorCode(cause) === 'ACTION_PERSONAL_EMAIL_INVALID')
+        setPersonalEmailError(errorMessage(cause, t));
       else if (errorCode(cause) === 'CUSTOM_FIELD_INVALID') {
         setCustomErrors(customFieldErrors(errorDetails(cause)));
         setError(errorMessage(cause, t));
@@ -709,6 +727,30 @@ function ActionForm({
             </NativeSelect>
             {leaveReasonError ? (
               <FieldError>{leaveReasonError}</FieldError>
+            ) : null}
+          </Field>
+        ) : null}
+        {type === 'offboard' ? (
+          <Field data-invalid={Boolean(personalEmailError)}>
+            <FieldLabel htmlFor='action-personal-email'>
+              {t('talent.fields.personalEmail')}
+            </FieldLabel>
+            <Input
+              id='action-personal-email'
+              type='email'
+              value={draft.personalEmail ?? ''}
+              maxLength={320}
+              aria-invalid={Boolean(personalEmailError)}
+              onChange={(e) => {
+                setPersonalEmailError(undefined);
+                set('personalEmail', e.target.value);
+              }}
+            />
+            <FieldDescription>
+              {t('talent.actions.personalEmailHint')}
+            </FieldDescription>
+            {personalEmailError ? (
+              <FieldError>{personalEmailError}</FieldError>
             ) : null}
           </Field>
         ) : null}

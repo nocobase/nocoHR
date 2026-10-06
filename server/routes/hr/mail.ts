@@ -44,11 +44,49 @@ export const mailRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
     routes.get('/settings', async (c) => {
       const current = await settings().get(actor(c));
       return c.json({
-        data: { ...current, connections: mail().connections() },
+        data: { ...current, connections: await mail().connections() },
       });
     });
-    routes.put('/settings', async (c) =>
-      c.json({ data: await settings().update(actor(c), await readJson(c)) }),
+    routes.put('/settings', async (c) => {
+      const body = await readJson(c);
+      // A mailbox may only be bound to an existing account, as its owner.
+      const mailboxes = (
+        body as {
+          value?: {
+            mailboxes?: Record<
+              string,
+              { accountId?: string; ownerUserId?: string }
+            >;
+          };
+        } | null
+      )?.value?.mailboxes;
+      if (mailboxes) {
+        await settings().get(actor(c));
+        await mail().checkBindings(mailboxes);
+      }
+      return c.json({ data: await settings().update(actor(c), body) });
+    });
+    routes.get('/accounts', async (c) => {
+      // HR administrators only, like the settings themselves.
+      await settings().get(actor(c));
+      return c.json({ data: await mail().accounts() });
+    });
+    routes.get('/mine/bindings', async (c) =>
+      c.json({ data: await mail().myBindings(actor(c)) }),
+    );
+    routes.get('/mine', async (c) =>
+      c.json({
+        data: await mail().mine(actor(c), c.req.query('address') ?? ''),
+      }),
+    );
+    routes.get('/mine/:accountId/:messageId', async (c) =>
+      c.json({
+        data: await mail().mineMessage(
+          actor(c),
+          c.req.param('accountId'),
+          c.req.param('messageId'),
+        ),
+      }),
     );
     routes.get('/mailboxes', async (c) =>
       c.json({ data: await mail().mailboxes(actor(c)) }),

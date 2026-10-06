@@ -1642,6 +1642,7 @@ export function createCycleService(
           path: `/talent/my-payslips?month=${cycle.month}`,
         });
       }
+      ctx.onPublished?.(cycle.id);
       return cycleRow(cycle.id);
     },
 

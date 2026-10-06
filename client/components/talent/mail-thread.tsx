@@ -34,6 +34,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 
+import { MailDocumentProposal } from './mail-document.js';
 import {
   displaySubject,
   recordPath,
@@ -101,6 +102,9 @@ function DraftEditor({
   const [body, setBody] = useState(message.bodyText ?? '');
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // A document reply is sent only by the role its document belongs to (payroll for amounts).
+  const [documentSendable, setDocumentSendable] = useState(true);
+  const mayEdit = canSend && documentSendable;
   const to = message.to.join('、');
   const id = `mail-draft-${message.id}`;
 
@@ -171,7 +175,7 @@ function DraftEditor({
           <NativeSelect
             id={`${id}-time`}
             value={String(chosen)}
-            disabled={!canSend || busy}
+            disabled={!mayEdit || busy}
             onChange={(e) => void choose(Number(e.target.value))}
           >
             {options.map((o, index) => (
@@ -183,13 +187,18 @@ function DraftEditor({
           <FieldDescription>{t('mail.rescheduleHint')}</FieldDescription>
         </Field>
       ) : null}
+      {/* 人事邮箱 (V1-02 V2 增补): the document whose link replaces the placeholder on send. */}
+      <MailDocumentProposal
+        message={message}
+        onSendable={setDocumentSendable}
+      />
       <Field>
         <FieldLabel htmlFor={id}>{t('mail.draftTitle')}</FieldLabel>
         <Textarea
           id={id}
           rows={10}
           value={body}
-          disabled={!canSend || busy}
+          disabled={!mayEdit || busy}
           onChange={(e) => setBody(e.target.value)}
         />
         <FieldDescription>
@@ -199,7 +208,7 @@ function DraftEditor({
           })}
         </FieldDescription>
       </Field>
-      {canSend ? (
+      {mayEdit ? (
         <div className='flex flex-wrap gap-2'>
           <Button
             variant='outline'

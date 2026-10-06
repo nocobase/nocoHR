@@ -25,7 +25,9 @@ import talent from './talent.js';
 import talentProfile from './talent-profile.js';
 // Feishu self-built app (organization sync, bot)
 import feishu from './feishu.js';
-// V2-06: business mailboxes (邮件往来).
+// V2-06: business mailboxes (邮件往来). Named businessMail: `mail` belongs to the Mail plugin.
+import businessMail from './business-mail.js';
+// The Mail plugin (@nocobase/app-plugin-mail): user mailboxes and their providers.
 import mail from './mail.js';
 
 const defaultConfigs: AppConfigFactory<{
@@ -50,6 +52,7 @@ const defaultConfigs: AppConfigFactory<{
   talent: ReturnType<typeof talent>;
   talentProfile: ReturnType<typeof talentProfile>;
   feishu: ReturnType<typeof feishu>;
+  businessMail: ReturnType<typeof businessMail>;
   mail: ReturnType<typeof mail>;
 }> = defaultAppConfigs({
   auth,
@@ -73,6 +76,7 @@ const defaultConfigs: AppConfigFactory<{
   talent,
   talentProfile,
   feishu,
+  businessMail,
   mail,
 });
 

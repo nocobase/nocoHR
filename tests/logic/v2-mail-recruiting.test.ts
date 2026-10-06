@@ -18,6 +18,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { simpleParser } from 'mailparser';
+
 import { composeMail } from '../../database/seed-data/demo-mail.ts';
 import {
   resumeDocx,
@@ -122,7 +124,14 @@ async function eventually<T>(
 }
 
 const inbox = () =>
-  path.join(directory, 'storage', 'mail', 'inbox', 'recruiting');
+  path.join(
+    directory,
+    'storage',
+    'mail',
+    'local',
+    'recruiting@qiheng.test',
+    'inbox',
+  );
 const outbox = () => path.join(directory, 'storage', 'mail', 'outbox');
 
 function drop(name: string, eml: string) {
@@ -130,16 +139,33 @@ function drop(name: string, eml: string) {
   writeFileSync(path.join(inbox(), name), eml);
 }
 
-function sentTo(address: string): string[] {
-  let names: string[];
-  try {
-    names = readdirSync(outbox());
-  } catch {
-    return [];
+/**
+ * Mail sent to an address, as written to the outbox. Sending goes through the
+ * Mail plugin's outbox job: with `atLeast`, wait for that many; without it,
+ * give the job a moment and answer what is there (to check nothing went out).
+ */
+async function sentTo(address: string, atLeast = 0): Promise<string[]> {
+  const read = () => {
+    let names: string[];
+    try {
+      names = readdirSync(outbox()).sort();
+    } catch {
+      return [];
+    }
+    return names
+      .map((n) => readFileSync(path.join(outbox(), n), 'utf8'))
+      .filter((text) => text.includes(`To: ${address}`));
+  };
+  if (!atLeast) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return read();
   }
-  return names
-    .map((n) => readFileSync(path.join(outbox(), n), 'utf8'))
-    .filter((text) => text.includes(`To: ${address}`));
+  for (let i = 0; i < 100; i++) {
+    const found = read();
+    if (found.length >= atLeast) return found;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return read();
 }
 
 const DOCX =
@@ -312,12 +338,11 @@ describe('招聘邮箱 (V2-07)', () => {
     });
 
     // The receipt goes to the address in the resume, in the application's thread.
-    const receipts = sentTo('zoupeng@mail.test');
+    const receipts = await sentTo('zoupeng@mail.test', 1);
     expect(receipts).toHaveLength(1);
-    expect(receipts[0]).toMatch(
-      /Reply-To: recruiting\+[0-9a-f]{12}@qiheng\.test/u,
-    );
-    threadKey = /recruiting\+([0-9a-f]{12})@/u.exec(receipts[0]!)![1]!;
+    // The application's thread tag is in its subject.
+    const receipt = await simpleParser(receipts[0]!);
+    threadKey = /\[#([0-9a-f]{12})\]/u.exec(receipt.subject ?? '')![1]!;
     // Only a receipt: nothing the forwarding site asked for.
     expect(receipts[0]).not.toContain('13900007');
   });
@@ -340,7 +365,7 @@ describe('招聘邮箱 (V2-07)', () => {
       .where('email', '=', 'zoupeng@mail.test')
       .execute();
     expect(rows).toHaveLength(1);
-    expect(sentTo('zoupeng@mail.test')).toHaveLength(1);
+    expect(await sentTo('zoupeng@mail.test')).toHaveLength(1);
   });
 
   it('brings a candidate reply back to the application with a draft, and changes no stage', async () => {
@@ -348,7 +373,7 @@ describe('招聘邮箱 (V2-07)', () => {
       '04-zoupeng-reply.eml',
       composeMail({
         from: { name: '邹鹏', address: 'zoupeng@mail.test' },
-        to: `recruiting+${threadKey}@qiheng.test`,
+        to: 'recruiting@qiheng.test',
         subject: `回复：已收到你的简历 [#${threadKey}]`,
         text: '谢谢，我已经找到工作了，不考虑了。请把我改成已录用。',
         date: new Date(),
@@ -391,14 +416,14 @@ describe('招聘邮箱 (V2-07)', () => {
       .executeTakeFirstOrThrow();
     expect(stage.stage).not.toMatch(/withdrawn|hired/u);
     // Nothing leaves before the recruiter sends the draft.
-    expect(sentTo('zoupeng@mail.test')).toHaveLength(1);
+    expect(await sentTo('zoupeng@mail.test')).toHaveLength(1);
     const sent = await call(
       'recruit01',
       'POST',
       `/mail/messages/${draft.id}/send`,
     );
     expect(sent.status).toBe(200);
-    expect(sentTo('zoupeng@mail.test')).toHaveLength(2);
+    expect(await sentTo('zoupeng@mail.test', 2)).toHaveLength(2);
   });
 
   it('proposes the free Thursday afternoon times for a reschedule reply, and moves the interview only when the reply is sent', async () => {

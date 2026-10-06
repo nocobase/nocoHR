@@ -1,30 +1,39 @@
 /**
  * 邮件往来 (总纲 邮件约定, V2-06). The one place business mail is received,
- * threaded, drafted and sent:
+ * threaded, drafted and sent. Since 2026-10-05 the mailboxes are Mail plugin
+ * accounts (@nocobase/app-plugin-mail): the plugin connects, synchronizes and
+ * sends; this service decides what the mail means for NocoHR.
  *
- * - Receiving: each enabled mailbox's source is read; a message is stored once
- *   per (mailbox, messageId), attachments are filtered and kept as hrFiles, and
- *   the message is threaded by the `+<threadKey>` in the address it was sent
- *   to (or the `[#threadKey]` tag in its subject). A reply in a linked thread
- *   goes to the purpose's handler as a reply; anything else as unmatched.
- * - Sending: only drafts are sent, only by someone the purpose allows, through
- *   the notification plugin's email channel with a reply address that carries
- *   the thread key. The mock adapter writes the message to the outbox instead.
+ * - A purpose's mailbox is the plugin account bound to it on 设置 / 邮件, read
+ *   and sent as the account's owner. Development, tests and the demo bind a
+ *   本地文件邮箱 account per purpose automatically.
+ * - Receiving: the account is synchronized, and each new message of its inbox
+ *   is stored once per (mailbox, Message-ID) with its attachments filtered and
+ *   kept as hrFiles. It is threaded by the `[#threadKey]` tag in its subject,
+ *   or by its In-Reply-To / References naming a message of a known thread. A
+ *   reply in a linked thread goes to the purpose's handler as a reply;
+ *   anything else as unmatched.
+ * - Sending: only drafts are sent (and the steps' own confirmed messages,
+ *   sendDirect), only by someone the purpose allows, through the plugin as the
+ *   account; a reply names the message it answers, so the plugin keeps the
+ *   conversation's headers.
  *
  * Message content is data: nothing here, and no handler, acts on what a
  * message asks for. Handlers only recognise, link and draft.
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 
+import type { MailService as PluginMailService } from '@nocobase/app-plugin-mail/server';
 import type { DatabaseManager } from '@nocobase/db';
 import type { NocoBaseDriveManager } from '@nocobase/drive';
 
-import type { MailConfig, MailboxConfig } from '../../../config/mail.js';
+import type {
+  MailConfig,
+  MailboxConfig,
+} from '../../../config/business-mail.js';
 import type { ActorContext } from '../framework-service.js';
 import { HrError } from '../shared.js';
-import { parseMail, type ParsedMail } from './parse.js';
 import type { MailSettingsService } from './settings.js';
-import { mailSourceFor, writeMockOutbox } from './sources.js';
 import {
   MAIL_PURPOSES,
   type MailHandler,
@@ -94,19 +103,42 @@ export function toMail(row: Record<string, unknown>): MailMessage {
 
 const newThreadKey = (): string => randomBytes(6).toString('hex');
 
-/** `billing+<key>@qiheng.test` for the thread key a message was sent to. */
-function threadKeyOf(
-  parsed: ParsedMail,
-  own: readonly string[],
-): string | null {
-  for (const address of [...parsed.to, ...parsed.cc]) {
-    const [local, host] = address.split('@');
-    if (!local || !host) continue;
-    const [base, key] = local.split('+');
-    if (key && own.includes(`${base}@${host}`)) return key.toLowerCase();
-  }
-  const tag = /\[#([0-9a-f]{12})\]/iu.exec(parsed.subject);
+/** The `[#threadKey]` tag a reply keeps in its subject. */
+function threadKeyOf(subject: string): string | null {
+  const tag = /\[#([0-9a-f]{12})\]/iu.exec(subject);
   return tag ? tag[1].toLowerCase() : null;
+}
+
+/** A received message, as the plugin hands it over. */
+interface IncomingMail {
+  readonly ref: string;
+  readonly messageId: string;
+  readonly inReplyTo: string | null;
+  readonly references: readonly string[];
+  readonly from: { address: string; name: string | null };
+  readonly to: string[];
+  readonly cc: string[];
+  readonly subject: string;
+  readonly text: string;
+  readonly date: Date | null;
+  readonly attachments: {
+    filename: string;
+    contentType: string;
+    bytes: Uint8Array;
+  }[];
+}
+
+async function readStream(
+  stream: ReadableStream<Uint8Array>,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return new Uint8Array(Buffer.concat(chunks));
 }
 
 function addDays(date: Date, days: number): string {
@@ -118,18 +150,14 @@ export interface MailServiceDeps {
   readonly database: DatabaseManager;
   readonly settings: MailSettingsService;
   readonly config: () => MailConfig;
-  readonly storageDir: () => string;
   readonly drive: () => NocoBaseDriveManager;
   readonly production: boolean;
-  /** Sends one email through the notification plugin; answers the delivery state. */
-  readonly sendEmail: (input: {
-    idempotencyKey: string;
-    channel: string;
-    to: string;
-    replyTo: string;
-    subject: string;
-    text: string;
-  }) => Promise<'sent' | 'channelNotConfigured' | 'failed'>;
+  /** The Mail plugin's service: accounts, synchronization, messages and sending. */
+  readonly mail: () => PluginMailService;
+  /** The 本地文件邮箱 provider instance, outside production (`local`); null in production. */
+  readonly localProvider: string | null;
+  /** Who a purpose's mailbox belongs to when it is connected automatically (the owner of its sorting task). */
+  readonly defaultOwner: (purpose: MailPurpose) => Promise<string | null>;
   readonly notify: (input: {
     key: string;
     userIds: string[];
@@ -143,13 +171,226 @@ export interface MailServiceDeps {
 export function createMailService(deps: MailServiceDeps) {
   const { database } = deps;
   const handlers = new Map<MailPurpose, MailHandler>();
+  const localTried = new Set<MailPurpose>();
 
   function mailboxConfig(purpose: MailPurpose): MailboxConfig {
     return deps.config()[purpose];
   }
 
-  function ownAddresses(): string[] {
-    return MAIL_PURPOSES.map((p) => mailboxConfig(p).address.toLowerCase());
+  /** The plugin account serving a purpose and its owner, when one is bound. */
+  async function binding(purpose: MailPurpose) {
+    let mailbox = (await deps.settings.read()).value.mailboxes[purpose];
+    // Outside production the 本地文件邮箱 accounts are connected the first time a mailbox is needed.
+    if (
+      (!mailbox.accountId || !mailbox.ownerUserId) &&
+      deps.localProvider &&
+      !localTried.has(purpose)
+    ) {
+      localTried.add(purpose);
+      await ensureLocalAccounts().catch((error: unknown) =>
+        deps.log({ error, purpose }, 'Local mailbox could not be connected'),
+      );
+      mailbox = (await deps.settings.read()).value.mailboxes[purpose];
+    }
+    if (!mailbox.accountId || !mailbox.ownerUserId) return null;
+    return {
+      accountId: mailbox.accountId,
+      ctx: { actorId: mailbox.ownerUserId },
+    };
+  }
+
+  /** Development, tests and the demo: each purpose gets a 本地文件邮箱 account of its own, once. */
+  async function ensureLocalAccounts(): Promise<void> {
+    if (!deps.localProvider || deps.production) return;
+    const current = await deps.settings.read();
+    // Once an administrator has saved 设置 / 邮件, the bindings are theirs: an unbound mailbox stays unbound.
+    if (current.updatedBy && current.updatedBy !== 'system') return;
+    let changed = false;
+    const mailboxes = { ...current.value.mailboxes };
+    for (const purpose of MAIL_PURPOSES) {
+      if (mailboxes[purpose].accountId) continue;
+      const owner = await deps.defaultOwner(purpose);
+      if (!owner) {
+        deps.log({ purpose }, 'No owner for the local mailbox yet');
+        continue;
+      }
+      const address = mailboxConfig(purpose).address;
+      const ctx = { actorId: owner };
+      const existing = (await deps.mail().listAccounts(ctx)).find(
+        (a) => a.address.toLowerCase() === address.toLowerCase(),
+      );
+      const account =
+        existing ??
+        (await deps.mail().connectAccount(ctx, {
+          provider: { type: 'local-files', name: deps.localProvider },
+          address,
+          ...(current.value.senderName
+            ? { displayName: current.value.senderName }
+            : {}),
+          username: address,
+          password: 'local',
+          initialSyncReceivedAfter: new Date(
+            Date.now() - 365 * 86_400_000,
+          ).toISOString(),
+        }));
+      mailboxes[purpose] = {
+        ...mailboxes[purpose],
+        accountId: account.id,
+        ownerUserId: owner,
+      };
+      changed = true;
+    }
+    if (changed)
+      await deps.settings.writeTrusted({ ...current.value, mailboxes });
+  }
+
+  /**
+   * Synchronizes an account and waits (up to ten seconds) until none of its
+   * runs is still going: the plugin's jobs carry them out, and a newly
+   * connected account already has its first run under way.
+   */
+  async function synchronize(ctx: { actorId: string }, accountId: string) {
+    const mail = deps.mail();
+    await mail.startSync(ctx, { accountId });
+    for (let i = 0; i < 100; i++) {
+      const runs = await mail.listSyncRuns(ctx, 0, 20);
+      const active = runs.filter(
+        (r) =>
+          r.accountId === accountId &&
+          ['pending', 'running'].includes(String(r.status)),
+      );
+      if (!active.length) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /** The inbox messages not stored yet, oldest first, read in full. */
+  async function newMail(
+    purpose: MailPurpose,
+    ctx: { actorId: string },
+    accountId: string,
+  ): Promise<IncomingMail[]> {
+    const mail = deps.mail();
+    const inbox = (await mail.listFolders(ctx, accountId)).filter(
+      (f) => f.type === 'inbox',
+    );
+    const fresh: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 20; page++) {
+      const result = await mail.listMessages(ctx, {
+        accountIds: [accountId],
+        limit: 50,
+        ...(cursor ? { cursor } : {}),
+      });
+      // Received mail only: a message names its folders by the provider's id or the plugin's.
+      const inboxIds = new Set(
+        inbox.flatMap((f) => [f.id, f.providerFolderId]),
+      );
+      const refs = result.items
+        .filter(
+          (m) =>
+            !m.draft &&
+            (!inboxIds.size || m.folderIds.some((id) => inboxIds.has(id))),
+        )
+        .map((m) => m.id);
+      const known = refs.length
+        ? new Set(
+            (
+              await database
+                .query()
+                .selectFrom('businessMailMessages')
+                .select(['mailMessageRef'])
+                .where('mailbox', '=', purpose)
+                .where('mailMessageRef', 'in', refs)
+                .execute()
+            ).map((r) => str(r.mailMessageRef)),
+          )
+        : new Set<string>();
+      const unseen = refs.filter((r) => !known.has(r));
+      fresh.push(...unseen);
+      // Newest first: a page with nothing new means everything older was already stored.
+      if (!unseen.length || !result.nextCursor) break;
+      cursor = result.nextCursor;
+    }
+    const out: IncomingMail[] = [];
+    for (const ref of fresh.reverse()) {
+      const full = await mail.getMessage(ctx, accountId, ref);
+      if (!full) continue;
+      const attachments = [];
+      for (const a of full.attachments.filter((x) => !x.inline)) {
+        const content = await mail.getAttachment(ctx, accountId, full.id, a.id);
+        attachments.push({
+          filename: a.fileName,
+          contentType: a.contentType,
+          bytes: await readStream(content.stream),
+        });
+      }
+      out.push({
+        ref: full.id,
+        messageId: full.internetMessageId ?? `<mail-${full.id}>`,
+        inReplyTo: full.inReplyTo ?? null,
+        references: full.references,
+        from: {
+          address: (full.from?.address ?? '').toLowerCase(),
+          name: full.from?.name ?? null,
+        },
+        to: full.to.map((t) => t.address.toLowerCase()),
+        cc: full.cc.map((t) => t.address.toLowerCase()),
+        subject: full.subject,
+        text: full.text ?? '',
+        date: full.receivedAt ? new Date(full.receivedAt) : null,
+        attachments,
+      });
+    }
+    return out;
+  }
+
+  /** Sends one message as a purpose's account; answers the plugin's verdict. */
+  async function submit(
+    purpose: MailPurpose,
+    input: {
+      idempotencyKey: string;
+      to: string;
+      subject: string;
+      text: string;
+      inReplyToRef: string | null;
+    },
+  ): Promise<{
+    state: 'sent' | 'failed' | 'channelNotConfigured';
+    accountId: string | null;
+  }> {
+    const bound = await binding(purpose);
+    if (!bound) return { state: 'channelNotConfigured', accountId: null };
+    const mail = deps.mail();
+    const identities = await mail.listIdentities(bound.ctx, bound.accountId);
+    const identity =
+      identities.find((i) => i.isPrimary && i.canSend) ??
+      identities.find((i) => i.canSend);
+    if (!identity)
+      return { state: 'channelNotConfigured', accountId: bound.accountId };
+    try {
+      const submission = await mail.sendMessage(bound.ctx, {
+        accountId: bound.accountId,
+        identityId: identity.id,
+        signatureId: null,
+        to: [{ address: input.to }],
+        subject: input.subject,
+        text: input.text,
+        ...(input.inReplyToRef
+          ? { inReplyToMessageId: input.inReplyToRef }
+          : {}),
+        idempotencyKey: input.idempotencyKey,
+      });
+      return {
+        state: ['failed', 'cancelled'].includes(String(submission.status))
+          ? 'failed'
+          : 'sent',
+        accountId: bound.accountId,
+      };
+    } catch (error) {
+      deps.log({ error, purpose }, 'Business mail could not be submitted');
+      return { state: 'failed', accountId: bound.accountId };
+    }
   }
 
   function handlerFor(purpose: MailPurpose): MailHandler {
@@ -161,7 +402,7 @@ export function createMailService(deps: MailServiceDeps) {
   async function row(id: string): Promise<MailMessage> {
     const found = await database
       .query()
-      .selectFrom('mailMessages')
+      .selectFrom('businessMailMessages')
       .selectAll()
       .where('id', '=', id)
       .executeTakeFirst();
@@ -172,6 +413,17 @@ export function createMailService(deps: MailServiceDeps) {
   async function requireView(ctx: ActorContext, purpose: MailPurpose) {
     if (!(await handlerFor(purpose).canView(ctx)))
       throw new HrError('MAIL_NOT_FOUND', 404);
+  }
+
+  /** The messages of a purpose this user may see, when its step narrows them. */
+  async function visible(ctx: ActorContext, mails: MailMessage[]) {
+    if (!mails.length) return mails;
+    const handler = handlerFor(mails[0].mailbox);
+    if (!handler.canSee) return mails;
+    const out: MailMessage[] = [];
+    for (const mail of mails)
+      if (await handler.canSee(ctx, mail)) out.push(mail);
+    return out;
   }
 
   async function requireSend(ctx: ActorContext, purpose: MailPurpose) {
@@ -211,13 +463,13 @@ export function createMailService(deps: MailServiceDeps) {
   /** Stores one received message; answers it, or null for a duplicate. */
   async function ingest(
     purpose: MailPurpose,
-    raw: Uint8Array,
+    accountId: string,
+    parsed: IncomingMail,
   ): Promise<MailMessage | null> {
-    const parsed = await parseMail(raw);
-    const messageId = parsed.messageId ?? `<no-id-${randomUUID()}>`;
+    const messageId = parsed.messageId;
     const duplicate = await database
       .query()
-      .selectFrom('mailMessages')
+      .selectFrom('businessMailMessages')
       .select(['id'])
       .where('mailbox', '=', purpose)
       .where('messageId', '=', messageId)
@@ -244,23 +496,35 @@ export function createMailService(deps: MailServiceDeps) {
           filename: file.filename,
         });
     }
-    // A reply in a known thread takes the thread's record.
-    const key = threadKeyOf(parsed, ownAddresses());
+    // A reply in a known thread takes the thread's record: by its subject tag, else by the messages it answers.
+    const key = threadKeyOf(parsed.subject);
+    const answers = [parsed.inReplyTo, ...parsed.references].filter(
+      (v): v is string => Boolean(v),
+    );
     const thread = key
       ? await database
           .query()
-          .selectFrom('mailMessages')
-          .select(['refType', 'refId'])
+          .selectFrom('businessMailMessages')
+          .select(['threadKey', 'refType', 'refId'])
           .where('threadKey', '=', key)
           .where('mailbox', '=', purpose)
           .where('refId', 'is not', null)
           .executeTakeFirst()
-      : undefined;
+      : answers.length
+        ? await database
+            .query()
+            .selectFrom('businessMailMessages')
+            .select(['threadKey', 'refType', 'refId'])
+            .where('messageId', 'in', answers)
+            .where('mailbox', '=', purpose)
+            .where('refId', 'is not', null)
+            .executeTakeFirst()
+        : undefined;
     const now = new Date();
     const id = randomUUID();
     await database
       .query()
-      .insertInto('mailMessages')
+      .insertInto('businessMailMessages')
       .values({
         id,
         mailbox: purpose,
@@ -268,7 +532,7 @@ export function createMailService(deps: MailServiceDeps) {
         status: thread ? 'linked' : 'received',
         messageId,
         inReplyTo: parsed.inReplyTo,
-        threadKey: thread && key ? key : newThreadKey(),
+        threadKey: thread ? str(thread.threadKey) : newThreadKey(),
         fromAddress: parsed.from.address,
         fromName: parsed.from.name,
         toAddresses: parsed.to,
@@ -287,6 +551,8 @@ export function createMailService(deps: MailServiceDeps) {
         deliveryError: null,
         receivedAt: parsed.date ?? now,
         retentionUntil: addDays(now, settings.mailboxes[purpose].retentionDays),
+        mailAccountId: accountId,
+        mailMessageRef: parsed.ref,
         createdAt: now,
         updatedAt: now,
       })
@@ -300,6 +566,9 @@ export function createMailService(deps: MailServiceDeps) {
       handlers.set(purpose, handler);
     },
 
+    /** Development, tests and the demo: connect the 本地文件邮箱 accounts (once; called at start-up). */
+    ensureLocalAccounts,
+
     /** Reads every enabled mailbox (or one); answers how many new messages each stored. */
     async poll(only?: MailPurpose): Promise<Record<string, number>> {
       const settings = (await deps.settings.read()).value;
@@ -308,25 +577,23 @@ export function createMailService(deps: MailServiceDeps) {
         if (only && purpose !== only) continue;
         if (!settings.mailboxes[purpose].enabled || !handlers.has(purpose))
           continue;
-        const source = mailSourceFor({
-          purpose,
-          config: mailboxConfig(purpose),
-          storageDir: deps.storageDir(),
-          production: deps.production,
-        });
-        if (!source) continue;
-        let stored = 0;
-        let items;
+        const bound = await binding(purpose);
+        if (!bound) {
+          deps.log({ purpose }, 'Mailbox has no Mail account bound');
+          continue;
+        }
+        let items: IncomingMail[];
         try {
-          items = await source.fetch();
+          await synchronize(bound.ctx, bound.accountId);
+          items = await newMail(purpose, bound.ctx, bound.accountId);
         } catch (error) {
           deps.log({ error, purpose }, 'Mailbox could not be read');
           continue;
         }
+        let stored = 0;
         for (const item of items) {
           try {
-            const mail = await ingest(purpose, item.raw);
-            await item.ack();
+            const mail = await ingest(purpose, bound.accountId, item);
             if (!mail) continue;
             stored += 1;
             const handler = handlerFor(purpose);
@@ -347,25 +614,38 @@ export function createMailService(deps: MailServiceDeps) {
       return service.poll(purpose);
     },
 
-    /** Each mailbox's address and source for 设置 / 邮件; never a credential. */
-    connections() {
-      return MAIL_PURPOSES.map((purpose) => {
-        const config = mailboxConfig(purpose);
-        return {
+    /** Each mailbox's bound account for 设置 / 邮件: address, provider and state; never a credential. */
+    async connections() {
+      const settings = (await deps.settings.read()).value;
+      const out = [];
+      for (const purpose of MAIL_PURPOSES) {
+        const mailbox = settings.mailboxes[purpose];
+        const account =
+          mailbox.accountId && mailbox.ownerUserId
+            ? (
+                await deps
+                  .mail()
+                  .listAccounts({ actorId: mailbox.ownerUserId })
+                  .catch(() => [])
+              ).find((a) => a.id === mailbox.accountId)
+            : undefined;
+        out.push({
           purpose,
-          address: config.address,
-          adapter: config.adapter,
-          // IMAP needs a host, user and password; the page says whether they are set, not what they are.
-          configured:
-            config.adapter !== 'imap' ||
-            Boolean(config.imapHost && config.imapUser && config.imapPassword),
-        };
-      });
+          address: account?.address ?? mailboxConfig(purpose).address,
+          adapter: account ? account.provider.type : 'none',
+          status: account?.status ?? null,
+          accountId: account?.id ?? null,
+          ownerUserId: account ? mailbox.ownerUserId : null,
+          configured: Boolean(account),
+        });
+      }
+      return out;
     },
 
     /** The purposes the user may open, with the unmatched count of each. */
     async mailboxes(ctx: ActorContext) {
       const settings = (await deps.settings.read()).value;
+      const connections = await service.connections();
       const out: {
         purpose: MailPurpose;
         address: string;
@@ -377,19 +657,24 @@ export function createMailService(deps: MailServiceDeps) {
       for (const purpose of MAIL_PURPOSES) {
         const handler = handlers.get(purpose);
         if (!handler || !(await handler.canView(ctx))) continue;
-        const unmatched = await database
-          .query()
-          .selectFrom('mailMessages')
-          .select(['id'])
-          .where('mailbox', '=', purpose)
-          .where('status', '=', 'unmatched')
-          .execute();
-        const config = mailboxConfig(purpose);
+        const unmatched = await visible(
+          ctx,
+          (
+            await database
+              .query()
+              .selectFrom('businessMailMessages')
+              .selectAll()
+              .where('mailbox', '=', purpose)
+              .where('status', '=', 'unmatched')
+              .execute()
+          ).map((r) => toMail(r as Record<string, unknown>)),
+        );
+        const connection = connections.find((c) => c.purpose === purpose)!;
         out.push({
           purpose,
-          address: config.address,
+          address: connection.address,
           enabled: settings.mailboxes[purpose].enabled,
-          adapter: config.adapter,
+          adapter: connection.adapter,
           canSend: await handler.canSend(ctx),
           unmatched: unmatched.length,
         });
@@ -405,7 +690,7 @@ export function createMailService(deps: MailServiceDeps) {
       await requireView(ctx, purpose);
       let query = database
         .query()
-        .selectFrom('mailMessages')
+        .selectFrom('businessMailMessages')
         .selectAll()
         .where('mailbox', '=', purpose);
       if (filter.status === 'unmatched')
@@ -416,12 +701,17 @@ export function createMailService(deps: MailServiceDeps) {
         .orderBy('createdAt', 'desc')
         .limit(200)
         .execute();
-      return rows.map((r) => toMail(r as Record<string, unknown>));
+      return visible(
+        ctx,
+        rows.map((r) => toMail(r as Record<string, unknown>)),
+      );
     },
 
     async get(ctx: ActorContext, id: string) {
       const mail = await row(id);
       await requireView(ctx, mail.mailbox);
+      if (!(await visible(ctx, [mail])).length)
+        throw new HrError('MAIL_NOT_FOUND', 404);
       return mail;
     },
 
@@ -435,14 +725,17 @@ export function createMailService(deps: MailServiceDeps) {
       await requireView(ctx, purpose);
       const rows = await database
         .query()
-        .selectFrom('mailMessages')
+        .selectFrom('businessMailMessages')
         .selectAll()
         .where('mailbox', '=', purpose)
         .where('refType', '=', refType)
         .where('refId', '=', refId)
         .orderBy('createdAt', 'asc')
         .execute();
-      return rows.map((r) => toMail(r as Record<string, unknown>));
+      return visible(
+        ctx,
+        rows.map((r) => toMail(r as Record<string, unknown>)),
+      );
     },
 
     /** A file of a message the user may read. */
@@ -493,14 +786,14 @@ export function createMailService(deps: MailServiceDeps) {
       // The record belongs to the whole thread; status, intent and summary describe this message only.
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({ refType: input.refType, refId: input.refId, updatedAt: now })
         .where('threadKey', '=', mail.threadKey)
         .where('mailbox', '=', mail.mailbox)
         .execute();
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({
           status: mail.direction === 'inbound' ? 'linked' : mail.status,
           ...(input.intent !== undefined ? { aiIntent: input.intent } : {}),
@@ -518,7 +811,7 @@ export function createMailService(deps: MailServiceDeps) {
     async leaveUnmatched(id: string, intent: string | null, summary: string) {
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({
           status: 'unmatched',
           aiIntent: intent,
@@ -546,7 +839,7 @@ export function createMailService(deps: MailServiceDeps) {
         throw new HrError('INVALID_INPUT', 400);
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({ status: 'received', updatedAt: new Date() })
         .where('id', '=', id)
         .execute();
@@ -561,7 +854,7 @@ export function createMailService(deps: MailServiceDeps) {
       if (mail.direction !== 'inbound') throw new HrError('INVALID_INPUT', 400);
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({ status: 'ignored', updatedAt: new Date() })
         .where('id', '=', id)
         .execute();
@@ -584,7 +877,7 @@ export function createMailService(deps: MailServiceDeps) {
       // One open draft per message: a new draft replaces an unsent one.
       await database
         .query()
-        .deleteFrom('mailMessages')
+        .deleteFrom('businessMailMessages')
         .where('draftOf', '=', original.id)
         .where('status', '=', 'draft')
         .execute();
@@ -597,7 +890,7 @@ export function createMailService(deps: MailServiceDeps) {
           : `Re: ${original.subject}`);
       await database
         .query()
-        .insertInto('mailMessages')
+        .insertInto('businessMailMessages')
         .values({
           id,
           mailbox: original.mailbox,
@@ -649,7 +942,7 @@ export function createMailService(deps: MailServiceDeps) {
       const next = await handler.chooseProposal(mail, choice);
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({
           proposal: next.proposal,
           bodyText: next.body.slice(0, 100_000),
@@ -669,22 +962,19 @@ export function createMailService(deps: MailServiceDeps) {
         throw new HrError('INVALID_INPUT', 400);
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({ bodyText: body.slice(0, 100_000), updatedAt: new Date() })
         .where('id', '=', id)
         .execute();
       return row(id);
     },
 
-    /** Sends a draft: the only way mail leaves the application. */
+    /** Sends a draft: the only way a reply leaves the application. */
     async send(ctx: ActorContext, id: string) {
       const mail = await service.get(ctx, id);
       await requireSend(ctx, mail.mailbox);
       if (mail.status !== 'draft') throw new HrError('MAIL_NOT_DRAFT', 409);
       const settings = (await deps.settings.read()).value;
-      const config = mailboxConfig(mail.mailbox);
-      const [local, host] = config.address.split('@');
-      const replyTo = `${local}+${mail.threadKey}@${host}`;
       const subject = mail.subject.includes(`[#${mail.threadKey}]`)
         ? mail.subject
         : `${mail.subject} [#${mail.threadKey}]`;
@@ -696,33 +986,28 @@ export function createMailService(deps: MailServiceDeps) {
         ctx,
         mail,
       )) ?? { text: mail.bodyText ?? '', storedText: mail.bodyText ?? '' };
-      const text = prepared.text;
-      let state: 'sent' | 'channelNotConfigured' | 'failed';
-      if (config.adapter === 'mock' && !deps.production) {
-        writeMockOutbox(deps.storageDir(), {
-          id,
-          from: settings.senderName
-            ? `${settings.senderName} <${config.address}>`
-            : config.address,
-          replyTo,
-          to,
-          subject,
-          text,
-        });
-        state = 'sent';
-      } else
-        state = await deps.sendEmail({
-          idempotencyKey: `hr:mail:${id}`,
-          channel: settings.channel,
-          to,
-          replyTo,
-          subject,
-          text,
-        });
+      // The message it answers, so the plugin sends it in that conversation.
+      const original = mail.draftOf
+        ? await database
+            .query()
+            .selectFrom('businessMailMessages')
+            .select(['mailMessageRef'])
+            .where('id', '=', mail.draftOf)
+            .executeTakeFirst()
+        : undefined;
+      const { state, accountId } = await submit(mail.mailbox, {
+        idempotencyKey: `hr-mail-${id}`,
+        to,
+        subject,
+        text: prepared.text,
+        inReplyToRef: original?.mailMessageRef
+          ? str(original.mailMessageRef)
+          : null,
+      });
       const now = new Date();
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set(
           state === 'sent'
             ? {
@@ -732,6 +1017,7 @@ export function createMailService(deps: MailServiceDeps) {
                 sentBy: ctx.userId,
                 sentAt: now,
                 deliveryError: null,
+                mailAccountId: accountId,
                 updatedAt: now,
               }
             : { deliveryError: state, updatedAt: now },
@@ -746,8 +1032,8 @@ export function createMailService(deps: MailServiceDeps) {
 
     /**
      * Mail a step sends on its own after a person confirmed the content or its template once (an interview
-     * invitation, an offer, a reminder): recorded as sent in the record's thread, with the thread's reply address,
-     * so the answer comes back to the same record. Sent once per idempotency key.
+     * invitation, an offer, a reminder): recorded as sent in the record's thread, with the thread's tag in the
+     * subject, so the answer comes back to the same record. Sent once per idempotency key.
      */
     async sendDirect(input: {
       purpose: MailPurpose;
@@ -757,24 +1043,21 @@ export function createMailService(deps: MailServiceDeps) {
       text: string;
       refType: string | null;
       refId: string | null;
-      /** A step's own channel and test address, when it has them (招聘设置 · 邮件). */
-      channel?: string;
+      /** A step's own test address, when it has one (招聘设置 · 邮件). */
       redirectTo?: string;
       /** What the thread keeps when the sent text must not be stored (a one-time code). */
       storedText?: string;
+      /** What the message carries, for the step's own use (人事邮箱: which document). */
+      proposal?: Record<string, unknown> | null;
     }): Promise<'sent' | 'channelNotConfigured' | 'failed' | null> {
-      // null: the mailbox is off, so the step sends the way it did before mail was connected.
+      // null: the mailbox is off or has no account, so the step sends the way it did before mail was connected.
       const settings = (await deps.settings.read()).value;
-      const config = mailboxConfig(input.purpose);
-      if (
-        !settings.mailboxes[input.purpose].enabled ||
-        config.adapter === 'none'
-      )
-        return null;
+      if (!settings.mailboxes[input.purpose].enabled) return null;
+      if (!(await binding(input.purpose))) return null;
       const messageId = `<${input.idempotencyKey}>`;
       const done = await database
         .query()
-        .selectFrom('mailMessages')
+        .selectFrom('businessMailMessages')
         .select(['status'])
         .where('mailbox', '=', input.purpose)
         .where('messageId', '=', messageId)
@@ -784,7 +1067,7 @@ export function createMailService(deps: MailServiceDeps) {
         input.refType && input.refId
           ? await database
               .query()
-              .selectFrom('mailMessages')
+              .selectFrom('businessMailMessages')
               .select(['threadKey'])
               .where('mailbox', '=', input.purpose)
               .where('refType', '=', input.refType)
@@ -793,39 +1076,21 @@ export function createMailService(deps: MailServiceDeps) {
               .executeTakeFirst()
           : undefined;
       const threadKey = thread ? str(thread.threadKey) : newThreadKey();
-      const [local, host] = config.address.split('@');
-      const replyTo = `${local}+${threadKey}@${host}`;
       const subject = `${input.subject} [#${threadKey}]`;
-      const redirect = input.redirectTo ?? settings.redirectTo;
+      const redirect = input.redirectTo || settings.redirectTo;
       const to = !deps.production && redirect ? redirect : input.to;
-      let state: 'sent' | 'channelNotConfigured' | 'failed';
-      const id = randomUUID();
-      if (config.adapter === 'mock' && !deps.production) {
-        writeMockOutbox(deps.storageDir(), {
-          id,
-          from: settings.senderName
-            ? `${settings.senderName} <${config.address}>`
-            : config.address,
-          replyTo,
-          to,
-          subject,
-          text: input.text,
-        });
-        state = 'sent';
-      } else
-        state = await deps.sendEmail({
-          idempotencyKey: `hr:mail:${input.idempotencyKey}`,
-          channel: input.channel ?? settings.channel,
-          to,
-          replyTo,
-          subject,
-          text: input.text,
-        });
+      const { state, accountId } = await submit(input.purpose, {
+        idempotencyKey: `hr-mail-${input.idempotencyKey}`.slice(0, 190),
+        to,
+        subject,
+        text: input.text,
+        inReplyToRef: null,
+      });
       const now = new Date();
       if (done)
         await database
           .query()
-          .updateTable('mailMessages')
+          .updateTable('businessMailMessages')
           .set({
             status: state === 'sent' ? 'sent' : 'failed',
             sentAt: state === 'sent' ? now : null,
@@ -838,16 +1103,16 @@ export function createMailService(deps: MailServiceDeps) {
       else
         await database
           .query()
-          .insertInto('mailMessages')
+          .insertInto('businessMailMessages')
           .values({
-            id,
+            id: randomUUID(),
             mailbox: input.purpose,
             direction: 'outbound',
             status: state === 'sent' ? 'sent' : 'failed',
             messageId,
             inReplyTo: null,
             threadKey,
-            fromAddress: config.address,
+            fromAddress: mailboxConfig(input.purpose).address,
             fromName: settings.senderName || null,
             toAddresses: [input.to],
             ccAddresses: [],
@@ -859,6 +1124,7 @@ export function createMailService(deps: MailServiceDeps) {
             refId: input.refId,
             aiIntent: null,
             aiSummary: null,
+            proposal: input.proposal ?? null,
             draftOf: null,
             sentBy: null,
             sentAt: state === 'sent' ? now : null,
@@ -868,6 +1134,8 @@ export function createMailService(deps: MailServiceDeps) {
               now,
               settings.mailboxes[input.purpose].retentionDays,
             ),
+            mailAccountId: accountId,
+            mailMessageRef: null,
             createdAt: now,
             updatedAt: now,
           })
@@ -875,11 +1143,117 @@ export function createMailService(deps: MailServiceDeps) {
       return state;
     },
 
+    /** 设置 / 邮件: every Mail plugin account, to bind one to a purpose (HR administrators; checked by the route). */
+    async accounts() {
+      const accounts = await deps
+        .mail()
+        .listManagedAccounts({ actorId: 'system' });
+      return accounts.map((a) => ({
+        id: a.id,
+        address: a.address,
+        ownerUserId: a.userId,
+        ownerName: a.ownerName ?? null,
+        provider: a.provider.type,
+        status: a.status,
+      }));
+    },
+
+    /** A binding names an existing account and its real owner, or nothing. */
+    async checkBindings(
+      mailboxes: Record<string, { accountId?: string; ownerUserId?: string }>,
+    ) {
+      const accounts = await service.accounts();
+      // One account serves one purpose: two purposes reading one inbox would each take every message.
+      const bound = Object.values(mailboxes)
+        .map((m) => m.accountId)
+        .filter((id): id is string => Boolean(id));
+      if (new Set(bound).size !== bound.length)
+        throw new HrError('MAIL_ACCOUNT_IN_USE', 400);
+      for (const mailbox of Object.values(mailboxes)) {
+        if (!mailbox.accountId && !mailbox.ownerUserId) continue;
+        const account = accounts.find((a) => a.id === mailbox.accountId);
+        if (!account || account.ownerUserId !== mailbox.ownerUserId)
+          throw new HrError('MAIL_ACCOUNT_INVALID', 400);
+      }
+    },
+
+    /** The business mailboxes bound to the user's own accounts (我的邮箱 marks them and keeps them from removal). */
+    async myBindings(ctx: ActorContext) {
+      const settings = (await deps.settings.read()).value;
+      return MAIL_PURPOSES.filter(
+        (p) =>
+          settings.mailboxes[p].accountId &&
+          settings.mailboxes[p].ownerUserId === ctx.userId,
+      ).map((purpose) => ({
+        purpose,
+        accountId: settings.mailboxes[purpose].accountId,
+      }));
+    },
+
+    /**
+     * 我的邮箱往来: messages in the user's own Mail accounts that involve an
+     * address (a candidate's), newest first. The plugin checks the ownership.
+     */
+    async mine(ctx: ActorContext, address: string) {
+      const target = address.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+$/u.test(target))
+        throw new HrError('INVALID_INPUT', 400);
+      // The user's mailboxes are synchronized in the background too, so a message that just arrived shows on the next look.
+      const own = { actorId: ctx.userId };
+      for (const account of await deps
+        .mail()
+        .listAccounts(own)
+        .catch(() => []))
+        if (account.status === 'active')
+          void deps
+            .mail()
+            .startSync(own, { accountId: account.id })
+            .catch(() => undefined);
+      const page = await deps
+        .mail()
+        .listMessages({ actorId: ctx.userId }, { query: target, limit: 50 });
+      return page.items
+        .filter(
+          (m) =>
+            !m.draft &&
+            [m.from, ...m.to, ...m.cc]
+              .filter((a): a is NonNullable<typeof a> => Boolean(a))
+              .some((a) => a.address.toLowerCase() === target),
+        )
+        .map((m) => ({
+          accountId: m.accountId,
+          id: m.id,
+          subject: m.subject,
+          from: m.from ?? null,
+          to: m.to,
+          at: m.receivedAt ?? m.sentAt ?? null,
+          preview: m.preview ?? '',
+        }));
+    },
+
+    /** One message of the user's own accounts, as text. */
+    async mineMessage(ctx: ActorContext, accountId: string, messageId: string) {
+      const message = await deps
+        .mail()
+        .getMessage({ actorId: ctx.userId }, accountId, messageId)
+        .catch(() => undefined);
+      if (!message) throw new HrError('MAIL_NOT_FOUND', 404);
+      return {
+        id: message.id,
+        subject: message.subject,
+        from: message.from ?? null,
+        to: message.to,
+        at: message.receivedAt ?? message.sentAt ?? null,
+        text: message.text ?? '',
+        attachments: message.attachments.map((a) => a.fileName),
+      };
+    },
+
     /** Daily: bodies and attachments past their retention are cleared; subject, addresses and links stay. */
     async sweepRetention(date: string) {
       const expired = await database
         .query()
-        .selectFrom('mailMessages')
+        .selectFrom('businessMailMessages')
         .select(['id'])
         .where('retentionUntil', '<', date)
         .where('bodyText', 'is not', null)
@@ -887,7 +1261,7 @@ export function createMailService(deps: MailServiceDeps) {
       if (!expired.length) return { cleared: 0 };
       await database
         .query()
-        .updateTable('mailMessages')
+        .updateTable('businessMailMessages')
         .set({
           bodyText: null,
           attachmentFileIds: [],

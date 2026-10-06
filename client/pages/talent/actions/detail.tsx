@@ -170,6 +170,12 @@ function ActionBody({
                 ],
               ] as [string, string][])
             : []),
+          ...(action.personalEmail
+            ? ([[t('talent.fields.personalEmail'), action.personalEmail]] as [
+                string,
+                string,
+              ][])
+            : []),
         ] as [string, string][])),
     [t('talent.actions.reason'), action.reason ?? '—'],
     [t('talent.actions.applicant'), action.applicantName ?? '—'],

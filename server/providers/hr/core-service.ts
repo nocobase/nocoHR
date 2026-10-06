@@ -115,6 +115,8 @@ export const PROFILE_CHANGE_FIELDS = [
   'mobile',
   'email',
   'address',
+  // V1-02 V2 增补: the address the employee is reached at after leaving.
+  'personalEmail',
   'educations',
   'experiences',
   'emergencyContacts',
@@ -555,6 +557,7 @@ const EMPLOYEE_FIELDS = [
   'idNumber',
   'birthDate',
   'address',
+  'personalEmail',
   'note',
 ] as const;
 
@@ -1136,6 +1139,10 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
           .set({
             leaveDate: effectiveDate,
             leaveReason: row.leaveReason == null ? null : str(row.leaveReason),
+            // The contact address given on the 离职单, kept unless none was given.
+            ...(row.personalEmail
+              ? { personalEmail: str(row.personalEmail) }
+              : {}),
             updatedAt: stamp,
           })
           .where('id', '=', employee.id)
@@ -1434,7 +1441,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
   ): Promise<void> {
     const stamp = now();
     const scalar: Record<string, unknown> = {};
-    for (const key of ['mobile', 'email', 'address'] as const)
+    for (const key of ['mobile', 'email', 'address', 'personalEmail'] as const)
       if (key in changes)
         scalar[key] = changes[key] == null ? null : str(changes[key]);
     if (Object.keys(scalar).length)
@@ -1508,6 +1515,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
         'mobile',
         'email',
         'address',
+        'personalEmail',
         'idNumber',
         'birthDate',
         'gender',
@@ -1785,6 +1793,8 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       let toDepartmentId: string | null = null;
       let toPositionId: string | null = null;
       let leaveReason: string | null = null;
+      // V1-02 V2 增补: where the employee is reached once they have left (sensitive; never in the action's view).
+      let personalEmail: string | null = null;
       if (actionType === 'onboard') {
         toDepartmentId = requireString(
           input.toDepartmentId,
@@ -1912,6 +1922,18 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             LEAVE_REASONS,
             'ACTION_LEAVE_REASON_REQUIRED',
           );
+          if (
+            typeof input.personalEmail === 'string' &&
+            input.personalEmail.trim()
+          ) {
+            const email = input.personalEmail.trim().toLowerCase();
+            if (
+              !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) ||
+              email.length > 320
+            )
+              throw new HrError('ACTION_PERSONAL_EMAIL_INVALID', 400);
+            personalEmail = email;
+          }
         }
       }
       if (toDepartmentId && !(await organization.getDepartment(toDepartmentId)))
@@ -1978,6 +2000,7 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             effectiveDate,
             reason,
             leaveReason,
+            personalEmail,
             status: allPassed ? 'approved' : 'pending',
             applicantUserId: ctx.userId,
             approvals,
@@ -2602,6 +2625,13 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
             optional: true,
             max: 320,
           });
+      if (
+        'personalEmail' in changes &&
+        changes.personalEmail != null &&
+        changes.personalEmail !== '' &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(str(changes.personalEmail))
+      )
+        throw new HrError('INVALID_INPUT', 400);
       const open = await database
         .query()
         .selectFrom('profileChangeRequests')

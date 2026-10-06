@@ -75,6 +75,11 @@ export function EmployeeBasics({
           {'address' in e ? (
             <Item label={t('talent.fields.address')}>{e.address}</Item>
           ) : null}
+          {'personalEmail' in e ? (
+            <Item label={t('talent.fields.personalEmail')}>
+              {e.personalEmail}
+            </Item>
+          ) : null}
           <Item label={t('talent.fields.workLocation')}>{e.workLocation}</Item>
           <Item label={t('talent.fields.positionSince')}>
             {e.positionSince}

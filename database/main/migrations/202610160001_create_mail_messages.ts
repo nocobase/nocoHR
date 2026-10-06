@@ -3,7 +3,9 @@ import { defineMigration, type MigrationDefinition } from '@nocobase/db';
 /**
  * V2-06 业务邮箱与邮件往来 (总纲 邮件约定):
  *
- * - `mailMessages`: one row per message a business mailbox received or the
+ * - `businessMailMessages` (named `mailMessages` until 2026-10-05, renamed for
+ *   the Mail plugin's own `mailMessages`; see 202609020001): one row per
+ *   message a business mailbox received or the
  *   application sent (drafts included), grouped by `threadKey` and linked to
  *   the business record it belongs to (`refType` / `refId`). `mailbox` is the
  *   purpose (billing, recruiting, audit, hr); later steps add purposes and
@@ -15,7 +17,7 @@ import { defineMigration, type MigrationDefinition } from '@nocobase/db';
 const migration: MigrationDefinition = defineMigration({
   name: '202610160001_create_mail_messages',
   async up({ builder }) {
-    await builder.createCollection('mailMessages', (c) => {
+    await builder.createCollection('businessMailMessages', (c) => {
       c.string('id', { length: 64 }).notNull();
       c.primary('id');
       c.string('mailbox', { length: 32 }).notNull();
@@ -58,7 +60,7 @@ const migration: MigrationDefinition = defineMigration({
     await builder.alterCollection('laborVendorBills', (c) => {
       c.dropFields('sourceMailId');
     });
-    await builder.dropCollection('mailMessages');
+    await builder.dropCollection('businessMailMessages');
   },
 });
 

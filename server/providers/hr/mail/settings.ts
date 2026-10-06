@@ -22,6 +22,9 @@ const domain = z
 const mailboxSchema = z
   .object({
     enabled: z.boolean(),
+    /** The Mail plugin account that is this mailbox, and the user it belongs to (who reads and sends as it). */
+    accountId: z.string().trim().max(64).default(''),
+    ownerUserId: z.string().trim().max(64).default(''),
     /** Empty: any sender; otherwise mail from other domains goes to 待归类 without being recognised. */
     allowedSenderDomains: z.array(domain).max(50),
     /** Days an unlinked message keeps its body and attachments. */
@@ -70,6 +73,8 @@ export type MailSettings = z.infer<typeof mailSettingsSchema>;
 
 const mailboxDefault = {
   enabled: true,
+  accountId: '',
+  ownerUserId: '',
   allowedSenderDomains: [],
   retentionDays: 90,
   vendors: [],
@@ -93,7 +98,12 @@ export const MAIL_SETTINGS_DEFAULTS: MailSettings = {
 const ROW_ID = 'mail';
 
 export function createMailSettingsService(database: DatabaseManager) {
-  async function read(): Promise<{ value: MailSettings; revision: number }> {
+  async function read(): Promise<{
+    value: MailSettings;
+    revision: number;
+    /** Who saved it last: a user id, `system` for the demo seed and the automatic binding, or null when never saved. */
+    updatedBy: string | null;
+  }> {
     const row = await database
       .repository('personnelSettings')
       .findOne({ filter: { id: ROW_ID } });
@@ -101,10 +111,42 @@ export function createMailSettingsService(database: DatabaseManager) {
     return {
       value: parsed.success ? parsed.data : MAIL_SETTINGS_DEFAULTS,
       revision: Number(row?.revision ?? 0),
+      updatedBy:
+        typeof row?.updatedBy === 'string' && row.updatedBy
+          ? row.updatedBy
+          : null,
     };
   }
   return {
     read,
+    /**
+     * Saves a value without a person (the automatic binding of 本地文件邮箱
+     * accounts outside production); bumps the revision like an edit.
+     */
+    async writeTrusted(value: MailSettings) {
+      const parsed = mailSettingsSchema.parse(value);
+      const previous = await database
+        .repository('personnelSettings')
+        .findOne({ filter: { id: ROW_ID } });
+      const revision = Number(previous?.revision ?? 0);
+      const stamp = new Date();
+      if (previous)
+        await database.repository('personnelSettings').updateOne({
+          filter: { id: ROW_ID },
+          values: { value: parsed, revision: revision + 1, updatedAt: stamp },
+        });
+      else
+        await database.repository('personnelSettings').createOne({
+          values: {
+            id: ROW_ID,
+            value: parsed,
+            revision: 1,
+            updatedBy: 'system',
+            createdAt: stamp,
+            updatedAt: stamp,
+          },
+        });
+    },
     async get(ctx: ActorContext) {
       await ctx.authz.require(PERSONNEL_SETTINGS_AUTH);
       return read();

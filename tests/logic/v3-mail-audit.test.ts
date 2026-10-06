@@ -103,7 +103,15 @@ async function call(
   };
 }
 
-const inbox = () => path.join(directory, 'storage', 'mail', 'inbox', 'audit');
+const inbox = () =>
+  path.join(
+    directory,
+    'storage',
+    'mail',
+    'local',
+    'audit@qiheng.test',
+    'inbox',
+  );
 const outbox = () => path.join(directory, 'storage', 'mail', 'outbox');
 
 function drop(name: string, eml: string) {
@@ -111,16 +119,33 @@ function drop(name: string, eml: string) {
   writeFileSync(path.join(inbox(), name), eml);
 }
 
-function sentTo(address: string): string[] {
-  let names: string[];
-  try {
-    names = readdirSync(outbox()).sort();
-  } catch {
-    return [];
+/**
+ * Mail sent to an address, as written to the outbox. Sending goes through the
+ * Mail plugin's outbox job: with `atLeast`, wait for that many; without it,
+ * give the job a moment and answer what is there (to check nothing went out).
+ */
+async function sentTo(address: string, atLeast = 0): Promise<string[]> {
+  const read = () => {
+    let names: string[];
+    try {
+      names = readdirSync(outbox()).sort();
+    } catch {
+      return [];
+    }
+    return names
+      .map((n) => readFileSync(path.join(outbox(), n), 'utf8'))
+      .filter((text) => text.includes(`To: ${address}`));
+  };
+  if (!atLeast) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return read();
   }
-  return names
-    .map((n) => readFileSync(path.join(outbox(), n), 'utf8'))
-    .filter((text) => text.includes(`To: ${address}`));
+  for (let i = 0; i < 100; i++) {
+    const found = read();
+    if (found.length >= atLeast) return found;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return read();
 }
 
 async function pub(
@@ -320,7 +345,7 @@ describe('审核邮箱 (V3-11)', () => {
       (await call('qa_audit', 'POST', `/mail/messages/${draft.id}/send`))
         .status,
     ).toBe(200);
-    const sent = sentTo(REQUESTER);
+    const sent = await sentTo(REQUESTER, 1);
     expect(sent).toHaveLength(1);
     const link = /\/audit-pack\/([A-Za-z0-9_-]{20,})/u.exec(sent[0]!);
     expect(link).toBeTruthy();
@@ -350,7 +375,9 @@ describe('审核邮箱 (V3-11)', () => {
       (await pub('POST', `/${token}/download`, { code: '000000' })).status,
     ).toBe(400);
     expect((await pub('POST', `/${token}/code`, {})).status).toBe(200);
-    const codeMail = sentTo(REQUESTER).find((m) => /验证码：\d{6}/u.test(m))!;
+    const codeMail = (await sentTo(REQUESTER, 2)).find((m) =>
+      /验证码：\d{6}/u.test(m),
+    )!;
     expect(codeMail).toBeTruthy();
     const code = /验证码：(\d{6})/u.exec(codeMail)![1]!;
     // The thread never keeps the code itself.

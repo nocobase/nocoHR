@@ -18,6 +18,7 @@ import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { simpleParser } from 'mailparser';
 import * as XLSX from 'xlsx';
 
 import { composeMail, XLSX_TYPE } from '../../database/seed-data/demo-mail.ts';
@@ -119,8 +120,30 @@ async function eventually<T>(
   return last;
 }
 
-const inbox = () => path.join(directory, 'storage', 'mail', 'inbox', 'billing');
+const inbox = () =>
+  path.join(
+    directory,
+    'storage',
+    'mail',
+    'local',
+    'billing@qiheng.test',
+    'inbox',
+  );
 const outbox = () => path.join(directory, 'storage', 'mail', 'outbox');
+
+/** Sent mail goes out through the Mail plugin's outbox job: wait for the files. */
+async function sentFiles(count: number): Promise<string[]> {
+  return eventually(
+    async () => {
+      try {
+        return readdirSync(outbox()).sort();
+      } catch {
+        return [] as string[];
+      }
+    },
+    (files) => files.length >= count,
+  );
+}
 
 function drop(name: string, eml: string) {
   mkdirSync(inbox(), { recursive: true });
@@ -364,11 +387,15 @@ describe('对账邮箱 (V2-06)', () => {
     );
     expect(sent.status).toBe(200);
     expect(sent.json.data.status).toBe('sent');
-    const files = readdirSync(outbox());
+    const files = await sentFiles(1);
     expect(files).toHaveLength(1);
-    const written = readFileSync(path.join(outbox(), files[0]!), 'utf8');
-    expect(written).toContain(`Reply-To: billing+${threadKey}@qiheng.test`);
-    expect(written).toContain('另：请在本周内回复。');
+    const written = await simpleParser(
+      readFileSync(path.join(outbox(), files[0]!)),
+    );
+    // In the vendor's conversation: it answers their message and keeps the thread's tag.
+    expect(written.inReplyTo).toBeTruthy();
+    expect(written.subject).toContain(`[#${threadKey}]`);
+    expect(written.text).toContain('另：请在本周内回复。');
     // Sending twice is refused.
     expect(
       (await call('payroll01', 'POST', `/mail/messages/${draft.id}/send`))
@@ -381,7 +408,7 @@ describe('对账邮箱 (V2-06)', () => {
       '03-corrected.eml',
       composeMail({
         from: vendor,
-        to: `billing+${threadKey}@qiheng.test`,
+        to: 'billing@qiheng.test',
         subject: `回复：蓉川人力 ${label}派遣工时账单 [#${threadKey}]`,
         text: '已更正，见附件。',
         date: new Date(),
@@ -502,5 +529,94 @@ describe('对账邮箱 (V2-06)', () => {
       `/mail/messages/${promo.id}/ignore`,
     );
     expect(ignored.json.data.status).toBe('ignored');
+  });
+});
+
+describe('Mail plugin accounts behind the business mailboxes', () => {
+  it('lists the accounts for HR administrators only and binds one only with its owner', async () => {
+    const accounts = await call('hr01', 'GET', '/mail/accounts');
+    expect(accounts.status).toBe(200);
+    const billing = (accounts.json.data as Json[]).find(
+      (a) => a.address === 'billing@qiheng.test',
+    )!;
+    expect(billing).toMatchObject({
+      provider: 'local-files',
+      status: 'active',
+    });
+    expect((await call('payroll01', 'GET', '/mail/accounts')).status).toBe(403);
+    const current = await call('hr01', 'GET', '/mail/settings');
+    const value = current.json.data.value as Json;
+    // The page reads each purpose's bound account.
+    expect(current.json.data.connections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          purpose: 'billing',
+          address: 'billing@qiheng.test',
+          adapter: 'local-files',
+        }),
+      ]),
+    );
+    const twice = await call('hr01', 'PUT', '/mail/settings', {
+      revision: current.json.data.revision,
+      value: {
+        ...value,
+        mailboxes: {
+          ...value.mailboxes,
+          hr: { ...value.mailboxes.billing },
+        },
+      },
+    });
+    expect(twice.status).toBe(400);
+    const wrongOwner = await call('hr01', 'PUT', '/mail/settings', {
+      revision: current.json.data.revision,
+      value: {
+        ...value,
+        mailboxes: {
+          ...value.mailboxes,
+          billing: { ...value.mailboxes.billing, ownerUserId: 'someone-else' },
+        },
+      },
+    });
+    expect(wrongOwner.status).toBe(400);
+    expect(wrongOwner.json.error?.code ?? wrongOwner.json.code).toBe(
+      'MAIL_ACCOUNT_INVALID',
+    );
+  });
+
+  it('shows each user only the correspondence in their own mailboxes', async () => {
+    const own = await call(
+      'payroll01',
+      'GET',
+      `/mail/mine?address=${encodeURIComponent(vendor.address)}`,
+    );
+    expect(own.status).toBe(200);
+    const items = own.json.data as Json[];
+    expect(items.length).toBeGreaterThan(0);
+    const message = await call(
+      'payroll01',
+      'GET',
+      `/mail/mine/${items[0]!.accountId}/${items[0]!.id}`,
+    );
+    expect(message.status).toBe(200);
+    expect(typeof message.json.data.text).toBe('string');
+    // Another user's mailbox is not readable, by listing or by id.
+    const other = await call(
+      'recruit01',
+      'GET',
+      `/mail/mine?address=${encodeURIComponent(vendor.address)}`,
+    );
+    expect(other.json.data).toEqual([]);
+    expect(
+      (
+        await call(
+          'recruit01',
+          'GET',
+          `/mail/mine/${items[0]!.accountId}/${items[0]!.id}`,
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await call(null, 'GET', '/mail/mine?address=a@b.test')).status,
+    ).toBe(401);
   });
 });

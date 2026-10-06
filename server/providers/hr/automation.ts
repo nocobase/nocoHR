@@ -365,6 +365,14 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     kind: 'daily',
     defaults: { hour: 18 },
   },
+  // V1-02 V2 增补 · 人事邮箱 (departed/service.ts): departed employees' requests (owner hr01).
+  {
+    key: 'hrAssistant.mailSortHr',
+    employee: 'hrAssistant',
+    composite: 'talent.hrAssistant',
+    kind: 'event',
+    defaults: {},
+  },
   // V3-11 审核邮箱 (mail/audit.ts): 审核问询分拣与准备 and 审核回复起草 (owner hr01).
   {
     key: 'certificationSteward.mailSortAudit',

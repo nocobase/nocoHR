@@ -283,25 +283,40 @@ export const licensedServicesToken: ServiceToken<
 // V2-06 邮件往来 (总纲 邮件约定).
 export const mailSettingsToken: ServiceToken<
   import('./mail/settings.js').MailSettingsService
-> = createServiceToken<import('./mail/settings.js').MailSettingsService>(
-  'hr/mail-settings',
-);
+> =
+  createServiceToken<import('./mail/settings.js').MailSettingsService>(
+    'hr/mail-settings',
+  );
 export const mailServiceToken: ServiceToken<
   import('./mail/service.js').MailService
-> = createServiceToken<import('./mail/service.js').MailService>(
-  'hr/mail-service',
-);
-export const auditMailToken: ServiceToken<
-  import('./mail/audit.js').AuditMail
-> = createServiceToken<import('./mail/audit.js').AuditMail>('hr/mail-audit');
+> =
+  createServiceToken<import('./mail/service.js').MailService>(
+    'hr/mail-service',
+  );
+export const departedMailToken: ServiceToken<
+  import('./departed/service.js').DepartedMail
+> =
+  createServiceToken<import('./departed/service.js').DepartedMail>(
+    'hr/departed-mail',
+  );
+export const documentSharesToken: ServiceToken<
+  import('./departed/shares.js').DocumentShares
+> =
+  createServiceToken<import('./departed/shares.js').DocumentShares>(
+    'hr/document-shares',
+  );
+export const auditMailToken: ServiceToken<import('./mail/audit.js').AuditMail> =
+  createServiceToken<import('./mail/audit.js').AuditMail>('hr/mail-audit');
 export const recruitingMailToken: ServiceToken<
   import('./mail/recruiting.js').RecruitingMailHandler
-> = createServiceToken<import('./mail/recruiting.js').RecruitingMailHandler>(
-  'hr/mail-recruiting',
-);
+> =
+  createServiceToken<import('./mail/recruiting.js').RecruitingMailHandler>(
+    'hr/mail-recruiting',
+  );
 export const billingMailToken: ServiceToken<
   import('./mail/billing.js').BillingMailHandler
-> = createServiceToken<import('./mail/billing.js').BillingMailHandler>(
-  'hr/mail-billing',
-);
+> =
+  createServiceToken<import('./mail/billing.js').BillingMailHandler>(
+    'hr/mail-billing',
+  );
 // V2-06 邮件往来 end

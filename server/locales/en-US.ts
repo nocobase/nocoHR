@@ -635,6 +635,15 @@ const enUS = {
       title: 'Reply to the {{customer}} audit request drafted',
       body: 'Review it and send; the share link is created when it is sent.',
     },
+    // V1-02 V2 addition, HR mailbox (server/providers/hr/departed/): never amounts or ID numbers in the text.
+    mailDepartedRequest: {
+      title: 'A former employee asked for a document: {{request}}',
+      body: 'The reply is drafted; the document link is created when it is sent.',
+    },
+    departedTemplateRequired: {
+      title: 'Confirm the separation certificate template',
+      body: '{{name}} has left with a personal email registered; the certificate is mailed once the template is confirmed.',
+    },
     // V2-07 recruiting mailbox (server/providers/hr/mail/recruiting.ts)
     mailResumeReceived: {
       title: 'A resume arrived in the recruiting mailbox',

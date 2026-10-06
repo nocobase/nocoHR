@@ -83,6 +83,39 @@ The `demo-batch-record` route (`/demo/batch-record`, 设备开工登记 / Equipm
 
 The App menu has three top-level groups, 人事, 招聘 (V2-07: 用工计划, 招聘需求, 职位, 候选人, 面试, Offer, 招聘报表; the `recruiting` group in `client/routes.ts`) and 人才发展 (the latter with 能力体系, 学习与培训, 考试与认证 and 绩效 (`performance-center`, V4-12) sub-groups, plus V3-11's six leaf pages: 待我决定, 团队看板, 找人, 业务数据, 修订建议, 审计导出, and V4-13's 人才盘点 and 继任计划; V4-13 adds 讲师, 培训评估 and 译文审核 under 学习与培训, 实操考核 under 考试与认证, and 设置 · 外部 AI 助手), following the 2026-09-28 总纲; the user chose this over the earlier function groups. The public careers pages (`/jobs`, `/jobs/:slug`, `/jobs/booking/:token`, `/jobs/ai-interview/:token`, `/offer/:token`) are `auth: 'optional'` routes with `authz: 'skip'`; their `/api/public/recruiting/*` endpoints enforce the careers-page switch, tokens and throttling themselves. The V3-11 customer audit pack share page `/audit-pack/:token` is the same kind of route: `/api/public/audit-pack/*` (`server/routes/hr/audit-requests.ts`) checks the hashed share token, its expiry and revocation, and a one-time code sent only to the requester's address before the pack downloads; the reply that carries the link is a mail draft whose link is created only when a person sends it (`prepareSend` in `server/providers/hr/mail/audit.ts`). The demo data is the 启衡精密 case (01-演示案例.md).
 
+Business mail (对账 / 招聘 / 审核 / 人事邮箱, `server/providers/hr/mail/`) runs on the Pro **Mail plugin** `@nocobase/app-plugin-mail` since 2026-10-05; read its Skill (`nocobase-app-plugin-mail`) before changing how mail is received or sent.
+
+- **Division of work.** The plugin owns accounts, credentials, synchronization and sending. NocoHR owns what mail means:
+  - purposes and their permissions;
+  - AI sorting;
+  - linking messages to records;
+  - drafts that a person confirms;
+  - reschedule proposals and audit share links.
+- **Mailboxes.** A purpose's mailbox is a plugin account, bound with its owner on 设置 / 邮件 (`businessMail.mailboxes[purpose].accountId/ownerUserId` in the `mail` personnelSettings row). It is read and sent as the owner through the plugin's `MailService`; the plugin's service has no permission checks of its own, so our routes check first.
+- **Configuration.** There are two sections:
+  - `businessMail` (`server/config/business-mail.ts`): only each purpose's address.
+  - `mail` (`server/config/mail.ts`): the plugin's own section, with providers and OAuth.
+
+  Ours was renamed from `mail` because the plugin owns that name.
+
+- **Development, tests and the demo** use a 本地文件邮箱 provider (`local-provider.ts`, type `local-files`, instance `local`). It is registered and configured only outside production, and refuses production. It reads `storage/mail/local/<address>/inbox/*.eml` and writes sent mail to `storage/mail/outbox/`. Each purpose's local account is connected the first time it is needed.
+- **Receiving.** The service synchronizes the account and waits for all its runs, then stores the new inbox messages once. Threads are found by the subject's `[#threadKey]` tag, or by In-Reply-To / References. There are no plus-addressed reply addresses any more.
+- **Table name.** The plugin creates its own `mailMessages`, so ours is `businessMailMessages`. 202610160001 and 202610180001 were edited to that name with the user's approval while the app was pre-release. On an older database, 202609020001 (named to sort before the plugin's 202609030001) copies the old table into the new one; then `pnpm nocobase db repair` realigns the two checksums.
+- **Version.** The plugin is pinned to 0.1.0-beta.5, the release matching `@nocobase/app-server` 1.0.0-beta.30, and listed in `minimumReleaseAgeExclude`. 1.0.0-beta.6 and later need a newer template.
+- **Production pages.** The plugin's own pages are development-only, so we add:
+  - 我的邮箱 (`/talent/my-mailbox`, page `mail.workspace`, granted by seed 202610190102), where users connect their own mailbox;
+  - 我的邮箱往来 on the candidate detail page;
+  - the account picker on 设置 / 邮件.
+
+  OAuth returns to `/talent/my-mailbox`.
+
+已离职员工的邮件往来 (V1-02 V2 增补, `server/providers/hr/departed/`) uses the 人事邮箱 (purpose `hr`):
+- `employees.personalEmail` is a sensitive field (hr.admin and the person), filled on the 离职单, by HR, or as a self-service change; the change checklist's `departedContact` item lists it.
+- Documents (离职证明, 工作经历证明, 收入证明, 工资条) are PDFs reached only through a 7-day link (`documentShares`, `/hr-document/:token`, `/api/public/hr-document/*`) that opens with a one-time code mailed to the registered personal address; mail text never carries amounts or ID numbers.
+- The separation certificate is mailed when a 离职单 takes effect (job-event handler `departed.offboard`), but only once an HR administrator has confirmed its template on 设置 / 邮件; the last payslip's link follows the payroll cycle's publication (`PayrollContext.onPublished`).
+- A request from the registered address is linked to the employee and drafted with a `proposal` naming the document; income certificates and payslips are sent by payroll only, the others by HR administrators. A request from any other address stays unsorted and its draft names no one.
+- HR administrators see the whole 人事邮箱; payroll sees only mail about pay (the handler's `canSee`, which the mail service applies to lists, threads and single messages). Mail the mailbox sends itself carries the document in `proposal` (`documentSent`, `documentCode`) for that check.
+
 A real Feishu tenant is reached through a self-built app configured in the `feishu` config section (`server/config/feishu.ts`; `FEISHU_APP_ID` / `FEISHU_APP_SECRET`, set in `.env.local` or the deployment's secrets, never committed). No office-suite plugin is installed, so `server/providers/hr/feishu/` holds the client (`api.ts`), the bot transport (`transport.ts`: text and cards by `user_id`, cards updated in place through `imCards.externalMessageId`) and the long connection (`long-connection.ts`: `im.message.receive_v1` and `card.action.trigger`, so no public callback URL is needed); `org-sync/feishu-source.ts` reads the directory. With both credentials set, the directory sync, the bot channel and the long connection use the tenant instead of the development mock (`storage/org-sync/feishu-mock.json`, `/dev/im-mock`); leave them unset (commented out) for the demo walkthrough, which relies on the mock's members. Switching between the two needs the other side's `externalId` / `externalUserId` bindings cleared first. Nothing Feishu-related runs under Vitest. Links in Feishu messages use `feishu.linkOrigin`, else `app.publicOrigin`, else `http://localhost:<server.port>` outside production.
 
 The change checklist's 排班 item is the `schedule` provider in `server/providers/hr/schedule-checklist.ts` (scope before a transfer takes effect, the revalidation result after; offboarding: shifts after the leaving day and unused annual leave); the rules themselves stay in the `attendance.transferRevalidate` and `attendance.offboard` job-event handlers.

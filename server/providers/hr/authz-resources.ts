@@ -50,6 +50,8 @@ export const EMPLOYEE_SENSITIVE_FIELDS = [
   'idNumber',
   'birthDate',
   'address',
+  // V1-02 V2 增补: where a departed employee is reached by mail.
+  'personalEmail',
 ] as const;
 /** Only HR administrators may read these. */
 export const EMPLOYEE_NOTE_FIELDS = ['id', 'note'] as const;
@@ -80,6 +82,7 @@ export const EMPLOYEE_WRITE_FIELDS = [
   'leaveDate',
   'leaveReason',
   'address',
+  'personalEmail',
   'createdAt',
   'updatedAt',
   'lastImportBatchId',
@@ -717,7 +720,11 @@ export const personnelActionResource = defineCompositeResource(
       .action('create', (a) =>
         a
           .title(label('authz.actions.create'))
-          .grant('personnelActions', actionData.create([...ACTION_FIELDS])),
+          .grant(
+            'personnelActions',
+            // personalEmail (V1-02 V2 增补) is written with a 离职单 but never read through the action.
+            actionData.create([...ACTION_FIELDS, 'personalEmail']),
+          ),
       )
       .action('approve', (a) =>
         a
