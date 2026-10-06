@@ -111,7 +111,10 @@ export function createMailSettingsService(database: DatabaseManager) {
     return {
       value: parsed.success ? parsed.data : MAIL_SETTINGS_DEFAULTS,
       revision: Number(row?.revision ?? 0),
-      updatedBy: row?.updatedBy ? String(row.updatedBy) : null,
+      updatedBy:
+        typeof row?.updatedBy === 'string' && row.updatedBy
+          ? row.updatedBy
+          : null,
     };
   }
   return {
