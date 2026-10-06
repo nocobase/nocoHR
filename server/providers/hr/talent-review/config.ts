@@ -11,7 +11,8 @@
  * high/high), the development suggestions per box, the number of successors
  * recommended (3), the first days of the quarters (Jan, Apr, Jul, Oct), the
  * recertification rule (a previous certificate that was not revoked makes an
- * issue a recertification), the translation glossary and the MCP limits.
+ * issue a recertification), the translation glossary (empty), the words the
+ * practical checklist fallback reads and the MCP limits.
  */
 import type { DatabaseManager } from '@nocobase/db';
 import { z } from 'zod';
@@ -103,6 +104,21 @@ export const talentReviewSettingsSchema = z
       })
       .strict()
       .default({ allCriticalPass: true, minPassRate: 80 }),
+    /**
+     * 起草实操考核表 without a model: sections whose title contains one of
+     * these words are read for check items (as are sections numbered 4–5), and
+     * an item containing one of the critical words is marked critical. Neutral
+     * for any written procedure; the 启衡精密 demo adds 检验, 点检 and 首件
+     * through its settings (seed 202610210131).
+     */
+    practicalSectionKeywords: z
+      .array(z.string().trim().min(1).max(20))
+      .max(30)
+      .default(['操作', '步骤', '检查', '核对', '记录', '安全']),
+    practicalCriticalKeywords: z
+      .array(z.string().trim().min(1).max(20))
+      .max(30)
+      .default(['安全', '须', '必须', '禁止', '不得', '严禁']),
     /** 培训评估 questionnaires and periods. */
     l1Questions: z
       .array(question)
@@ -146,12 +162,10 @@ export const talentReviewSettingsSchema = z
           .strict(),
       )
       .max(500)
-      .default([
-        { zh: '首件检验', en: 'first article inspection' },
-        { zh: '作业指导书', en: 'work instruction' },
-        { zh: '质量问题', en: 'quality issue' },
-        { zh: '上岗证', en: 'job qualification certificate' },
-      ]),
+      // Empty for a new installation: the terms are the business's own. The
+      // 启衡精密 demo keeps 首件检验, 作业指导书, 质量问题 and 上岗证 in its
+      // settings (seed 202610210131).
+      .default([]),
     /** 13C: calls per token per minute, and the longest token life. */
     agentRateLimitPerMinute: z.number().int().min(1).max(10_000).default(60),
     agentTokenMaxDays: z.number().int().min(1).max(90).default(90),

@@ -103,20 +103,19 @@ export default function HrReportsPage(): ReactElement {
       }) satisfies ChartConfig,
     [t],
   );
+  // Colours follow the types present (nine types exist, five chart colours), so a typical mix never repeats one.
   const typeConfig = useMemo(
     () =>
       Object.fromEntries(
-        ['fullTime', 'partTime', 'intern', 'outsourced', 'dispatched'].map(
-          (type, i) => [
-            type,
-            {
-              label: t(`talent.employmentType.${type}`),
-              color: `var(--chart-${i + 1})`,
-            },
-          ],
-        ),
+        (report.data?.employmentTypes ?? []).map((entry, i) => [
+          entry.type,
+          {
+            label: t(`talent.employmentType.${entry.type}`),
+            color: `var(--chart-${(i % 5) + 1})`,
+          },
+        ]),
       ) satisfies ChartConfig,
-    [t],
+    [t, report.data],
   );
   const data = report.data;
 

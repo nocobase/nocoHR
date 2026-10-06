@@ -510,16 +510,23 @@ ${text.slice(0, 12_000)}`,
       }
       if (!drafted) {
         // Rule fallback: every list item and sentence of the procedure sections is a check item.
+        // The section and critical words are settings (practicalSectionKeywords / practicalCriticalKeywords).
+        const { practicalSectionKeywords, practicalCriticalKeywords } = await ctx.settings();
+        const mentions = (value: string, words: readonly string[]) =>
+          words.some((word) => value.includes(word));
         const items: { item: string; critical: boolean; sourceExcerpt: string }[] = [];
         for (const section of splitSections(text)) {
-          if (!/^\s*[4-5]/u.test(section.title) && !/检验|操作|点检|记录|安全/u.test(section.title))
+          if (
+            !/^\s*[4-5]/u.test(section.title) &&
+            !mentions(section.title, practicalSectionKeywords)
+          )
             continue;
           for (const line of section.text.split(/\n+/u)) {
             const clean = line.replace(/^[-*\d.\s]+/u, '').trim();
             if (clean.length < 8) continue;
             items.push({
               item: clean.slice(0, 120),
-              critical: /安全|首件|须|禁止|不得/u.test(clean),
+              critical: mentions(clean, practicalCriticalKeywords),
               sourceExcerpt: line.trim(),
             });
             if (items.length >= 10) break;

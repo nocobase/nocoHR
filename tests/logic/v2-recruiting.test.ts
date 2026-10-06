@@ -306,6 +306,8 @@ describe('V2-07 用工计划', () => {
       maxHeadcount: 4,
       covers: false,
     });
+    // The demo turns 借调人员需安排住宿 on (seed 202610210111); a new install has it off.
+    expect(option('transfer').risks).toEqual(['partialCover', 'housing']);
     expect(option('hire').detail).toMatchObject({
       readyInDays: 28,
       readyInWeeks: 4,

@@ -472,6 +472,8 @@ export interface RecruitingSettingsValue {
   workforce: {
     capacity: CapacityRow[];
     transferLimits: TransferRow[];
+    /** The loan option carries the housing risk (off by default). */
+    transferHousingRisk?: boolean;
     recruitingCycleDays: number;
     absorbOvertimeHours: number;
     onboardingDays: number;

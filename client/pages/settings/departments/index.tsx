@@ -7,7 +7,9 @@ import { useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
-import { errorMessage } from '@/components/talent/errors';
+import { compactValues, customFieldErrors, useCustomFieldDefinitions, type CustomValues } from '@/components/talent/custom-field-model';
+import { CustomFieldInputs, CustomFieldValues } from '@/components/talent/custom-fields';
+import { errorCode, errorDetails, errorMessage } from '@/components/talent/errors';
 import { BlockSkeleton, EmptyState, LoadError } from '@/components/talent/states';
 import { titleText } from '@/components/talent/titles';
 import { useRemote } from '@/components/talent/use-remote';
@@ -33,6 +35,8 @@ interface Department {
   managerName: string | null;
   active: boolean;
   sortOrder: number;
+  /** 界面追加字段 (e.g. a store's number or a ward's bed count). */
+  customFields?: CustomValues;
 }
 
 interface Member {
@@ -197,6 +201,7 @@ function DepartmentPanel({ department, departments, label, canUpdate, onEdit, on
   const { t } = useTranslation();
   const api = useApiClient();
   const members = useRemote<Member[]>(`talent/org/departments/${encodeURIComponent(department.id)}/members`);
+  const { definitions } = useCustomFieldDefinitions('departments', 'detail', true);
   const [adding, setAdding] = useState(false);
   const parent = departments.find((d) => d.id === department.parentId);
   const inactiveAncestor = (() => {
@@ -256,6 +261,11 @@ function DepartmentPanel({ department, departments, label, canUpdate, onEdit, on
               <dd>{parent ? label(parent) : '—'}</dd>
             </div>
           </dl>
+          {definitions.length ? (
+            <div className='mt-4 border-t pt-4'>
+              <CustomFieldValues definitions={definitions} values={department.customFields} />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
       <Card>
@@ -397,6 +407,9 @@ function DepartmentDialog({ mode, parentId, department, departments, label, onCl
     parentId: department ? (department.parentId ?? '') : (parentId ?? ''),
     managerId: department?.managerId ?? '',
   });
+  const { definitions } = useCustomFieldDefinitions('departments', 'form');
+  const [custom, setCustom] = useState<CustomValues>(() => department?.customFields ?? {});
+  const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   async function save(): Promise<void> {
@@ -406,18 +419,20 @@ function DepartmentDialog({ mode, parentId, department, departments, label, onCl
     }
     setPending(true);
     setError(undefined);
+    setCustomErrors({});
     try {
       // A seeded title is a translation descriptor; keep it unless the text was actually changed.
       const titleChanged = !department || draft.title.trim() !== label(department);
       const { data } = await api.request<{ data: { id: string } }>({
         path: department ? `talent/org/departments/${encodeURIComponent(department.id)}` : 'talent/org/departments',
         method: department ? 'PATCH' : 'POST',
-        json: { ...(titleChanged ? { title: draft.title.trim() } : {}), code: draft.code.trim() || null, parentId: draft.parentId || null, managerId: draft.managerId || null },
+        json: { ...(titleChanged ? { title: draft.title.trim() } : {}), code: draft.code.trim() || null, parentId: draft.parentId || null, managerId: draft.managerId || null, ...(definitions.length ? { customFields: compactValues(custom) } : {}) },
       });
       toast.add({ type: 'success', title: t('talent.org.saved') });
       onSaved(data.id);
     } catch (cause) {
       setError(errorMessage(cause, t));
+      if (errorCode(cause) === 'CUSTOM_FIELD_INVALID') setCustomErrors(customFieldErrors(errorDetails(cause)));
     } finally {
       setPending(false);
     }
@@ -461,6 +476,7 @@ function DepartmentDialog({ mode, parentId, department, departments, label, onCl
               <FieldLabel htmlFor='dept-head'>{t('talent.org.head')}</FieldLabel>
               <UserPicker id='dept-head' value={draft.managerId} onChange={(value) => setDraft((d) => ({ ...d, managerId: value }))} />
             </Field>
+            <CustomFieldInputs definitions={definitions} values={custom} onChange={setCustom} errors={customErrors} disabled={pending} idPrefix='dept-custom' />
             {error ? <FieldError>{error}</FieldError> : null}
           </FieldGroup>
         </form>

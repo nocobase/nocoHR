@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { scopeForUser } from '../../providers/hr/authorize.js';
 import { validateDraft } from '../../providers/hr/recruiting/postings.js';
 import { REQUIREMENT_TYPES } from '../../providers/hr/recruiting/common.js';
+import { CHECK_IN_TOPICS } from '../../providers/hr/recruiting/config.js';
 import { HrError, str } from '../../providers/hr/shared.js';
 import { recruitingServicesToken } from '../../providers/hr/tokens.js';
 
@@ -425,13 +426,13 @@ export const saveCheckInIssues = tool({
   title: 'Save check-in issues',
   about: "The employee's reply by topic, and the issues to follow up.",
   description:
-    "In the employee's own check-in conversation: save the reply by topic (housing, shuttle, mentoring, schedule, workload, other) and the issues to follow up; each issue becomes a to-do for the owner configured for its topic. Submits no request on the employee's behalf. declined=true when the employee does not want to answer.",
+    "In the employee's own check-in conversation: save the reply by topic (commute, mentoring, schedule, workload, expectations, environment, other) and the issues to follow up; each issue becomes a to-do for the owner configured for its topic. Submits no request on the employee's behalf. declined=true when the employee does not want to answer.",
   schema: z.object({
     checkInId: id,
     answers: z
       .array(
         z.object({
-          topic: z.enum(['housing', 'shuttle', 'mentoring', 'schedule', 'workload', 'other']),
+          topic: z.enum(CHECK_IN_TOPICS),
           text: z.string().min(1).max(500),
         }),
       )
@@ -439,7 +440,7 @@ export const saveCheckInIssues = tool({
     issues: z
       .array(
         z.object({
-          topic: z.enum(['housing', 'shuttle', 'mentoring', 'schedule', 'workload', 'other']),
+          topic: z.enum(CHECK_IN_TOPICS),
           summary: z.string().min(1).max(300),
         }),
       )

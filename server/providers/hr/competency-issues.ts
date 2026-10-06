@@ -8,6 +8,7 @@
 import type { DatabaseManager } from '@nocobase/db';
 
 import { editDistance, normalizeTitle, parseSynonyms } from './import-check.js';
+import { json } from './platform.js';
 import { str } from './shared.js';
 
 export interface CompetencyIssues {
@@ -160,8 +161,24 @@ export interface PositionIssues {
 export const POSITION_ISSUE_DEFAULTS = {
   vacantDays: 180,
   editDistance: 1,
-  synonyms: 'CNC/数控; 操作工/操作员; 班组长/组长',
+  synonyms: '',
 } as const;
+
+/** The synonym groups set on the monthly check (frameworkAdvisor.dictionaryReview), else none. */
+async function storedPositionSynonyms(
+  database: DatabaseManager,
+): Promise<string> {
+  const row = await database
+    .query()
+    .selectFrom('aiAutomationSettings')
+    .select(['params'])
+    .where('id', '=', 'frameworkAdvisor.dictionaryReview')
+    .executeTakeFirst();
+  const synonyms = json<Record<string, unknown>>(row?.params, {}).synonyms;
+  return typeof synonyms === 'string'
+    ? synonyms
+    : POSITION_ISSUE_DEFAULTS.synonyms;
+}
 
 export async function computePositionIssues(
   database: DatabaseManager,
@@ -177,7 +194,7 @@ export async function computePositionIssues(
   const maxDistance =
     options.editDistance ?? POSITION_ISSUE_DEFAULTS.editDistance;
   const groups = parseSynonyms(
-    options.synonyms ?? POSITION_ISSUE_DEFAULTS.synonyms,
+    options.synonyms ?? (await storedPositionSynonyms(database)),
   );
   const query = database.query();
   const positions = (

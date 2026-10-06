@@ -156,24 +156,61 @@ export function createSettingsDraftService(deps: {
     throw new HrError('SETTINGS_DRAFT_DEPARTMENT_UNKNOWN', 400, { name });
   }
 
-  /** “厂长”、“工厂负责人” and the like: the head of the factory a department belongs to (V1-02 一句话改配置). */
-  const FACTORY_HEAD =
-    /厂长|工厂负责人|工厂主管|factory (head|manager)|plant manager/iu;
+  /**
+   * “厂长”、“院长”、“店长”、“区域经理”、“项目负责人” and the like name a person by role: the head of the
+   * nearest organisation unit, from the department up, whose name ends with the unit the role names
+   * (苏州工厂, 第一人民医院, 南京西路店, 华东大区, 滨江项目部). V1-02 一句话改配置; this was a factory-only rule.
+   */
+  const ROLE_SUFFIX = /^(.+?)(?:总经理|经理|负责人|主管|主任|长)$/u;
+  const ENGLISH_ROLE =
+    /^(factory|plant|store|shop|hospital|campus|branch|region|project|site|center|centre)\s+(?:head|manager|director|lead)$/iu;
+  /** Units a role prefix also matches: a 厂长 heads a 工厂, a 区域经理 a 大区. */
+  const UNIT_ALIASES: Record<string, readonly string[]> = {
+    工厂: ['工厂', '厂'],
+    区域: ['区域', '大区', '片区', '区'],
+    大区: ['大区', '区域', '区'],
+    门店: ['门店', '店'],
+    医院: ['医院', '院区', '院'],
+    项目: ['项目部', '项目'],
+    factory: ['factory', 'plant', '工厂', '厂'],
+    plant: ['plant', 'factory', '工厂', '厂'],
+    store: ['store', 'shop', '门店', '店'],
+    shop: ['shop', 'store', '门店', '店'],
+    hospital: ['hospital', 'campus', '医院', '院区', '院'],
+    campus: ['campus', '院区'],
+    branch: ['branch', '分公司'],
+    region: ['region', '大区', '区域', '区'],
+    project: ['project', '项目部', '项目'],
+    site: ['site', '现场', '工地'],
+    center: ['center', 'centre', '中心'],
+    centre: ['centre', 'center', '中心'],
+  };
+  /** Words that mean the department's own head, handled by the ordinary departmentHead path. */
+  const OWN_DEPARTMENT = /^(本?部门|直属|直接|所在部门)$/u;
 
-  /** The nearest department, from this one up, whose name is a factory (“…工厂”, “…厂”). */
-  async function factoryOf(departmentId: string): Promise<string> {
+  /** The department whose head a role word names, or null when the word is not such a role. */
+  async function unitHeadOf(
+    roleWord: string,
+    departmentId: string,
+  ): Promise<string | null> {
+    const word = roleWord.trim();
+    const unit =
+      ENGLISH_ROLE.exec(word)?.[1]?.toLowerCase() ??
+      ROLE_SUFFIX.exec(word)?.[1];
+    if (!unit || OWN_DEPARTMENT.test(unit)) return null;
+    const endings = UNIT_ALIASES[unit] ?? [unit];
     const tree = await deps.organization.listTree();
     const byId = new Map(tree.map((d) => [d.id, d]));
     for (
       let d = byId.get(departmentId);
       d;
       d = d.parentId ? byId.get(d.parentId) : undefined
-    )
-      if (
-        /工厂$|厂$|factory|plant/iu.test(deps.organization.titleText(d.title))
-      )
-        return d.id;
-    return departmentId;
+    ) {
+      const title = deps.organization.titleText(d.title).toLowerCase();
+      if (endings.some((e) => title.endsWith(e.toLowerCase()))) return d.id;
+    }
+    // A 厂长 of a department outside any 工厂 was always its own head; other roles stay unresolved.
+    return endings.includes('厂') ? departmentId : null;
   }
 
   async function resolve(
@@ -182,18 +219,15 @@ export function createSettingsDraftService(deps: {
   ): Promise<Pick<DraftItem, 'resolved' | 'preview' | 'warnings'>> {
     if (input.type === 'chainRule') {
       const departmentId = await departmentByName(input.department);
-      // “加一级厂长审批” names a person by role: the factory's head, not a permission set called 厂长 (which
+      // “加一级厂长审批” names a person by role: the unit's head, not a permission set called 厂长 (which
       // matched nobody) — whether the model sent it as a permission set or as a department named 厂长.
       const roleWord =
         input.approver.type === 'permissionSet'
           ? input.approver.key
           : (input.approver.department ?? '');
-      const factoryHead = FACTORY_HEAD.test(roleWord);
-      const approver = factoryHead
-        ? {
-            type: 'departmentHead' as const,
-            departmentId: await factoryOf(departmentId),
-          }
+      const unitHead = await unitHeadOf(roleWord, departmentId);
+      const approver = unitHead
+        ? { type: 'departmentHead' as const, departmentId: unitHead }
         : input.approver.type === 'departmentHead'
           ? {
               type: 'departmentHead' as const,

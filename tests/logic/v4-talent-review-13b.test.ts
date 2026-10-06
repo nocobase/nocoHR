@@ -234,6 +234,33 @@ describe('13B 实操考核', () => {
     expect((await h.call('trainer01', 'POST', `/practicals/templates/${assessmentId}/confirm`)).status).toBe(200);
     expect((await h.call('trainer01', 'POST', '/practicals/records', body)).status).toBe(201);
   });
+
+  it('without a model the form follows the checklist words in the settings; the demo keeps its own (首件, 点检)', async () => {
+    const settings = await h.call('hr01', 'GET', '/talent-reviews/settings');
+    expect(settings.status).toBe(200);
+    const value = settings.json.data.value;
+    expect(value.practicalCriticalKeywords).toContain('首件');
+    expect(value.practicalSectionKeywords).toContain('点检');
+    expect(value.glossary.map((g: { zh: string }) => g.zh)).toContain('首件检验');
+    const draft = async () => {
+      const drafted = await h.call('trainer01', 'POST', '/practicals/templates/draft', {
+        documentId: 'doc-wi-mc-0231',
+        competencyIds: ['comp-cnc'],
+      });
+      expect(drafted.status).toBe(201);
+      return drafted.json.data.checklist as { item: string; critical: boolean }[];
+    };
+    expect((await draft()).some((c) => c.critical && c.item.includes('首件'))).toBe(true);
+    const words = value.practicalCriticalKeywords as string[];
+    expect(
+      (await h.call('hr01', 'PUT', '/talent-reviews/settings/review', { practicalCriticalKeywords: ['严禁吸烟'] })).status,
+    ).toBe(200);
+    try {
+      expect((await draft()).some((c) => c.critical)).toBe(false);
+    } finally {
+      await h.call('hr01', 'PUT', '/talent-reviews/settings/review', { practicalCriticalKeywords: words });
+    }
+  });
 });
 
 describe('13B 讲师与培训评估', () => {

@@ -19,6 +19,7 @@ import { planAttendanceApproval } from './attendance-approval.js';
 import {
   attendanceConfigDefaults,
   attendanceConfigSchemas,
+  isWeeklyRestDay,
 } from './attendance-config.js';
 import {
   shiftInterval,
@@ -116,27 +117,36 @@ const day = (value: unknown) =>
 
 function isWorkday(
   value: string,
-  calendar: { holidays: string[]; adjusted: string[] },
+  calendar: {
+    holidays: readonly string[];
+    adjusted: readonly string[];
+    weeklyRestDays?: readonly number[];
+  },
 ) {
   if (calendar.adjusted.includes(value)) return true;
   if (calendar.holidays.includes(value)) return false;
-  const weekday = new Date(`${value}T00:00:00Z`).getUTCDay();
-  return weekday !== 0 && weekday !== 6;
+  return !isWeeklyRestDay(value, calendar.weeklyRestDays);
 }
 
-/** 加班类型 by the calendar: holiday, else a rest day when unscheduled or off, else a workday. */
+/**
+ * 加班类型 by the calendar: holiday, else a rest day when unscheduled or off,
+ * else a workday. Without a schedule, the calendar's weekly rest days
+ * (Saturday and Sunday unless configured) decide.
+ */
 export function overtimeTypeOf(input: {
   date: string;
   holidays: readonly string[];
   adjustedWorkdays: readonly string[];
   scheduledShift: boolean | null;
+  weeklyRestDays?: readonly number[];
 }): 'workday' | 'restDay' | 'holiday' {
   if (input.holidays.includes(input.date)) return 'holiday';
   if (input.scheduledShift === false) return 'restDay';
   if (input.scheduledShift === true) return 'workday';
   return isWorkday(input.date, {
-    holidays: [...input.holidays],
-    adjusted: [...input.adjustedWorkdays],
+    holidays: input.holidays,
+    adjusted: input.adjustedWorkdays,
+    weeklyRestDays: input.weeklyRestDays,
   })
     ? 'workday'
     : 'restDay';
@@ -583,6 +593,7 @@ export function createAdjustmentService(deps: {
           date: body.date,
           holidays: calendar.years.flatMap((y) => y.holidays),
           adjustedWorkdays: calendar.years.flatMap((y) => y.adjustedWorkdays),
+          weeklyRestDays: calendar.weeklyRestDays,
           scheduledShift: schedule ? Boolean(schedule.shiftId) : null,
         });
         projected =

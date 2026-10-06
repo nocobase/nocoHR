@@ -62,6 +62,23 @@ const notesSchema = z
   })
   .strict();
 
+/**
+ * The loan option's risks. 借调人员需安排住宿 (housing) only when 招聘设置 says
+ * lent staff need accommodation (`workforce.transferHousingRisk`, off by
+ * default): an employer without dormitories never sees it.
+ */
+export function transferRisks(
+  available: number,
+  gapHeadcount: number,
+  workforce: { transferHousingRisk?: boolean },
+): string[] {
+  return [
+    ...(available === 0 ? ['noSource'] : []),
+    ...(available > 0 && available < gapHeadcount ? ['partialCover'] : []),
+    ...(available > 0 && workforce.transferHousingRisk ? ['housing'] : []),
+  ];
+}
+
 export interface PlanOption {
   type: 'overtime' | 'transfer' | 'hire';
   feasible: boolean;
@@ -360,11 +377,7 @@ export function createWorkforceService(
         type: 'transfer',
         feasible: total > 0,
         detail: { sources, maxHeadcount: total, covers: total >= gapHeadcount },
-        risks: [
-          ...(total === 0 ? ['noSource'] : []),
-          ...(total > 0 && total < gapHeadcount ? ['partialCover'] : []),
-          ...(total > 0 ? ['housing'] : []),
-        ],
+        risks: transferRisks(total, gapHeadcount, settings.workforce),
         costNote: total
           ? `最多可借调 ${total} 人，${total >= gapHeadcount ? '可以覆盖' : `不能覆盖 ${gapHeadcount} 人的缺口`}`
           : '招聘设置中没有可借调的部门',

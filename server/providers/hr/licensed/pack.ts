@@ -5,8 +5,9 @@
  *   (`{ enabled }`), so the certification subject, the notices and the
  *   earlier toggle keep reading one switch.
  * - The rest lives in `personnelSettings.licensedOperation.pack`:
- *   `certificationOnlyPermissionSets` (default prod.cncOperator and
- *   equip.forkliftOperator), `scheduleCheckEnabled` (default true),
+ *   `certificationOnlyPermissionSets` (default empty: the sets belong to the
+ *   industry; the 启衡精密 demo writes prod.cncOperator and
+ *   equip.forkliftOperator, seed 202610210101), `scheduleCheckEnabled` (default true),
  *   `transferCheckEnabled` (default true), and the last changes of the
  *   switch and of the certification-only list (the settings page's log; the
  *   `hr-audit` logger records the same).
@@ -25,10 +26,8 @@ export const PACK_ROW = 'licensedOperation.pack';
 export const CERTIFICATION_SUBJECT_TYPE = 'hr.certification';
 export const CNC_OPERATOR_SET = 'prod.cncOperator';
 export const FORKLIFT_OPERATOR_SET = 'equip.forkliftOperator';
-export const DEFAULT_CERTIFICATION_ONLY = [
-  CNC_OPERATOR_SET,
-  FORKLIFT_OPERATOR_SET,
-] as const;
+/** No set is certification-only until an administrator, or an industry's demo, lists it. */
+export const DEFAULT_CERTIFICATION_ONLY: readonly string[] = [];
 /** How many switch and list changes the settings page keeps. */
 export const HISTORY_LIMIT = 100;
 

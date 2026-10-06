@@ -17,6 +17,7 @@ import { workbenchResource } from './workbench-resource.js';
 import { documentConflictResource } from './content-resources.js';
 import { createWorkItemStore, workItemText } from './work-item-store.js';
 import { createCustomFieldService } from './custom-fields.js';
+import { qualifiedDepartmentTitle } from './department-labels.js';
 import { createPersonnelSettingsService } from './personnel-settings.js';
 import { createJobEventProcessor } from './job-events.js';
 import path from 'node:path';
@@ -546,7 +547,6 @@ export default class HrProvider extends ServiceProvider<Application> {
         production,
         mail: () => container.resolve(pluginMailServiceToken),
         localProvider: production ? null : 'local',
-        // A mailbox connected automatically belongs to the owner of its sorting task, else a holder of its role.
         userName: async (id) =>
           (
             await container
@@ -554,6 +554,7 @@ export default class HrProvider extends ServiceProvider<Application> {
               .get(id)
               .catch(() => undefined)
           )?.name ?? null,
+        // A mailbox connected automatically belongs to the owner of its sorting task, else a holder of its role.
         defaultOwner: async (purpose) => {
           const task = {
             billing: 'hrAssistant.mailSortBilling',
@@ -824,7 +825,6 @@ export default class HrProvider extends ServiceProvider<Application> {
               });
           },
         },
-        postingFacts: async (postingId) => {
         linkables: async (userId, query) => {
           const db = container.resolve(databaseManagerToken).query();
           let applications = db
@@ -931,6 +931,7 @@ export default class HrProvider extends ServiceProvider<Application> {
                 hint: null,
               };
         },
+        postingFacts: async (postingId) => {
           const posting = await recruiting()
             .postings.get(postingId)
             .catch(() => null);
@@ -1035,21 +1036,16 @@ export default class HrProvider extends ServiceProvider<Application> {
             ]),
           ];
         },
-        // A workshop named the same in several plants is shown with its plant (苏州工厂 · 机加工车间).
+        // A department named the same in several places is shown with its parent (苏州工厂机加工车间).
         departmentTitle: async (id) => {
           const organization = platform.organization;
-          const department = await organization.getDepartment(id);
-          if (!department) return id;
-          const title = organization.titleText(department.title);
-          const parent = department.parentId
-            ? await organization.getDepartment(department.parentId)
-            : null;
-          if (!parent) return title;
-          const plant = organization.titleText(parent.title);
-          const prefix = plant.replace(/工厂$/u, '');
-          return prefix && prefix !== plant && !title.startsWith(prefix)
-            ? `${plant}${title}`
-            : title;
+          const tree = (await organization.listTree()).map((d) => ({
+            id: d.id,
+            parentId: d.parentId,
+            title: organization.titleText(d.title),
+          }));
+          const department = tree.find((d) => d.id === id);
+          return department ? qualifiedDepartmentTitle(department, tree) : id;
         },
         positionTitle: async (id) => {
           const position = await database

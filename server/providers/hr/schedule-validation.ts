@@ -1,4 +1,5 @@
 import { addDays, HrError } from './shared.js';
+import { isWeeklyRestDay } from './attendance-config.js';
 import { zonedInstant } from './leave-duration.js';
 import {
   attendanceDepartmentChain,
@@ -41,18 +42,27 @@ export interface OvertimeForecastInput {
   readonly approvedHours: ReadonlyMap<string, number>;
   readonly holidays: readonly string[];
   readonly adjustedWorkdays: readonly string[];
+  /** 每周休息日 from the calendar settings; Saturday and Sunday when not given. */
+  readonly weeklyRestDays?: readonly number[];
 }
 
-function workdaysIn(month: string, input: OvertimeForecastInput): number {
+/** A month's workdays by the calendar: adjusted workdays, plus days that are neither holidays nor weekly rest days. */
+export function workdaysIn(
+  month: string,
+  input: Pick<
+    OvertimeForecastInput,
+    'holidays' | 'adjustedWorkdays' | 'weeklyRestDays'
+  >,
+): number {
   const [y, m] = month.split('-').map(Number);
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   let count = 0;
   for (let d = 1; d <= last; d++) {
     const date = `${month}-${String(d).padStart(2, '0')}`;
-    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
     if (
       input.adjustedWorkdays.includes(date) ||
-      (!input.holidays.includes(date) && weekday !== 0 && weekday !== 6)
+      (!input.holidays.includes(date) &&
+        !isWeeklyRestDay(date, input.weeklyRestDays))
     )
       count++;
   }

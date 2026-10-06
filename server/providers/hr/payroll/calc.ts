@@ -140,6 +140,20 @@ export interface CalculationInput {
   tax: PayrollSettings['tax'];
   /** V4-12: perf.coefficient (0 without a bonus cycle, a published result or coefficients). */
   perf?: { coefficient: number } | null;
+  /**
+   * 标准日工时: the standard working day in hours (attendance settings,
+   * 加班 · 标准工时), dividing the daily rate into `hourlyRate`. 8 when not
+   * given, so earlier results do not change.
+   */
+  standardDayHours?: number | null;
+}
+
+/** The standard day used for `hourlyRate`: the configured hours, else 8. */
+export function standardDayHoursOf(
+  input: Pick<CalculationInput, 'standardDayHours'>,
+): number {
+  const hours = Number(input.standardDayHours);
+  return Number.isFinite(hours) && hours > 0 ? hours : 8;
 }
 
 export interface VariableSource {
@@ -241,7 +255,10 @@ function variableValue(
     case 'dailyRate':
       return { value: dailyRate, source: 'computed' };
     case 'hourlyRate':
-      return { value: dailyRate / 8, source: 'computed' };
+      return {
+        value: dailyRate / standardDayHoursOf(input),
+        source: 'computed',
+      };
     case 'payableDays':
       return { value: input.payableDays, source: 'computed' };
     case 'payDaysPerMonth':

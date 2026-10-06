@@ -29,6 +29,7 @@ import {
   num,
   payableDaysFor,
   readCalendar,
+  readStandardDayHours,
   toEmployee,
   EMPLOYEE_COLUMNS,
 } from './common.js';
@@ -327,6 +328,7 @@ export function createStructureService(ctx: PayrollContext) {
         startMonth: month,
       },
       tax: settings.tax,
+      standardDayHours: await readStandardDayHours(query),
     });
     return {
       employeeId: employee.id,

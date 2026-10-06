@@ -13,15 +13,61 @@ import { HrError } from '../shared.js';
 
 export const RECRUITING_SETTINGS_ID = 'recruiting.settings';
 
+/**
+ * 新员工回访 topics, written for any employer: commute (and accommodation,
+ * where an employer provides it), mentoring (带教与同事支持), the schedule, the
+ * workload, whether the work matches what was described (expectations), the
+ * working environment, and anything else.
+ */
 export const CHECK_IN_TOPICS = [
-  'housing',
-  'shuttle',
+  'commute',
   'mentoring',
   'schedule',
   'workload',
+  'expectations',
+  'environment',
   'other',
 ] as const;
 export type CheckInTopic = (typeof CHECK_IN_TOPICS)[number];
+
+/**
+ * Topics written before 2026-10 (housing 住宿 / shuttle 班车, a factory's
+ * questions). Check-ins and routing rules that carry them still read and
+ * display; nothing new is written with them. Both are now part of commute.
+ */
+export const LEGACY_CHECK_IN_TOPICS = ['housing', 'shuttle'] as const;
+export type LegacyCheckInTopic = (typeof LEGACY_CHECK_IN_TOPICS)[number];
+/** A topic as stored on a check-in: a current one or a legacy one. */
+export type StoredCheckInTopic = CheckInTopic | LegacyCheckInTopic;
+export const STORED_CHECK_IN_TOPICS = [
+  ...CHECK_IN_TOPICS,
+  ...LEGACY_CHECK_IN_TOPICS,
+] as const;
+export const LEGACY_TOPIC_OF: Record<LegacyCheckInTopic, CheckInTopic> = {
+  housing: 'commute',
+  shuttle: 'commute',
+};
+
+/**
+ * Who an issue on this topic goes to: its own rule, else (for commute) the
+ * rule an older settings row kept for shuttle or housing, else the HR owner.
+ */
+export function checkInRouteFor(
+  routing: Partial<Record<StoredCheckInTopic, string>>,
+  topic: StoredCheckInTopic,
+): string {
+  const own = routing[topic];
+  if (own) return own;
+  const current =
+    topic in LEGACY_TOPIC_OF
+      ? LEGACY_TOPIC_OF[topic as LegacyCheckInTopic]
+      : (topic as CheckInTopic);
+  if (routing[current]) return routing[current];
+  const legacy = LEGACY_CHECK_IN_TOPICS.find(
+    (l) => LEGACY_TOPIC_OF[l] === current && routing[l],
+  );
+  return (legacy && routing[legacy]) || 'hrOwner';
+}
 
 /** hrOwner: the owner of 新员工回访 (default hr01); departmentHead / scheduler: the new hire's head; user:<id>. */
 const routeTarget = z
@@ -115,6 +161,12 @@ export const recruitingSettingsSchema = z
               .strict(),
           )
           .max(100),
+        /**
+         * 借调人员需安排住宿: a loan option carries the housing risk. Off for a new
+         * install (most employers lend people without accommodation); optional so
+         * a settings row saved before it existed still reads.
+         */
+        transferHousingRisk: z.boolean().optional(),
         recruitingCycleDays: z.number().int().min(0).max(365),
         /** A shortfall the people on duty absorb with at most this much overtime each (hours/month) is noGap. */
         absorbOvertimeHours: z.number().min(0).max(100),
@@ -127,7 +179,8 @@ export const recruitingSettingsSchema = z
         days: z.array(z.number().int().min(1).max(365)).min(1).max(10),
         noReplyDays: z.number().int().min(1).max(30),
         questions: z.array(z.string().trim().min(1).max(200)).min(1).max(10),
-        routing: z.partialRecord(z.enum(CHECK_IN_TOPICS), routeTarget),
+        /** Legacy topics (housing, shuttle) are accepted so an older row still reads. */
+        routing: z.partialRecord(z.enum(STORED_CHECK_IN_TOPICS), routeTarget),
       })
       .strict(),
     interviews: z
@@ -170,6 +223,8 @@ export const RECRUITING_SETTINGS_DEFAULTS: RecruitingSettings = {
   workforce: {
     capacity: [],
     transferLimits: [],
+    // transferHousingRisk is left out: unset means off (the demo seed
+    // 202610210111 turns it on only while it was never saved).
     recruitingCycleDays: 14,
     absorbOvertimeHours: 8,
     onboardingDays: 14,
@@ -178,17 +233,19 @@ export const RECRUITING_SETTINGS_DEFAULTS: RecruitingSettings = {
     days: [3, 7, 30],
     noReplyDays: 3,
     questions: [
-      '住宿还习惯吗？宿舍离车间远不远？',
-      '上下班的班车方便吗？',
-      '带教师傅有没有及时带你？',
-      '现在的排班还适应吗？',
+      '上下班通勤方便吗？',
+      '现在的工作内容和入职前了解的一致吗？',
+      '带教人和同事有没有及时帮你上手？',
+      '工作量还合适吗？',
+      '现在的排班或工作时间还适应吗？',
     ],
     routing: {
-      housing: 'hrOwner',
-      shuttle: 'hrOwner',
+      commute: 'hrOwner',
       mentoring: 'departmentHead',
       workload: 'departmentHead',
+      expectations: 'departmentHead',
       schedule: 'scheduler',
+      environment: 'hrOwner',
       other: 'hrOwner',
     },
   },

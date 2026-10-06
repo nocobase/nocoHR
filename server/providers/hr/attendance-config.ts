@@ -6,6 +6,33 @@ const uniqueDates = z
   .max(366)
   .refine((v) => new Set(v).size === v.length);
 
+/**
+ * 每周休息日: the weekdays (0 = Sunday … 6 = Saturday) that are rest days
+ * when nobody is scheduled and the calendar names no holiday or adjusted
+ * workday. Saturday and Sunday unless HR sets otherwise (a six-day week, or a
+ * business that rests mid-week); at least one weekday stays a workday.
+ */
+export const DEFAULT_WEEKLY_REST_DAYS: readonly number[] = [0, 6];
+const weeklyRestDays = z
+  .array(z.number().int().min(0).max(6))
+  .max(6)
+  .refine((v) => new Set(v).size === v.length)
+  .default([...DEFAULT_WEEKLY_REST_DAYS]);
+
+/** A stored or submitted rest-day list, or the default when it is not a valid one. */
+export function weeklyRestDaysOf(value: unknown): readonly number[] {
+  const parsed = weeklyRestDays.safeParse(value ?? undefined);
+  return parsed.success ? parsed.data : DEFAULT_WEEKLY_REST_DAYS;
+}
+
+/** Whether a YYYY-MM-DD date falls on one of the weekly rest days. */
+export function isWeeklyRestDay(
+  date: string,
+  restDays: readonly number[] = DEFAULT_WEEKLY_REST_DAYS,
+): boolean {
+  return restDays.includes(new Date(`${date}T00:00:00Z`).getUTCDay());
+}
+
 /** Application configuration, not a tenth attendance business collection. */
 export const attendanceConfigSchemas = {
   limits: z
@@ -64,6 +91,7 @@ export const attendanceConfigSchemas = {
         .refine(
           (years) => new Set(years.map((y) => y.year)).size === years.length,
         ),
+      weeklyRestDays,
     })
     .strict(),
   /**
@@ -167,7 +195,7 @@ export const attendanceConfigDefaults: AttendanceConfiguration = {
     ],
   },
   // No invented statutory holiday dates: HR supplies the applicable calendar.
-  calendar: { years: [] },
+  calendar: { years: [], weeklyRestDays: [...DEFAULT_WEEKLY_REST_DAYS] },
   rotations: { templates: [] },
   leaveUnits: {
     hourStep: 0.5,

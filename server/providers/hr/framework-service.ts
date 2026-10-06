@@ -2,6 +2,7 @@ import type { AuthorizationContext } from '@nocobase/app-plugin-authorization/se
 import type { DatabaseConnection, DatabaseManager } from '@nocobase/db';
 
 import { authorizeAction, policyOf, tryAuthorizeAction } from './authorize.js';
+import { readValues, type CustomFieldService } from './custom-fields.js';
 import { recordDraftOutcome } from './draft-snapshots.js';
 import {
   HrError,
@@ -52,6 +53,8 @@ export interface Position {
   jdError: string | null;
   active: boolean;
   sortOrder: number;
+  /** 界面追加字段 (migration 202610210001), as the reader may see them; present when listed or saved through the framework. */
+  customFields?: Record<string, unknown>;
 }
 export interface Competency {
   id: string;
@@ -276,9 +279,34 @@ export function toRequirement(
 
 export function createFrameworkService(
   database: DatabaseManager,
+  /** 界面追加字段 on positions; without it positions carry no added fields. */
+  customFields?: CustomFieldService,
 ): FrameworkService {
   const FRAMEWORK = 'talent.framework';
   const COMPETENCY = 'talent.competency';
+
+  /**
+   * A position with the added-field values the reader may see: managers
+   * (HR administrators) see sensitive and retired fields, readers the rest.
+   */
+  async function withCustomFields(
+    rows: readonly Record<string, unknown>[],
+    manager: boolean,
+    connection?: DatabaseConnection,
+  ): Promise<Position[]> {
+    const definitions = customFields
+      ? await customFields.list('positions', connection)
+      : [];
+    return rows.map((row) => ({
+      ...toPosition(row),
+      customFields: customFields
+        ? customFields.project(definitions, row.customFields, {
+            sensitive: manager,
+            includeInactive: manager,
+          })
+        : {},
+    }));
+  }
 
   async function can(
     ctx: ActorContext,
@@ -408,20 +436,19 @@ export function createFrameworkService(
             })
         : [];
       const canSeeDrafts = canConfirm;
+      const canManage = await can(ctx, FRAMEWORK, 'manage');
       return {
         jobFamilies: families.map((r) =>
           toJobFamily(r as Record<string, unknown>),
         ),
-        positions: positions.map((r) =>
-          toPosition(r as Record<string, unknown>),
-        ),
+        positions: await withCustomFields(positions, canManage),
         requirements: requirements
           .map((r) => toRequirement(r as Record<string, unknown>))
           .filter((r) => canSeeDrafts || r.reviewStatus === 'confirmed'),
         competencies: competencies
           .map((r) => toCompetency(r as Record<string, unknown>))
           .filter((c) => canSeeDrafts || c.reviewStatus === 'confirmed'),
-        canManage: await can(ctx, FRAMEWORK, 'manage'),
+        canManage,
         canConfirm,
         canUseAdvisor: await can(ctx, 'talent.frameworkAdvisor', 'use'),
       };
@@ -514,6 +541,29 @@ export function createFrameworkService(
           .repository('positions')
           .withPolicy(policyOf(policies, 'positions'));
         const now = new Date();
+        // 界面追加字段: a form that sends them is checked for its required fields;
+        // a caller that sends none (an import, an AI tool) keeps the stored values.
+        const definitions = customFields
+          ? await customFields.list('positions', connection)
+          : [];
+        const stored = id
+          ? await connection.query
+              .selectFrom('positions')
+              .select(['customFields'])
+              .where('id', '=', id)
+              .executeTakeFirst()
+          : undefined;
+        const nextCustom = customFields
+          ? customFields.prepare(
+              definitions,
+              input.customFields,
+              readValues(stored?.customFields),
+              { enforceRequired: input.customFields !== undefined },
+            )
+          : {};
+        const customValues = customFields
+          ? { customFields: Object.keys(nextCustom).length ? nextCustom : null }
+          : {};
         if (id) {
           const { record } = await repo.updateOne({
             filter: { id },
@@ -523,11 +573,12 @@ export function createFrameworkService(
               jobFamilyId,
               grade,
               responsibilities,
+              ...customValues,
               ...(sortOrder === undefined ? {} : { sortOrder }),
               updatedAt: now,
             },
           });
-          return toPosition(record);
+          return (await withCustomFields([record], true, connection))[0];
         }
         const { record } = await repo.createOne({
           values: {
@@ -537,13 +588,14 @@ export function createFrameworkService(
             jobFamilyId,
             grade,
             responsibilities,
+            ...customValues,
             active: true,
             sortOrder: sortOrder ?? 0,
             createdAt: now,
             updatedAt: now,
           },
         });
-        return toPosition(record);
+        return (await withCustomFields([record], true, connection))[0];
       });
     },
 

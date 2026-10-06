@@ -391,7 +391,7 @@ const en = {
     },
     excludeCategories: 'Categories not counted',
     excludeHint:
-      'Issues of these categories are listed but not deducted (e.g. equipment faults).',
+      'Issues of these categories are listed but not deducted (causes outside the person’s control, such as a supplier outage). None by default.',
     learningRule: 'Required learning on time below {{below}}%: {{points}}',
     certificateRule: 'Any expired day of a required certificate: {{points}}',
     absentRule: 'Per day absent: {{perDay}}',
@@ -883,7 +883,8 @@ const zh: Shape = {
       minor: '每起 minor',
     },
     excludeCategories: '不计入的问题类别',
-    excludeHint: '这些类别的问题列出但不扣分（如设备故障）。',
+    excludeHint:
+      '这些类别的问题列出但不扣分（不由本人造成的，如供应商停服）。默认不排除任何类别。',
     learningRule: '必修学习按期完成率低于 {{below}}%：{{points}}',
     certificateRule: '必备证书有过期天数：{{points}}',
     absentRule: '每旷工一天：{{perDay}}',

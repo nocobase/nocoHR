@@ -1,4 +1,5 @@
 import { HrError, addDays, isDateOnly } from './shared.js';
+import { isWeeklyRestDay } from './attendance-config.js';
 
 export type LeaveCountBy = 'workdays' | 'schedule' | 'calendar';
 export type LeaveUnit = 'day' | 'halfDay' | 'hour';
@@ -23,6 +24,8 @@ export interface LeaveUnitPolicy {
 export interface LeaveDurationCalendar {
   readonly holidays?: readonly string[];
   readonly adjustedWorkdays?: readonly string[];
+  /** 每周休息日 (0 = Sunday … 6 = Saturday); Saturday and Sunday when not given. */
+  readonly weeklyRestDays?: readonly number[];
 }
 
 export interface LeaveDurationInput {
@@ -138,9 +141,7 @@ function isWorkday(date: string, calendar: LeaveDurationCalendar): boolean {
   const adjusted = new Set(calendar.adjustedWorkdays ?? []);
   return (
     adjusted.has(date) ||
-    (!holidays.has(date) &&
-      new Date(`${date}T00:00:00Z`).getUTCDay() !== 0 &&
-      new Date(`${date}T00:00:00Z`).getUTCDay() !== 6)
+    (!holidays.has(date) && !isWeeklyRestDay(date, calendar.weeklyRestDays))
   );
 }
 

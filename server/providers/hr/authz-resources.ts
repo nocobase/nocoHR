@@ -271,6 +271,8 @@ const POSITION_FIELDS = [
   'importBatchId',
   'active',
   'sortOrder',
+  // 界面追加字段 (202610210001): the framework service hides sensitive ones from readers.
+  'customFields',
   'createdAt',
   'updatedAt',
 ] as const;

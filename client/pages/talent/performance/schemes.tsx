@@ -253,7 +253,7 @@ const DEFAULT_RULES: QualityRules = {
   base: 5,
   min: 1,
   perIssue: { critical: -3, major: -1.5, minor: -0.5 },
-  excludeCategories: ['设备故障'],
+  excludeCategories: [],
   learningOnTime: { enabled: true, below: 90, points: -1 },
   certificateExpired: { enabled: true, points: -1 },
   absentDays: { enabled: false, perDay: -0.5 },

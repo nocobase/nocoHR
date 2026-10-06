@@ -234,7 +234,11 @@ export function createLeaveRequestService(deps: LeaveRequestServiceDeps) {
     const adjustedWorkdays = configured.years.flatMap(
       (entry) => entry.adjustedWorkdays,
     );
-    return { holidays, adjustedWorkdays };
+    return {
+      holidays,
+      adjustedWorkdays,
+      weeklyRestDays: configured.weeklyRestDays,
+    };
   }
 
   async function leaveUnits(connection: DatabaseConnection) {

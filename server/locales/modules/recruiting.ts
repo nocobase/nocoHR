@@ -100,7 +100,7 @@ export const recruitingServerEn = {
     ),
     recruitingCheckInFaceToFace: n(
       'Please check in with a new employee in person',
-      '{{name}} is on day {{day}} without an account or Feishu binding. Ask how housing, mentoring and the schedule are going.',
+      '{{name}} is on day {{day}} without an account or Feishu binding. Ask how the commute, mentoring, the workload and the schedule are going.',
     ),
     recruitingDeletionRequested: n(
       'A candidate asked to have their information deleted',
@@ -165,12 +165,16 @@ export const recruitingServerEn = {
       policy: 'Per {{title}} ({{section}}): {{excerpt}} {{link}}',
       routed: 'I have passed this on to {{names}}, who will follow up.',
       topics: {
+        commute: 'Commute and accommodation',
+        mentoring: 'Mentoring and support',
+        schedule: 'Schedule and working hours',
+        workload: 'Workload',
+        expectations: 'Work as described',
+        environment: 'Working environment',
+        other: 'Other',
+        // Legacy topics of check-ins recorded before 2026-10.
         housing: 'Housing',
         shuttle: 'Shuttle bus',
-        mentoring: 'Mentoring',
-        schedule: 'Schedule',
-        workload: 'Workload',
-        other: 'Other',
       },
     },
     onboard: {
@@ -281,7 +285,7 @@ export const recruitingServerZh: typeof recruitingServerEn = {
     ),
     recruitingCheckInFaceToFace: n(
       '请当面了解新员工近况',
-      '{{name}}入职第 {{day}} 天，没有账号或未绑定飞书，请当面了解住宿、带教和排班是否适应。',
+      '{{name}}入职第 {{day}} 天，没有账号或未绑定飞书，请当面了解通勤、带教、工作量和排班是否适应。',
     ),
     recruitingDeletionRequested: n(
       '有候选人申请删除个人信息',
@@ -345,12 +349,16 @@ export const recruitingServerZh: typeof recruitingServerEn = {
       policy: '按《{{title}}》（{{section}}）：{{excerpt}} {{link}}',
       routed: '这件事我已经转给{{names}}跟进。',
       topics: {
+        commute: '通勤与住宿',
+        mentoring: '带教与同事支持',
+        schedule: '排班与工作时间',
+        workload: '工作量',
+        expectations: '工作内容与预期',
+        environment: '工作环境',
+        other: '其他',
+        // 2026-10 之前记录的回访主题.
         housing: '住宿',
         shuttle: '班车',
-        mentoring: '带教',
-        schedule: '排班',
-        workload: '工作量',
-        other: '其他',
       },
     },
     onboard: {

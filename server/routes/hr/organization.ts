@@ -3,6 +3,7 @@ import {
   userAdministrationServiceToken,
 } from '@nocobase/app-plugin-authentication';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import { databaseManagerToken } from '@nocobase/db';
 import type { Application } from '@nocobase/app-server/application';
 import {
   defineApiRoutes,
@@ -19,8 +20,10 @@ import {
   isRecord,
   requireString,
 } from '../../providers/hr/shared.js';
+import { readValues } from '../../providers/hr/custom-fields.js';
 import {
   automationTasksToken,
+  customFieldServiceToken,
   organizationServiceToken,
 } from '../../providers/hr/tokens.js';
 import { installErrorHandler, readJson, type HrEnv } from './shared.js';
@@ -36,6 +39,65 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
     const authz = app.container.resolve(authorizationToken);
     const organization = app.container.resolve(organizationServiceToken);
     const users = app.container.resolve(userAdministrationServiceToken);
+
+    /*
+     * 界面追加字段 on departments (migration 202610210001). The values live in
+     * `departments.customFields`; the organisation service stays unaware of
+     * them, so these routes read and write them beside it. Readers of this
+     * settings item are organisation administrators and see every field.
+     */
+    const customFields = () => app.container.resolve(customFieldServiceToken);
+    const database = () => app.container.resolve(databaseManagerToken);
+    const storedCustom = async (ids: readonly string[]) => {
+      const out = new Map<string, Record<string, unknown>>();
+      if (!ids.length) return out;
+      const rows = await database()
+        .query()
+        .selectFrom('departments')
+        .select(['id', 'customFields'])
+        .where('id', 'in', [...ids])
+        .execute();
+      for (const row of rows)
+        out.set(String(row.id), readValues(row.customFields));
+      return out;
+    };
+    const projectCustom = async (ids: readonly string[]) => {
+      const definitions = await customFields().list('departments');
+      const stored = await storedCustom(ids);
+      return new Map(
+        ids.map((id) => [
+          id,
+          customFields().project(definitions, stored.get(id), {
+            sensitive: true,
+            includeInactive: true,
+          }),
+        ]),
+      );
+    };
+    /** Checks submitted values before the department is written; undefined when none were sent. */
+    const prepareCustom = async (
+      input: unknown,
+      id: string | null,
+    ): Promise<Record<string, unknown> | undefined> => {
+      if (input === undefined) return undefined;
+      const existing = id ? ((await storedCustom([id])).get(id) ?? {}) : {};
+      return customFields().prepare(
+        await customFields().list('departments'),
+        input,
+        existing,
+        { enforceRequired: true },
+      );
+    };
+    const writeCustom = async (id: string, values: Record<string, unknown>) => {
+      await database()
+        .repository('departments')
+        .updateOne({
+          filter: { id },
+          values: {
+            customFields: Object.keys(values).length ? values : null,
+          },
+        });
+    };
 
     const routes = new Hono<HrEnv>();
     routes.use('*', auth.required(), authz.middleware());
@@ -73,10 +135,12 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         ? await users.list({ userIds: managerIds, pageSize: 100 })
         : { items: [] };
       const names = new Map(page.items.map((u) => [u.id, u.name]));
+      const custom = await projectCustom(tree.map((d) => d.id));
       return c.json({
         data: tree.map((d) => ({
           ...d,
           managerName: d.managerId ? (names.get(d.managerId) ?? null) : null,
+          customFields: custom.get(d.id) ?? {},
         })),
       });
     });
@@ -90,6 +154,7 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         max: 64,
       });
       await checkUser(managerId);
+      const custom = await prepareCustom(body.customFields, null);
       const department = await organization.createDepartment({
         title: requireString(body.title, 'DEPARTMENT_TITLE_REQUIRED', {
           max: 200,
@@ -105,8 +170,19 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         managerId,
         sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : 0,
       });
+      if (custom) await writeCustom(department.id, custom);
       await refresh(managerId ? [managerId] : []);
-      return c.json({ data: department }, 201);
+      return c.json(
+        {
+          data: {
+            ...department,
+            customFields: (await projectCustom([department.id])).get(
+              department.id,
+            ),
+          },
+        },
+        201,
+      );
     });
 
     routes.patch('/departments/:id', async (c) => {
@@ -136,12 +212,21 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         await checkUser(input.managerId);
       }
       if (typeof body.sortOrder === 'number') input.sortOrder = body.sortOrder;
+      const custom = await prepareCustom(body.customFields, c.req.param('id'));
       const { department, changed } = await organization.updateDepartment(
         c.req.param('id'),
         input,
       );
+      if (custom) await writeCustom(department.id, custom);
       await refresh(changed);
-      return c.json({ data: department });
+      return c.json({
+        data: {
+          ...department,
+          customFields: (await projectCustom([department.id])).get(
+            department.id,
+          ),
+        },
+      });
     });
 
     routes.post('/departments/:id/active', async (c) => {

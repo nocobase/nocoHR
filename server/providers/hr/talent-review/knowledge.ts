@@ -130,7 +130,7 @@ export function topicByRule(candidate: { title: string; content: string }): stri
   const code =
     /(?:报警|alarm)\s*([A-Z]{1,3}\d{1,4})/iu.exec(text)?.[1] ??
     /([A-Z]{1,3}\d{1,4})\s*(?:报警|alarm)/iu.exec(text)?.[1];
-  if (code) return `CNC 报警 ${code.toUpperCase()} 复位`;
+  if (code) return `报警 ${code.toUpperCase()} 处理`;
   return candidate.title.replace(/[？?。！!]+$/u, '').slice(0, 40);
 }
 
@@ -336,7 +336,7 @@ ${c.content}
           employee: 'knowledgeAssistant',
           userId: run.owner.userId,
           title: '知识沉淀：归并主题',
-          prompt: `把下列已解决的问题按主题归并（同一个问题的不同说法归为一个主题），主题名简短（如“CNC 报警 E17 复位”）。已有主题：${JSON.stringify([...new Set(all.map((c) => c.topic).filter(Boolean))])}
+          prompt: `把下列已解决的问题按主题归并（同一个问题的不同说法归为一个主题），主题名简短（如“报警 E17 处理”“报销单退回重提”）。已有主题：${JSON.stringify([...new Set(all.map((c) => c.topic).filter(Boolean))])}
 问题：${JSON.stringify(all.map((c) => ({ id: c.id, title: c.title, content: c.content.slice(0, 300) })))}`,
           schema: topicSchema,
           timeZone: platform.timeZone,

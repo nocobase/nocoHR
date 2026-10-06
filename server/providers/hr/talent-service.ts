@@ -109,6 +109,13 @@ export const EMPLOYMENT_TYPES = [
   'outsourced',
   // V2-06: 派遣 workers are paid by their agency and get no payslip here.
   'dispatched',
+  // 用工类型 other industries need (retail, hospitality, agriculture, care):
+  // 季节工, 临时工, 退休返聘, 灵活用工. All are paid here like 全职 and 兼职;
+  // only 季节工 and 临时工 sign a labour contract (see compliance.ts).
+  'seasonal',
+  'temporary',
+  'retiredRehire',
+  'flexible',
 ] as const;
 export const GENDERS = ['male', 'female', 'other'] as const;
 export const ID_TYPES = ['idCard', 'passport', 'other'] as const;
@@ -518,7 +525,7 @@ export interface TalentServiceDeps {
 
 export function createTalentService(deps: TalentServiceDeps): TalentService {
   const { database, authz, organization, users } = deps;
-  const framework = createFrameworkService(database);
+  const framework = createFrameworkService(database, deps.customFields);
   const EMPLOYEE = 'talent.employee';
   const ASSESSMENT = 'talent.assessment';
 

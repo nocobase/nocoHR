@@ -2,7 +2,18 @@ import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useState, type ReactElement } from 'react';
 
-import { errorMessage } from '@/components/talent/errors';
+import {
+  compactValues,
+  customFieldErrors,
+  useCustomFieldDefinitions,
+  type CustomValues,
+} from '@/components/talent/custom-field-model';
+import { CustomFieldInputs } from '@/components/talent/custom-fields';
+import {
+  errorCode,
+  errorDetails,
+  errorMessage,
+} from '@/components/talent/errors';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -67,6 +78,16 @@ export function EntityDialog({
             responsibilities: target.position?.responsibilities ?? '',
           },
   );
+  // 界面追加字段 on positions (设置 / 字段管理), shown on the position's own form.
+  const { definitions: positionFields } = useCustomFieldDefinitions(
+    'positions',
+    'form',
+  );
+  const customDefinitions = target.kind === 'position' ? positionFields : [];
+  const [custom, setCustom] = useState<CustomValues>(() =>
+    target.kind === 'position' ? (target.position?.customFields ?? {}) : {},
+  );
+  const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   const set = (key: string, value: string) =>
@@ -78,6 +99,7 @@ export function EntityDialog({
     }
     setPending(true);
     setError(undefined);
+    setCustomErrors({});
     try {
       const base =
         target.kind === 'family'
@@ -86,14 +108,21 @@ export function EntityDialog({
       const { data } = await api.request<{ data: { id: string } }>({
         path: current ? `${base}/${encodeURIComponent(current.id)}` : base,
         method: current ? 'PATCH' : 'POST',
-        json: Object.fromEntries(
-          Object.entries(draft).map(([k, v]) => [k, v.trim() || null]),
-        ),
+        json: {
+          ...Object.fromEntries(
+            Object.entries(draft).map(([k, v]) => [k, v.trim() || null]),
+          ),
+          ...(customDefinitions.length
+            ? { customFields: compactValues(custom) }
+            : {}),
+        },
       });
       toast.add({ type: 'success', title: t('talent.framework.saved') });
       onSaved(data.id);
     } catch (cause) {
       setError(errorMessage(cause, t));
+      if (errorCode(cause) === 'CUSTOM_FIELD_INVALID')
+        setCustomErrors(customFieldErrors(errorDetails(cause)));
     } finally {
       setPending(false);
     }
@@ -200,6 +229,14 @@ export function EntityDialog({
                     )}
                   />
                 </Field>
+                <CustomFieldInputs
+                  definitions={customDefinitions}
+                  values={custom}
+                  onChange={setCustom}
+                  errors={customErrors}
+                  disabled={pending}
+                  idPrefix='position-custom'
+                />
               </>
             )}
             {error ? <FieldError>{error}</FieldError> : null}

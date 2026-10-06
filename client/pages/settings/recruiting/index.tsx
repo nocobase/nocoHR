@@ -39,12 +39,16 @@ import {
 } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 
+// The check-in topics of recruiting/config.ts CHECK_IN_TOPICS. A routing rule an
+// older settings row kept for the legacy housing / shuttle topics is kept on
+// save (the routing object is spread) and still applies to commute.
 const TOPICS = [
-  'housing',
-  'shuttle',
+  'commute',
   'mentoring',
   'schedule',
   'workload',
+  'expectations',
+  'environment',
   'other',
 ] as const;
 const TEMPLATES = [
@@ -182,7 +186,13 @@ function SettingsForm({
     part: Partial<FormValue[K]>,
   ) => setValue((v) => ({ ...v, [section]: { ...v[section], ...part } }));
   const route = (topic: (typeof TOPICS)[number]) => {
-    const target = value.checkIns.routing[topic] ?? 'hrOwner';
+    const routing = value.checkIns.routing;
+    const target =
+      routing[topic] ??
+      (topic === 'commute'
+        ? (routing.housing ?? routing.shuttle)
+        : undefined) ??
+      'hrOwner';
     return target.startsWith('user:') ? 'hrOwner' : target;
   };
   const setTemplate = (
@@ -695,6 +705,15 @@ function WorkforceSection({
       >
         {t('recruiting.settings.addTransfer')}
       </Button>
+      <label className='flex items-center gap-2 text-sm'>
+        <Checkbox
+          checked={w.transferHousingRisk ?? false}
+          onCheckedChange={(checked) =>
+            set({ transferHousingRisk: Boolean(checked) })
+          }
+        />
+        {t('recruiting.settings.transferHousingRisk')}
+      </label>
       <NumberField
         id='rs-cycle'
         label={t('recruiting.settings.recruitingCycle')}

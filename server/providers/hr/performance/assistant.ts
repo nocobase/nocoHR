@@ -143,12 +143,12 @@ export function createPerformanceAssistant(deps: {
     if (counted.length)
       list.push({
         text: `考核期内 ${counted.length} 起质量问题（${counted.map((i) => `${i.externalId}${i.severity ? ` ${i.severity}` : ''}`).join('、')}）`,
-        source: '质量系统',
+        source: '业务系统',
       });
     for (const issue of counted)
       list.push({
         text: issue.externalId,
-        source: '质量系统',
+        source: '业务系统',
         ref: { type: 'signal', id: issue.id, label: issue.externalId },
       });
     if (snapshot.exams.certificationExams.length)
@@ -221,27 +221,27 @@ export function createPerformanceAssistant(deps: {
     const [first, second] = departmentGoals;
     if (first)
       drafts.push({
-        title: '本人负责工序全年无 major 及以上质量问题',
-        measure: `质量系统中本人 critical 质量问题 0 起、major 质量问题 0 起；支撑部门目标“${first.title}”`,
+        title: '本岗位核心工作按时、按质完成',
+        measure: `本人负责的工作在考核期内 critical、major 问题 0 起；支撑部门目标“${first.title}”`,
         weight: 40,
         alignedGoalId: first.id,
       });
     drafts.push({
-      title: '首件检验与过程自检记录完整、及时',
-      measure: '首件检验记录完整率 100%，记录类质量问题 0 起',
+      title: '关键流程与工作规范执行到位',
+      measure: '关键流程的记录完整率 100%，因未按规范执行引起的问题 0 起',
       weight: first ? 30 : 50,
       alignedGoalId: first?.id ?? null,
     });
     if (second)
       drafts.push({
-        title: '带教新人按期上岗',
-        measure: `协助带教的新人在 14 天内通过上岗考试；支撑部门目标“${second.title}”`,
+        title: '带教新人或分享经验',
+        measure: `协助带教的新人按期通过岗位考核，或完成至少 1 次经验分享；支撑部门目标“${second.title}”`,
         weight: 15,
         alignedGoalId: second.id,
       });
     drafts.push({
-      title: '按期完成必修学习并保持上岗证有效',
-      measure: '必修学习按期完成率不低于 95%，上岗证在考核期内保持有效',
+      title: '按期完成必修学习并保持岗位必备证书有效',
+      measure: '必修学习按期完成率不低于 95%，岗位必备证书在考核期内保持有效',
       weight: 0,
       alignedGoalId: null,
     });
@@ -412,7 +412,7 @@ export function createPerformanceAssistant(deps: {
           [
             `为上级起草 ${context.employee.name} 的考核评语初稿。`,
             '只写有数据支撑的事实，每条事实后用括号标注来源；不写对性格、态度、家庭的评价；不给总评等级，只给各项的参考意见。',
-            '描述问题要具体、可改进，例如“考核期内两起首件检验类质量问题（QI-2026-0301、0457）”，而不是“质量意识差”。',
+            '描述问题要具体、可改进，例如“考核期内两起 major 级问题（编号 2026-0301、2026-0457）”，而不是“工作不认真”。',
             '下面 JSON 的字段名（如 current、required、progress）只是给你看的，不要写进评语。能力项的 current 为 null 表示当前没有评定记录，写“当前没有评定记录”；能力等级写成 L1、L2 这样，没有评定的写“未评定”，不要写“L-”。',
             `目标（JSON）：${JSON.stringify(context.goals.map((g) => ({ goalId: g.id, title: g.title, measure: g.measure, progress: g.progress })))}`,
             `能力项（JSON）：${JSON.stringify(context.requirements.map((r) => ({ competencyId: r.competencyId, title: r.title, required: r.requiredLevel, current: r.currentLevel })))}`,
@@ -438,7 +438,7 @@ export function createPerformanceAssistant(deps: {
         const qualityComment =
           data?.qualitySafety ||
           (quality
-            ? `参考分 ${quality.score}${quality.deductions.length ? `：${quality.deductions.map((d) => `${d.rule} ×${d.count}（${d.points}）`).join('，')}` : '：考核期内无扣分项'}（质量系统、学习与证书记录）`
+            ? `参考分 ${quality.score}${quality.deductions.length ? `：${quality.deductions.map((d) => `${d.rule} ×${d.count}（${d.points}）`).join('，')}` : '：考核期内无扣分项'}（业务系统、学习与证书记录）`
             : '');
         const comment =
           data?.comment ??

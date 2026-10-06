@@ -43,6 +43,7 @@ import {
   num,
   payableDaysFor,
   readCalendar,
+  readStandardDayHours,
   subtreeOf,
   toCsv,
   type PayrollEmployee,
@@ -1234,6 +1235,7 @@ export function createCycleService(
       const query = database.query();
       const settings = await ctx.settings();
       const calendar = await readCalendar(query);
+      const standardDayHours = await readStandardDayHours(query);
       const summaries = new Map(
         (
           await query
@@ -1359,9 +1361,12 @@ export function createCycleService(
           specialDeductionMonth: special.month,
           prior,
           tax: settings.tax,
+          standardDayHours,
         });
         const inputs = {
           calculationId,
+          // The standard day hourlyRate was divided by (attendance settings).
+          standardDayHours,
           employee: {
             employeeNo: employee.employeeNo,
             departmentId: employee.departmentId,

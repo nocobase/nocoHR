@@ -23,6 +23,8 @@ export interface Position {
   readonly jdError?: string | null;
   readonly active: boolean;
   readonly sortOrder: number;
+  /** 界面追加字段, as the reader may see them. */
+  readonly customFields?: Record<string, unknown>;
 }
 
 export interface Competency {

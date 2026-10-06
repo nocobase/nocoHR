@@ -461,7 +461,9 @@ export function createAutomationTasks(
     await authorizeAction(run.owner.authz, FRAMEWORK_ADVISOR, 'use');
     const issues = await computeCompetencyIssues(database);
     // V3-08: the position framework is checked in the same run.
-    const positionIssues = await computePositionIssues(database);
+    const positionIssues = await computePositionIssues(database, {
+      synonyms: String(run.params.synonyms ?? ''),
+    });
     if (
       !issues.similarPairs.length &&
       !issues.idle.length &&

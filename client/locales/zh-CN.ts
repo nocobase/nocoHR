@@ -886,6 +886,19 @@ const zhCN: AppResource = {
       noCalendar:
         '尚未配置法定节假日日历。请添加年度并核对日期，再用于工作日计算。',
       addYear: '添加年度',
+      weeklyRestDays: '每周休息日',
+      weeklyRestDaysHelp:
+        '未排班时，这些星期几按休息日计算加班类型、请假天数和计薪天数；日历中的调休上班日除外。',
+      invalidRestDays: '请至少保留一天为工作日。',
+      restWeekdays: {
+        '0': '周日',
+        '1': '周一',
+        '2': '周二',
+        '3': '周三',
+        '4': '周四',
+        '5': '周五',
+        '6': '周六',
+      },
       addBand: '添加档位',
       removeRow: '移除第 {{row}} 行',
       fields: {
@@ -1489,7 +1502,7 @@ const zhCN: AppResource = {
   },
   aiAutomations: {
     fieldHints: {
-      synonyms: '组之间用“;”分隔，组内用“/”分隔，例如 CNC/数控; 操作工/操作员',
+      synonyms: '组之间用“;”分隔，组内用“/”分隔，例如 主管/组长; 客服/客户服务',
     },
     skipReason: {
       DISABLED: '已跳过：该工作已关闭',
@@ -3051,6 +3064,10 @@ const zhCN: AppResource = {
       intern: '实习',
       outsourced: '外包',
       dispatched: '派遣',
+      seasonal: '季节工',
+      temporary: '临时工',
+      retiredRehire: '退休返聘',
+      flexible: '灵活用工',
     },
     gender: {
       male: '男',

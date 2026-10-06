@@ -37,6 +37,9 @@ export const EXTENSIBLE_COLLECTIONS = [
   // V4-13 内训师档案、实操考核 (migration 202610110001).
   'instructorProfiles',
   'practicalAssessments',
+  // 组织与岗位 (migration 202610210001): industries describe their units and posts.
+  'departments',
+  'positions',
 ] as const;
 export type ExtensibleCollection = (typeof EXTENSIBLE_COLLECTIONS)[number];
 
@@ -96,6 +99,8 @@ export const COLLECTION_PLACEMENTS: Record<
   reviewSchemes: ['detail', 'list', 'form'],
   instructorProfiles: ['detail', 'list', 'form'],
   practicalAssessments: ['detail', 'list', 'form'],
+  departments: ['detail', 'form'],
+  positions: ['detail', 'form'],
 };
 
 /**

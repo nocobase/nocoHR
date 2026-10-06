@@ -5,6 +5,7 @@
 import type { DatabaseManager } from '@nocobase/db';
 
 import { json } from '../platform.js';
+import { isWeeklyRestDay, weeklyRestDaysOf } from '../attendance-config.js';
 import { HrError, str } from '../shared.js';
 
 export { json };
@@ -171,6 +172,8 @@ export function subtreeOf(
 export interface WorkCalendar {
   holidays: Set<string>;
   adjustedWorkdays: Set<string>;
+  /** Weekdays (0 = Sunday … 6 = Saturday) that are rest days without a holiday or an adjusted workday; Saturday and Sunday when not set. */
+  weeklyRestDays?: readonly number[];
 }
 
 /** 节假日日历 from the attendance settings (设置 / 考勤设置); empty when not set. */
@@ -182,6 +185,7 @@ export async function readCalendar(query: Query): Promise<WorkCalendar> {
     .executeTakeFirst();
   const value = json<{
     years?: { holidays?: string[]; adjustedWorkdays?: string[] }[];
+    weeklyRestDays?: unknown;
   }>(row?.value, {});
   const holidays = new Set<string>();
   const adjusted = new Set<string>();
@@ -189,14 +193,33 @@ export async function readCalendar(query: Query): Promise<WorkCalendar> {
     for (const d of year.holidays ?? []) holidays.add(d);
     for (const d of year.adjustedWorkdays ?? []) adjusted.add(d);
   }
-  return { holidays, adjustedWorkdays: adjusted };
+  return {
+    holidays,
+    adjustedWorkdays: adjusted,
+    weeklyRestDays: weeklyRestDaysOf(value.weeklyRestDays),
+  };
+}
+
+/**
+ * 标准日工时 for `hourlyRate`: the attendance settings' standard day
+ * (加班 · 标准工时), 8 when not set.
+ */
+export async function readStandardDayHours(query: Query): Promise<number> {
+  const row = await query
+    .selectFrom('personnelSettings')
+    .select(['value'])
+    .where('id', '=', 'attendance.overtime')
+    .executeTakeFirst();
+  const hours = Number(
+    json<{ standardDayHours?: unknown }>(row?.value, {}).standardDayHours,
+  );
+  return Number.isFinite(hours) && hours > 0 && hours <= 24 ? hours : 8;
 }
 
 export function isWorkday(date: string, calendar: WorkCalendar): boolean {
   if (calendar.holidays.has(date)) return false;
   if (calendar.adjustedWorkdays.has(date)) return true;
-  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
-  return weekday !== 0 && weekday !== 6;
+  return !isWeeklyRestDay(date, calendar.weeklyRestDays);
 }
 
 /**

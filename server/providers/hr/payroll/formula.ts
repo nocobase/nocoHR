@@ -6,7 +6,7 @@
  * | Variable | Meaning |
  * |---|---|
  * | `base`, `allowance.<code>` | salary file |
- * | `dailyRate`, `hourlyRate`, `payableDays`, `payDaysPerMonth` | computed (the last is the structure's 月计薪天数) |
+ * | `dailyRate`, `hourlyRate`, `payableDays`, `payDaysPerMonth` | computed (`dailyRate` is base ÷ the structure's 月计薪天数, `hourlyRate` is that ÷ the attendance settings' standard day hours, 8 by default) |
  * | `att.nightShiftCount`, `att.absentDays`, `att.shift.<code>`, `att.overtime.workday / restDay / holiday`, `att.leave.<code>` | the locked monthly attendance summary |
  * | `imp.<code>` | the month's imported value |
  * | `param.<code>` | the structure's parameters |

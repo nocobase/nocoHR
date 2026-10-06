@@ -115,11 +115,22 @@ export function probationLimitFor(
   return limits.threeYearsOrOpen;
 }
 
+/** The employment types that sign a labour contract with the company, and so are checked. */
+export const LABOUR_CONTRACT_TYPES: ReadonlySet<string> = new Set([
+  'fullTime',
+  'seasonal',
+  'temporary',
+]);
+
 interface EmployeeRow {
   id: string;
   name: string;
   status: string;
-  /** Only 全职 sign a written labour contract with the company (派遣/外包 with their agency, 实习 none, 兼职 may agree orally). */
+  /**
+   * Only 全职, 季节工 and 临时工 sign a written labour contract with the
+   * company (派遣/外包 with their agency, 实习 none, 兼职 may agree orally,
+   * 退休返聘 sign a service agreement, 灵活用工 work through a platform).
+   */
   employmentType?: string | null;
   hireDate: string | null;
   probationEndDate: string | null;
@@ -145,7 +156,8 @@ export function findIssues(
   date: string,
 ): ComplianceFinding[] {
   if (!settings.enabled || employee.status === 'leave') return [];
-  if ((employee.employmentType ?? 'fullTime') !== 'fullTime') return [];
+  if (!LABOUR_CONTRACT_TYPES.has(employee.employmentType ?? 'fullTime'))
+    return [];
   const out: ComplianceFinding[] = [];
   const base = { employeeId: employee.id, employeeName: employee.name };
   const active = contracts.find((c) => c.status === 'active');

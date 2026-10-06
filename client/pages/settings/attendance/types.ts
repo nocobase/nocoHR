@@ -39,6 +39,8 @@ export interface Configuration {
   annualLeave: { bands: { minimumYears: number; days: number }[] };
   calendar: {
     years: { year: number; holidays: string[]; adjustedWorkdays: string[] }[];
+    /** 每周休息日 (0 = Sunday … 6 = Saturday); the server answers [0, 6] when not set. */
+    weeklyRestDays?: number[];
   };
   /** V2-05 轮班模板. */
   rotations: {

@@ -361,15 +361,25 @@ describe('V4-12 pure rules', () => {
       certificates: [],
       attendance: { absentDays: 0 } as never,
     };
+    // No category is excluded by default (a new installation); the demo
+    // scheme excludes 设备故障, which is what these rules spell out.
+    expect(common.DEFAULT_QUALITY_RULES.excludeCategories).toEqual([]);
     expect(
       evidence.qualitySafetyScore(
         snapshot as never,
         common.DEFAULT_QUALITY_RULES,
       ).score,
+    ).toBe(1.5);
+    const demoRules = {
+      ...common.DEFAULT_QUALITY_RULES,
+      excludeCategories: ['设备故障'],
+    };
+    expect(
+      evidence.qualitySafetyScore(snapshot as never, demoRules).score,
     ).toBe(2);
     expect(
       evidence.qualitySafetyScore(snapshot as never, {
-        ...common.DEFAULT_QUALITY_RULES,
+        ...demoRules,
         perIssue: { critical: -3, major: -2, minor: -0.5 },
       }).score,
     ).toBe(1);

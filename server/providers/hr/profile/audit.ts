@@ -35,6 +35,7 @@ import {
   type ProfileDeps,
   type ProfileReads,
 } from './context.js';
+import { unitShortName } from '../department-labels.js';
 import { certState } from './insights.js';
 import { renderPdf, type PdfBlock } from './pdf.js';
 
@@ -211,11 +212,11 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
         departmentIds.add(d.id);
         rest = rest.split(d.title).join(' ');
       }
-      // "苏州和成都机加工车间": a workshop title shared by several plants, qualified by each plant named.
+      // "苏州和成都机加工车间", "东院区和西院区急诊科": a title shared by several units, qualified by each unit named.
       for (const d of titles) {
         const parent = titles.find((p) => p.id === d.parentId);
         if (!parent) continue;
-        const prefix = parent.title.replace(/工厂$/u, '');
+        const prefix = unitShortName(parent.title);
         if (!prefix || prefix === parent.title) continue;
         const generic = d.title.startsWith(prefix)
           ? d.title.slice(prefix.length)

@@ -1,7 +1,8 @@
 /**
  * 新员工回访 (V2-07, 人事助理). On the configured days after joining (default
  * 3 / 7 / 30) the HR assistant asks a new employee, in a Feishu private chat,
- * how housing, the shuttle, mentoring and the schedule are going. A reply is
+ * how the commute, mentoring, the workload and the schedule are going (the
+ * configured questions). A reply is
  * claimed by the bot hook (im-channel `addHook`) and answered by the HR
  * assistant, who calls `saveCheckInIssues`; without a model the rule path
  * sorts the reply by topic, cites a policy when one answers it, and routes
@@ -19,7 +20,12 @@ import { z } from 'zod';
 import { authorizeAction } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
 import { addDays, daysBetween, HrError, newId, str } from '../shared.js';
-import { CHECK_IN_TOPICS, type CheckInTopic } from './config.js';
+import {
+  CHECK_IN_TOPICS,
+  checkInRouteFor,
+  type CheckInTopic,
+  type StoredCheckInTopic,
+} from './config.js';
 import { day, iso, json } from './common.js';
 import type { RecruitingContext } from './context.js';
 import { COMPOSITE } from './resources.js';
@@ -52,12 +58,19 @@ const issuesSchema = z
   })
   .strict();
 
+/**
+ * Keywords per topic, tried in this order; the first match wins. Commute
+ * covers getting to work and, where an employer provides it, accommodation
+ * (what were the separate housing and shuttle topics).
+ */
 const TOPIC_WORDS: Record<CheckInTopic, RegExp> = {
-  housing: /宿舍|住宿|室友|房间|空调|热水/u,
-  shuttle: /班车|通勤|公交|交通|接送|下班.{0,6}(没有?|没)车/u,
-  mentoring: /师傅|带教|教我|没人教|培训/u,
-  schedule: /排班|夜班|班次|倒班|休息|调班/u,
+  commute:
+    /通勤|交通|班车|公交|地铁|打车|接送|路上|住得远|离.{0,8}远|下班.{0,6}(没有?|没)车|住宿|宿舍|租房|室友/u,
+  mentoring: /师傅|带教|导师|教我|没人教|没人带|上手|同事|培训/u,
+  schedule: /排班|夜班|班次|倒班|调班|休息|工作时间|上班时间|周末/u,
   workload: /太累|加班|工作量|任务多|强度/u,
+  expectations: /工作内容|岗位职责|职责|预期|期望|说的不一样|不一致|和.{0,6}(说|讲|介绍)的/u,
+  environment: /环境|工位|办公室|设备|电脑|工具|空调|热水|噪音|食堂|吃饭/u,
   other: /$^/u,
 };
 
@@ -69,10 +82,14 @@ export function presentCheckIn(row: Record<string, unknown>) {
     channel: str(row.channel),
     askedAt: iso(row.askedAt),
     repliedAt: iso(row.repliedAt),
-    answers: json<{ topic: CheckInTopic; text: string }[]>(row.answers, []),
+    // Rows written before 2026-10 may carry the legacy housing / shuttle topics.
+    answers: json<{ topic: StoredCheckInTopic; text: string }[]>(
+      row.answers,
+      [],
+    ),
     issues: json<
       {
-        topic: CheckInTopic;
+        topic: StoredCheckInTopic;
         summary: string;
         routedToUserId: string | null;
         workItemId: string | null;
@@ -100,7 +117,8 @@ export function classifyReply(text: string) {
       if (topic) answers.push({ topic, text: part.slice(0, 200) });
     }
   }
-  const negative = /不|没|远|慢|累|难|问题|麻烦|不方便|不习惯|不适应/u;
+  const negative =
+    /不|没|远|慢|累|难|问题|麻烦|不方便|不习惯|不适应|太(多|长|久|慢|晚|早|挤|乱)/u;
   const issues = answers
     .filter((a) => negative.test(a.text))
     .map((a) => ({ topic: a.topic, summary: a.text }));
@@ -115,9 +133,9 @@ export function createCheckIns(ctx: RecruitingContext) {
     return (await ctx.ownerOf(CHECK_IN_TASK)) ?? (await ctx.hrAdministrators())[0] ?? null;
   }
 
-  async function routeTarget(topic: CheckInTopic, employeeId: string) {
+  async function routeTarget(topic: StoredCheckInTopic, employeeId: string) {
     const settings = await ctx.settings();
-    const target = settings.checkIns.routing[topic] ?? 'hrOwner';
+    const target = checkInRouteFor(settings.checkIns.routing, topic);
     if (target.startsWith('user:')) return target.slice(5);
     if (target === 'hrOwner') return owner();
     const employee = await platform.employee(employeeId);

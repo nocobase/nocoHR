@@ -182,6 +182,7 @@ export async function schedulePreflight(input: {
       approvedHours,
       holidays: calendar.years.flatMap((y) => y.holidays),
       adjustedWorkdays: calendar.years.flatMap((y) => y.adjustedWorkdays),
+      weeklyRestDays: calendar.weeklyRestDays,
     },
     qualification,
   });

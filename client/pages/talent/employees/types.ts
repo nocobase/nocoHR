@@ -19,6 +19,10 @@ export const EMPLOYMENT_TYPES = [
   'intern',
   'outsourced',
   'dispatched',
+  'seasonal',
+  'temporary',
+  'retiredRehire',
+  'flexible',
 ] as const;
 export const GENDERS = ['male', 'female', 'other'] as const;
 export const ID_TYPES = ['idCard', 'passport', 'other'] as const;

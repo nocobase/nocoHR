@@ -16,6 +16,7 @@ import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { notificationServiceToken } from '@nocobase/app-plugin-notification';
 
 import { scopeForUser } from '../../server/providers/hr/authorize.ts';
+import { readPack } from '../../server/providers/hr/licensed/pack.ts';
 import { qualificationChecks } from '../../server/providers/hr/licensed/qualification.ts';
 import { addDays, newId, today } from '../../server/providers/hr/shared.ts';
 import {
@@ -1001,5 +1002,103 @@ describe('认证管家与审计导出', () => {
     expect(grants.map((g) => g.pages.map((p) => p.title))).toEqual([
       ['叉车出库登记'],
     ]);
+  });
+});
+
+describe('新装不带制造业行业包', () => {
+  type Run = (context: { query: unknown }) => Promise<void>;
+  const runSeed = async (file: string) => {
+    const seed = (await import(`../../database/main/seeds/${file}.ts`))
+      .default as { run: Run };
+    await seed.run({ query: db().query() });
+  };
+  const packValue = async () => {
+    const row = await db()
+      .query()
+      .selectFrom('personnelSettings')
+      .select(['value'])
+      .where('id', '=', 'licensedOperation.pack')
+      .executeTakeFirst();
+    let value: unknown = row?.value;
+    for (let i = 0; i < 3 && typeof value === 'string'; i++)
+      value = JSON.parse(value);
+    return (value ?? {}) as Record<string, unknown>;
+  };
+  const setPackValue = (value: Record<string, unknown>) =>
+    db()
+      .query()
+      .updateTable('personnelSettings')
+      .set({ value: JSON.stringify(value) })
+      .where('id', '=', 'licensedOperation.pack')
+      .execute();
+
+  it('lists no certification-only set by default; the demo writes its own', async () => {
+    const before = await packValue();
+    const { certificationOnlyPermissionSets: _, ...rest } = before;
+    await setPackValue(rest);
+    expect(
+      (await readPack(db().query())).certificationOnlyPermissionSets,
+    ).toEqual([]);
+    await runSeed('202610210101_demo_manufacturing_pack_defaults');
+    expect((await packValue()).certificationOnlyPermissionSets).toEqual([
+      'prod.cncOperator',
+      'equip.forkliftOperator',
+    ]);
+    // An administrator's list is never replaced.
+    await setPackValue({ ...rest, certificationOnlyPermissionSets: [] });
+    await runSeed('202610210101_demo_manufacturing_pack_defaults');
+    expect((await packValue()).certificationOnlyPermissionSets).toEqual([]);
+    await setPackValue(before);
+  });
+
+  it('drops the manufacturing sets nothing is assigned to, outside the demo', async () => {
+    const sets = () =>
+      db()
+        .query()
+        .selectFrom('authorizationPermissionSets')
+        .selectAll()
+        .where('key', 'in', ['prod.cncOperator', 'equip.forkliftOperator'])
+        .execute();
+    const cncSet = (await sets()).find((s) => s.key === 'prod.cncOperator');
+    const cncAssignments = await db()
+      .query()
+      .selectFrom('authorizationPermissionSetAssignments')
+      .selectAll()
+      .where('permissionSetKey', '=', 'prod.cncOperator')
+      .execute();
+    expect(cncSet).toBeDefined();
+    // The demo keeps both.
+    await runSeed('202610210102_drop_unused_manufacturing_sets');
+    expect((await sets()).length).toBe(2);
+
+    await db()
+      .query()
+      .deleteFrom('authorizationPermissionSetAssignments')
+      .where('permissionSetKey', '=', 'prod.cncOperator')
+      .execute();
+    const demoSeed = process.env.HR_DEMO_SEED;
+    process.env.HR_DEMO_SEED = 'false';
+    try {
+      await runSeed('202610210102_drop_unused_manufacturing_sets');
+    } finally {
+      if (demoSeed === undefined) delete process.env.HR_DEMO_SEED;
+      else process.env.HR_DEMO_SEED = demoSeed;
+    }
+    // The unassigned set is gone; the one still assigned (叉车证) stays.
+    expect((await sets()).map((s) => s.key)).toEqual([
+      'equip.forkliftOperator',
+    ]);
+
+    await db()
+      .query()
+      .insertInto('authorizationPermissionSets')
+      .values(cncSet!)
+      .execute();
+    if (cncAssignments.length)
+      await db()
+        .query()
+        .insertInto('authorizationPermissionSetAssignments')
+        .values(cncAssignments)
+        .execute();
   });
 });

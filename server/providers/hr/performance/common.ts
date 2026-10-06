@@ -97,11 +97,13 @@ export const qualityRulesSchema = z
       })
       .strict()
       .default({ critical: -3, major: -1.5, minor: -0.5 }),
-    // Categories that are not the person's doing (设备故障 is the equipment's).
+    // Categories that are not the person's doing, listed but not deducted.
+    // None by default: which categories those are depends on the business
+    // (the 启衡精密 demo scheme lists 设备故障, the equipment's).
     excludeCategories: z
       .array(z.string().trim().min(1).max(64))
       .max(50)
-      .default(['设备故障']),
+      .default([]),
     learningOnTime: z
       .object({
         enabled: z.boolean().default(true),

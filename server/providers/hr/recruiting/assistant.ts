@@ -56,6 +56,25 @@ import {
 } from './resume-text.js';
 import type { WorkforceService } from './workforce.js';
 
+/**
+ * The words a talent-pool candidate's parsed resume is searched for: the
+ * requisition's checklist and the position title only. It used to append
+ * fixed machining words (数控, CNC, 加工中心, 机床), which matched factory
+ * resumes to every requisition of every customer.
+ */
+export function poolSearchWords(
+  checklist: readonly { text: string }[],
+  positionTitle: string | null,
+): string[] {
+  const filler =
+    /^(?:\d+\s*)?(?:年|个月)?(?:及?以上)?(?:的)?|(?:相关)?(?:工作)?(?:经验|经历|能力)$/gu;
+  const words = [...checklist.map((c) => c.text), positionTitle ?? '']
+    .flatMap((text) => text.split(/[或及与和、，,；;。（）()/\s]+/u))
+    .map((w) => w.replace(filler, '').trim())
+    .filter((w) => w.length >= 2);
+  return [...new Set(words)];
+}
+
 export const TASKS = {
   postingDraft: 'recruitingAssistant.postingDraft',
   poolReuse: 'recruitingAssistant.poolReuse',
@@ -325,13 +344,13 @@ export function createRecruitingAssistant(
           '为下面的招聘需求起草职位描述与任职要求，按要求的结构化格式输出。',
           `岗位：${position.title}（序列：${position.jobFamily ?? '—'}，职级：${position.grade ?? '—'}）`,
           `职责说明：${position.responsibilities ?? '（空）'}`,
-          'title 只写对外的职位名称（如“CNC 操作工”，可加工作地点），不写序列、职级等内部信息。',
+          'title 只写对外的职位名称（如“客户服务专员”“设备操作工”，可加工作地点），不写序列、职级等内部信息。',
           `用人部门条件清单（原样保留，origin=checklist）：`,
           ...requisition.requirementsChecklist.map(
             (c, i) =>
               `${i + 1}. [${c.type}] ${c.text}${c.mustHave ? '（必备）' : ''}`,
           ),
-          '从职责说明中只提炼岗位真正需要的学历、经验、证书和技能，origin=responsibilities；入职后才取得的内部上岗资格（如“须持有 CNC 岗位上岗证”）不列为要求，写进职位描述的“入职培训”说明。',
+          '从职责说明中只提炼岗位真正需要的学历、经验、证书和技能，origin=responsibilities；入职后才取得的内部上岗资格（如“须取得本岗位上岗资格”）不列为要求，写进职位描述的“入职培训”说明。',
           bulk
             ? '这是一线岗位批量招聘：再起草 3–5 道门槛问题，每题对应一条必备要求（requirementIndex 为要求在列表中的序号，从 0 开始），只作提示，不自动淘汰。'
             : '不需要门槛问题，knockoutQuestions 为空数组。',
@@ -453,10 +472,11 @@ export function createRecruitingAssistant(
         'applications.stage as stage',
       ])
       .execute();
-    const words = requisition.requirementsChecklist
-      .flatMap((c) => c.text.split(/[或及与、，,（）()\s]+/u))
-      .filter((w) => w.length >= 2)
-      .concat(['数控', 'CNC', '加工中心', '机床']);
+    const position = await ctx.position(requisition.positionId);
+    const words = poolSearchWords(
+      requisition.requirementsChecklist,
+      position?.title ?? null,
+    );
     const scored = [];
     for (const r of rows) {
       const mine = applied.filter((a) => str(a.candidateId) === str(r.id));

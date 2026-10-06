@@ -208,12 +208,16 @@ export const recruitingEn = {
       shortText: 'Short text',
     },
     topic: {
+      commute: 'Commute and accommodation',
+      mentoring: 'Mentoring and support',
+      schedule: 'Schedule and working hours',
+      workload: 'Workload',
+      expectations: 'Work as described',
+      environment: 'Working environment',
+      other: 'Other',
+      // Legacy topics of check-ins recorded before 2026-10.
       housing: 'Housing',
       shuttle: 'Shuttle bus',
-      mentoring: 'Mentoring',
-      schedule: 'Schedule',
-      workload: 'Workload',
-      other: 'Other',
     },
     message: {
       invitation: 'Interview invitation',
@@ -584,6 +588,8 @@ export const recruitingEn = {
     addCapacity: 'Add a row',
     transfer: 'Loan limits',
     addTransfer: 'Add a department',
+    transferHousingRisk:
+      'Staff on loan need accommodation (show it as a risk of the loan option)',
     maxHeadcount: 'Up to',
     coordinator: 'Coordinator',
     recruitingCycle: 'Recruiting cycle (days)',
@@ -953,12 +959,16 @@ export const recruitingZh: typeof recruitingEn = {
     mode: { onsite: '现场', video: '视频', phone: '电话', ai: 'AI 初面' },
     answerType: { yesNo: '能 / 不能', choice: '单选', shortText: '简短回答' },
     topic: {
+      commute: '通勤与住宿',
+      mentoring: '带教与同事支持',
+      schedule: '排班与工作时间',
+      workload: '工作量',
+      expectations: '工作内容与预期',
+      environment: '工作环境',
+      other: '其他',
+      // 2026-10 之前记录的回访主题.
       housing: '住宿',
       shuttle: '班车',
-      mentoring: '带教',
-      schedule: '排班',
-      workload: '工作量',
-      other: '其他',
     },
     message: {
       invitation: '面试邀请',
@@ -1305,6 +1315,7 @@ export const recruitingZh: typeof recruitingEn = {
     addCapacity: '添加一行',
     transfer: '可借调上限',
     addTransfer: '添加部门',
+    transferHousingRisk: '借调人员需安排住宿（在借调方案中提示此风险）',
     maxHeadcount: '最多',
     coordinator: '协调人',
     recruitingCycle: '招聘周期（天）',

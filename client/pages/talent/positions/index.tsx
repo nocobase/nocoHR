@@ -15,6 +15,8 @@ import { Link, useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
+import { useCustomFieldDefinitions } from '@/components/talent/custom-field-model';
+import { CustomFieldValues } from '@/components/talent/custom-fields';
 import { errorMessage } from '@/components/talent/errors';
 import {
   BlockSkeleton,
@@ -76,6 +78,11 @@ export default function PositionsPage(): ReactElement {
   const [search, setSearch] = useState('');
   const [entity, setEntity] = useState<EntityTarget | null>(null);
   const [busy, setBusy] = useState(false);
+  const { definitions: detailFields } = useCustomFieldDefinitions(
+    'positions',
+    'detail',
+    true,
+  );
   const data = remote.data;
   const first = data?.jobFamilies.flatMap((f) =>
     data.positions.filter((p) => p.jobFamilyId === f.id && p.active),
@@ -411,6 +418,12 @@ export default function PositionsPage(): ReactElement {
                       t('talent.framework.noResponsibilities')}
                   </p>
                 </div>
+                <CustomFieldValues
+                  definitions={detailFields.filter(
+                    (d) => data.canManage || (d.active && !d.sensitive),
+                  )}
+                  values={position.customFields}
+                />
               </CardContent>
             </Card>
           )}

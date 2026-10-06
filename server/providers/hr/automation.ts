@@ -53,8 +53,10 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
       params: {
         perTypeLimit: 20,
         editDistance: 1,
-        // Groups separated by ";", alternatives within a group by "/".
-        synonyms: 'CNC/数控; 操作工/操作员; 班组长/组长',
+        // Groups separated by ";", alternatives within a group by "/". Empty
+        // by default: the words are the business's own (the 启衡精密 demo sets
+        // CNC/数控; 操作工/操作员; 班组长/组长 in seed 202610210132).
+        synonyms: '',
       },
     },
   },
@@ -76,7 +78,8 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
       params: {
         // Incremental syncs' new items are explained together once they are this old.
         mergeMinutes: 60,
-        synonyms: 'CNC/数控机床/数控; 操作工/操作员; 班组长/组长',
+        // Empty by default, as for the import check (the demo's are seeded).
+        synonyms: '',
       },
     },
   },
@@ -121,7 +124,9 @@ export const AUTOMATIONS: readonly AutomationDefinition[] = [
     employee: 'frameworkAdvisor',
     composite: 'talent.frameworkAdvisor',
     kind: 'monthly',
-    defaults: { hour: 9, monthDay: 1 },
+    // synonyms: the groups the similar-position check reads (V3-08), empty
+    // by default like the import check's.
+    defaults: { hour: 9, monthDay: 1, params: { synonyms: '' } },
   },
   {
     key: 'contentWriter.draftCourseFromDocument',

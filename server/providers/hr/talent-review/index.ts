@@ -58,6 +58,8 @@ const SECTIONS: Record<
       'practicalPassRule',
       'knowledgeMergeThreshold',
       'glossary',
+      'practicalSectionKeywords',
+      'practicalCriticalKeywords',
     ],
   },
   evaluation: {

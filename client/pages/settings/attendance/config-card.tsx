@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useState } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { useRemote } from '@/components/talent/use-remote';
 import { BlockSkeleton } from '@/components/talent/states';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Card,
   CardContent,
@@ -15,6 +16,7 @@ import {
 } from '@/components/ui/card';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { CardForm } from './card-form.js';
 import { useSave } from './use-save.js';
@@ -315,6 +317,8 @@ function BandsForm({
 }
 
 const splitDates = (value: string) => value.split(/[\s,，]+/u).filter(Boolean);
+/** Monday first, as a week is read; values are JavaScript weekdays (0 = Sunday). */
+const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0] as const;
 function CalendarForm({
   initial,
   reload,
@@ -370,6 +374,9 @@ function CalendarForm({
           seen.add(entry.year);
         });
       }),
+    weeklyRestDays: z
+      .array(z.number())
+      .max(6, t('attendance.settings.invalidRestDays')),
   });
   const toForm = (value: Configuration['calendar']) => ({
     years: value.years.map((entry) => ({
@@ -377,6 +384,7 @@ function CalendarForm({
       holidays: entry.holidays.join('\n'),
       adjustedWorkdays: entry.adjustedWorkdays.join('\n'),
     })),
+    weeklyRestDays: value.weeklyRestDays ?? [0, 6],
   });
   const form = useForm({
     resolver: zodResolver(schema),
@@ -384,6 +392,10 @@ function CalendarForm({
     defaultValues: toForm(initial.value),
   });
   const list = useFieldArray({ control: form.control, name: 'years' });
+  const restDays = useWatch({
+    control: form.control,
+    name: 'weeklyRestDays',
+  });
   const { save, error } = useSave('calendar', initial);
   return (
     <CardForm
@@ -397,10 +409,42 @@ function CalendarForm({
             holidays: splitDates(entry.holidays),
             adjustedWorkdays: splitDates(entry.adjustedWorkdays),
           })),
+          weeklyRestDays: [...value.weeklyRestDays].sort((a, b) => a - b),
         });
         if (saved) form.reset(toForm(saved));
       })}
     >
+      <fieldset className='space-y-2'>
+        <legend className='text-sm font-medium'>
+          {t('attendance.settings.weeklyRestDays')}
+        </legend>
+        <p className='text-sm text-muted-foreground'>
+          {t('attendance.settings.weeklyRestDaysHelp')}
+        </p>
+        <div className='flex flex-wrap gap-4'>
+          {WEEKDAYS.map((weekday) => (
+            <Label
+              key={weekday}
+              className='flex items-center gap-2 font-normal'
+            >
+              <Checkbox
+                checked={restDays.includes(weekday)}
+                onCheckedChange={(checked) =>
+                  form.setValue(
+                    'weeklyRestDays',
+                    checked
+                      ? [...restDays, weekday]
+                      : restDays.filter((value) => value !== weekday),
+                    { shouldDirty: true, shouldValidate: true },
+                  )
+                }
+              />
+              {t(`attendance.settings.restWeekdays.${weekday}`)}
+            </Label>
+          ))}
+        </div>
+        <FieldError>{form.formState.errors.weeklyRestDays?.message}</FieldError>
+      </fieldset>
       {!list.fields.length ? (
         <p className='text-sm text-muted-foreground'>
           {t('attendance.settings.noCalendar')}

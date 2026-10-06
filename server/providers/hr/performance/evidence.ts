@@ -17,7 +17,8 @@
  * The quality and safety reference score follows the scheme's rules (default:
  * from 5, major −1.5, minor −0.5, on-time rate of required learning below 90 %
  * −1, any expired day of a required certificate −1, at least 1; categories in
- * `excludeCategories` — 设备故障 by default — are listed but not counted).
+ * `excludeCategories` — none by default; the demo scheme lists 设备故障 — are
+ * listed but not counted).
  */
 import type { DatabaseManager } from '@nocobase/db';
 

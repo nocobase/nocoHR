@@ -392,6 +392,8 @@ const en = {
         reviewSchemes: 'Review schemes',
         instructorProfiles: 'Instructor profiles',
         practicalAssessments: 'Practical assessments',
+        departments: 'Departments',
+        positions: 'Positions',
       },
       empty: 'No added fields yet.',
       columns: {
@@ -693,9 +695,9 @@ const en = {
     MAIL_ACCOUNT_INVALID:
       'Choose a connected mailbox account; it is bound with its owner.',
     MAIL_ACCOUNT_IN_USE: 'A mailbox account can serve only one purpose.',
+    MAIL_LINK_TARGET_INVALID: 'That record cannot be linked here.',
     MAIL_RECEIPT_DELETE_LINK_REQUIRED:
       'The receipt must tell the candidate how to have their information deleted: keep the deletion-link placeholder in the text.',
-    MAIL_LINK_TARGET_INVALID: 'That record cannot be linked here.',
     MAIL_RECEIPT_RETENTION_REQUIRED:
       'The receipt must state how long the information is kept: keep the months-kept placeholder in the text.',
     AUDIT_REQUEST_NOT_FOUND: 'The audit request was not found.',
@@ -1028,13 +1030,13 @@ const zh: Shape = {
       resorted: '已重新识别',
       ignored: '已标记为无需处理',
       transfer: '转给其他邮箱…',
-      transferred: '已转给{{mailbox}}，由该邮箱的 AI 员工重新分拣。',
-      thread: '邮件往来',
       link: '挂到单据…',
       linkSearch: '按姓名、月份或客户搜索',
       linkNone: '没有可以挂的单据。',
       linked: '已挂到「{{label}}」',
       linkHints: { posting: '职位', departed: '已离职' },
+      transferred: '已转给{{mailbox}}，由该邮箱的 AI 员工重新分拣。',
+      thread: '邮件往来',
       threadEmpty: '这张单据还没有邮件往来。',
       draftTitle: '回复草稿',
       rescheduleTo: '发送后把面试改到',
@@ -1138,6 +1140,8 @@ const zh: Shape = {
         reviewSchemes: '考核方案',
         instructorProfiles: '内训师档案',
         practicalAssessments: '实操考核',
+        departments: '部门',
+        positions: '岗位',
       },
       empty: '还没有追加字段。',
       columns: {
@@ -1421,11 +1425,11 @@ const zh: Shape = {
     MAIL_ACCOUNT_INVALID:
       '请选择一个已关联的邮箱账户，它会连同账户主人一起绑定。',
     MAIL_ACCOUNT_IN_USE: '一个邮箱账户只能承担一种用途。',
+    MAIL_LINK_TARGET_INVALID: '不能挂到这张单据。',
     MAIL_RECEIPT_DELETE_LINK_REQUIRED:
       '回执须告诉候选人如何申请删除，请在正文中保留“删除申请链接”占位符。',
     MAIL_RECEIPT_RETENTION_REQUIRED:
       '回执须说明信息保存期限，请在正文中保留“保存月数”占位符。',
-    MAIL_LINK_TARGET_INVALID: '不能挂到这张单据。',
     AUDIT_REQUEST_NOT_FOUND: '审核请求不存在。',
     AUDIT_REQUEST_LOCKED: '审核包已生成或已回复，范围不能再修改。',
     AUDIT_SCOPE_EMPTY: '请至少选择一个部门或岗位，并勾选资料。',

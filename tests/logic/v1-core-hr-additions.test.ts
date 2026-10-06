@@ -18,6 +18,7 @@ import {
   accessExplainerToken,
   customFieldServiceToken,
   hrCoreServiceToken,
+  organizationServiceToken,
   settingsDraftServiceToken,
 } from '../../server/providers/hr/tokens.ts';
 import {
@@ -301,7 +302,8 @@ describe('界面追加字段', () => {
     expect(
       (
         await call('hr01', 'POST', '/custom-fields', {
-          collection: 'departments',
+          // 部门 and 岗位 are open since the industry review; 合同 is not.
+          collection: 'contracts',
           label: { 'zh-CN': '不开放的表' },
           type: 'text',
         })
@@ -711,6 +713,83 @@ describe('一句话改配置、对话提交与权限说明', () => {
         '"approver":{"type":"departmentHead","departmentId":"cd"}',
       );
     }
+  });
+
+  it('reads 院长、店长、区域经理 as the head of that unit, not only 厂长', async () => {
+    const organization = server.application.container.resolve(
+      organizationServiceToken,
+    );
+    const drafts = server.application.container.resolve(
+      settingsDraftServiceToken,
+    );
+    const region = await organization.createDepartment({
+      title: '华东大区',
+    });
+    const store = await organization.createDepartment({
+      title: '南京西路店',
+      parentId: region.id,
+    });
+    const counter = await organization.createDepartment({
+      title: '南京西路店收银组',
+      parentId: store.id,
+    });
+    const hospital = await organization.createDepartment({
+      title: '第一人民医院',
+    });
+    const ward = await organization.createDepartment({
+      title: '急诊科',
+      parentId: hospital.id,
+    });
+    const approverOf = async (department: string, key: string) => {
+      const change = await drafts.draft(
+        await actorOf('hr01'),
+        `${department}的入职单加一级${key}审批`,
+        [
+          {
+            type: 'chainRule',
+            department,
+            actionTypes: ['onboard'],
+            name: `${key}审批`,
+            approver: { type: 'permissionSet', key },
+            position: 'afterFirst',
+          },
+        ],
+      );
+      return (change.items[0]!.resolved as { rule: { approver: Json } }).rule
+        .approver;
+    };
+    expect(await approverOf('南京西路店收银组', '店长')).toEqual({
+      type: 'departmentHead',
+      departmentId: store.id,
+    });
+    expect(await approverOf('南京西路店收银组', '区域经理')).toEqual({
+      type: 'departmentHead',
+      departmentId: region.id,
+    });
+    expect(await approverOf('急诊科', '院长')).toEqual({
+      type: 'departmentHead',
+      departmentId: hospital.id,
+    });
+    expect(await approverOf('急诊科', '科主任')).toEqual({
+      type: 'departmentHead',
+      departmentId: ward.id,
+    });
+    // A role with no such unit above stays what the model sent.
+    expect(await approverOf('急诊科', '店长')).toEqual({
+      type: 'permissionSet',
+      key: '店长',
+    });
+    // Leave the demo tree as the other cases expect it.
+    await server.application.container
+      .resolve(databaseManagerToken)
+      .query()
+      .deleteFrom('departments')
+      .where(
+        'id',
+        'in',
+        [counter, store, region, ward, hospital].map((d) => d.id),
+      )
+      .execute();
   });
 
   it('drafts a 成都工厂 厂长审批 rule with a merge warning, applies it and reverts it', async () => {

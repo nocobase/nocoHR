@@ -41,11 +41,15 @@ import type { SignalService } from './signals.js';
 export const ANALYST = 'talentAnalyst';
 /** 回访 topics (recruiting/config.ts CHECK_IN_TOPICS) as the report names them. */
 const TOPIC_LABEL: Record<string, string> = {
+  commute: '通勤与住宿',
+  mentoring: '带教与同事支持',
+  schedule: '排班与工作时间',
+  workload: '工作量',
+  expectations: '工作内容与预期',
+  environment: '工作环境',
+  // Check-ins recorded before 2026-10.
   housing: '住宿',
   shuttle: '班车',
-  mentoring: '带教',
-  schedule: '排班',
-  workload: '工作量',
 };
 export const REPORT_MAX = 300;
 

@@ -14,6 +14,7 @@ import {
   LoadError,
 } from '@/components/talent/states';
 import { useLookups } from '@/components/talent/use-lookups';
+import { qualifiedDepartmentTitle } from '@/components/talent/department-labels';
 import { useRemote } from '@/components/talent/use-remote';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -365,20 +366,19 @@ function ScopeSection({
   const [customerName, setCustomerName] = useState(request.customerName);
   const [dueDate, setDueDate] = useState(request.dueDate ?? '');
   const [busy, setBusy] = useState<string | null>(null);
-  // A workshop named the same in several plants is shown with its plant (苏州工厂 · 机加工车间).
+  // A department named the same in several places is shown with its parent (苏州工厂 · 机加工车间).
   const departmentLabel = (id: string): string => {
     const department = lookups.departments.find((d) => d.id === id);
     if (!department) return lookups.departmentTitle(id);
-    const parent = lookups.departments.find(
-      (d) => d.id === department.parentId,
+    return qualifiedDepartmentTitle(
+      {
+        id: department.id,
+        title: department.label,
+        parentId: department.parentId,
+      },
+      lookups.departments.map((d) => ({ id: d.id, title: d.label })),
+      ' · ',
     );
-    if (!parent) return department.label;
-    const prefix = parent.label.replace(/工厂$/u, '');
-    return prefix &&
-      prefix !== parent.label &&
-      !department.label.startsWith(prefix)
-      ? `${parent.label} · ${department.label}`
-      : department.label;
   };
   const editable =
     Boolean(request.can?.confirm) &&

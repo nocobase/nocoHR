@@ -983,6 +983,19 @@ const enUS = {
       noCalendar:
         'No statutory calendar configured. Add a year and verify its dates before using workday calculations.',
       addYear: 'Add year',
+      weeklyRestDays: 'Weekly rest days',
+      weeklyRestDaysHelp:
+        'Days without a shift on these weekdays count as rest days for overtime, leave and pay, unless the calendar marks them as adjusted workdays.',
+      invalidRestDays: 'Leave at least one weekday as a workday.',
+      restWeekdays: {
+        '0': 'Sunday',
+        '1': 'Monday',
+        '2': 'Tuesday',
+        '3': 'Wednesday',
+        '4': 'Thursday',
+        '5': 'Friday',
+        '6': 'Saturday',
+      },
       addBand: 'Add band',
       removeRow: 'Remove row {{row}}',
       fields: {
@@ -1620,7 +1633,7 @@ const enUS = {
   aiAutomations: {
     fieldHints: {
       synonyms:
-        'Groups separated by ";", alternatives within a group by "/", e.g. CNC/数控; 操作工/操作员',
+        'Groups separated by ";", alternatives within a group by "/", e.g. Supervisor/Team lead; Support/Customer service',
     },
     skipReason: {
       DISABLED: 'Skipped: the task is switched off',
@@ -3240,6 +3253,10 @@ const enUS = {
       intern: 'Intern',
       outsourced: 'Outsourced',
       dispatched: 'Dispatched',
+      seasonal: 'Seasonal',
+      temporary: 'Temporary',
+      retiredRehire: 'Retired, rehired',
+      flexible: 'Flexible (gig)',
     },
     gender: {
       male: 'Male',

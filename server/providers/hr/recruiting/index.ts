@@ -137,7 +137,7 @@ export function createRecruitingServices(deps: RecruitingDeps) {
       const settings = await ctx.settings();
       const note = [
         `【新员工回访 checkInId=${open.id}，入职第 ${open.day} 天】这是员工对回访问题的回复。`,
-        '按主题（housing 住宿 / shuttle 班车 / mentoring 带教 / schedule 排班 / workload 工作量 / other）整理回复，调用 saveCheckInIssues 保存；先按制度说明能怎么办（用 searchKnowledge，附出处），再告诉员工已经转给谁跟进。语气像 HR 同事，一次只问一件事；员工表示不想回答时结束回访（declined=true）。不代员工提交任何申请。',
+        '按主题（commute 通勤与住宿 / mentoring 带教与同事支持 / schedule 排班与工作时间 / workload 工作量 / expectations 工作内容与预期 / environment 工作环境 / other）整理回复，调用 saveCheckInIssues 保存；先按制度说明能怎么办（用 searchKnowledge，附出处），再告诉员工已经转给谁跟进。语气像 HR 同事，一次只问一件事；员工表示不想回答时结束回访（declined=true）。不代员工提交任何申请。',
         `回访问题：${settings.checkIns.questions.join(' / ')}`,
         '',
       ].join('\n');

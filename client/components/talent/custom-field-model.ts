@@ -57,6 +57,8 @@ export const COLLECTION_PLACEMENTS = {
   reviewSchemes: ['detail', 'list', 'form'],
   instructorProfiles: ['detail', 'list', 'form'],
   practicalAssessments: ['detail', 'list', 'form'],
+  departments: ['detail', 'form'],
+  positions: ['detail', 'form'],
 } as const satisfies Record<string, readonly CustomFieldPlacement[]>;
 export type ExtensibleCollection = keyof typeof COLLECTION_PLACEMENTS;
 export const EXTENSIBLE_COLLECTIONS = Object.keys(
