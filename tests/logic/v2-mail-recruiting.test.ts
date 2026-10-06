@@ -27,6 +27,7 @@ import {
 } from '../../database/seed-data/demo-recruiting.ts';
 import {
   candidateReplyIntent,
+  forwardingSite,
   postingForSubject,
 } from '../../server/providers/hr/mail/recruiting.ts';
 import {
@@ -243,6 +244,35 @@ afterAll(async () => {
 });
 
 describe('招聘邮箱 rules', () => {
+  it('names the site that forwarded a resume, and none for a candidate writing in', () => {
+    const base = {
+      fromName: '蜀才招聘网',
+      fromAddress: 'resume@shucai-jobs.test',
+      resumeEmail: 'zoupeng@mail.test',
+    };
+    expect(
+      forwardingSite({
+        ...base,
+        subject: '【蜀才招聘网】邹鹏 应聘 CNC 操作工',
+      }),
+    ).toBe('蜀才招聘网');
+    expect(forwardingSite({ ...base, subject: '[智联] 简历' })).toBe('智联');
+    expect(forwardingSite({ ...base, subject: '简历' })).toBe('蜀才招聘网');
+    expect(forwardingSite({ ...base, fromName: null, subject: '简历' })).toBe(
+      'shucai-jobs.test',
+    );
+    expect(
+      forwardingSite({
+        subject: '应聘 CNC 操作工',
+        fromName: '邹鹏',
+        fromAddress: 'ZouPeng@mail.test',
+        resumeEmail: 'zoupeng@mail.test',
+      }),
+    ).toBeNull();
+    expect(
+      forwardingSite({ ...base, resumeEmail: null, subject: '【蜀才招聘网】' }),
+    ).toBeNull();
+  });
   it('reads what a candidate reply asks for', () => {
     expect(candidateReplyIntent('周四的面试能改到下午吗？')).toBe('reschedule');
     expect(candidateReplyIntent('谢谢，我已经找到工作了，不考虑了')).toBe(
@@ -325,6 +355,8 @@ describe('招聘邮箱 (V2-07)', () => {
         'candidates.email as email',
         'candidates.consentBy as consentBy',
         'applications.sourceChannel as sourceChannel',
+        'applications.sourceName as sourceName',
+        'candidates.sourceName as candidateSourceName',
         'applications.postingId as postingId',
       ])
       .where('applications.id', '=', applicationId)
@@ -334,6 +366,9 @@ describe('招聘邮箱 (V2-07)', () => {
       email: 'zoupeng@mail.test',
       consentBy: 'email',
       sourceChannel: 'email',
+      // 渠道名称: the site that forwarded it, from 【…】 in the subject.
+      sourceName: '蜀才招聘网',
+      candidateSourceName: '蜀才招聘网',
       postingId: 'post-cd-cnc-lastyear',
     });
 

@@ -141,6 +141,7 @@ import { createAuditMail } from './mail/audit.js';
 import { localMailProvider } from './mail/local-provider.js';
 import {
   createRecruitingMailHandler,
+  forwardingSite,
   type ReceiptTemplateValue,
 } from './mail/recruiting.js';
 import { extractResumeText, readIdentity } from './recruiting/resume-text.js';
@@ -718,6 +719,12 @@ export default class HrProvider extends ServiceProvider<Application> {
             : { name: null, phone: null, email: null };
           // The resume's own contact details first: a job site forwards from its own address.
           const email = identity.email ?? input.fromAddress;
+          const sourceName = forwardingSite({
+            subject: input.subject,
+            fromName: input.fromName,
+            fromAddress: input.fromAddress,
+            resumeEmail: identity.email,
+          });
           const outcome = await services.candidates.intake({
             posting,
             name:
@@ -728,6 +735,7 @@ export default class HrProvider extends ServiceProvider<Application> {
             email,
             file: { ...input.file, mimeType },
             sourceChannel: 'email',
+            sourceName,
             consentBy: 'email',
             knockoutAnswers: [],
             customFields: {},

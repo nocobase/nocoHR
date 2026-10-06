@@ -226,6 +226,31 @@ export const DEFAULT_RECEIPT_TEMPLATE = {
   ].join('\n'),
 };
 
+/**
+ * 渠道名称: the job site that forwarded a resume, when the sender is not the
+ * candidate (the resume names another address) — from 【…】 or […] at the
+ * start of the subject, else the sender's display name, else its domain.
+ * A candidate writing in themselves has no site.
+ */
+export function forwardingSite(input: {
+  subject: string;
+  fromName: string | null;
+  fromAddress: string;
+  resumeEmail: string | null;
+}): string | null {
+  if (
+    !input.resumeEmail ||
+    input.resumeEmail.toLowerCase() === input.fromAddress.toLowerCase()
+  )
+    return null;
+  return (
+    /^\s*[【[]([^】\]]{1,40})[】\]]/u.exec(input.subject)?.[1]?.trim() ||
+    input.fromName?.trim() ||
+    input.fromAddress.split('@')[1] ||
+    null
+  );
+}
+
 function fillReceipt(text: string, values: Record<string, string>): string {
   return text.replace(/\{\{(\w+)\}\}/gu, (whole, key: string) =>
     key in values ? values[key] : whole,
@@ -247,6 +272,8 @@ export function createRecruitingMailHandler(deps: {
     postingId: string;
     fromAddress: string;
     fromName: string | null;
+    /** For the forwarding site's name (渠道名称). */
+    subject: string;
     file: { name: string; bytes: Uint8Array; mimeType: string };
     by: string;
   }) => Promise<{
@@ -434,6 +461,7 @@ export function createRecruitingMailHandler(deps: {
             postingId: posting.id,
             fromAddress: message.from.address,
             fromName: message.from.name,
+            subject: message.subject,
             file: resume,
             by: run.owner.userId,
           });

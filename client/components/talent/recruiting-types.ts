@@ -211,6 +211,8 @@ export interface ApplicationDetail {
     parsedProfile: ParsedProfile | null;
     parseStatus: string;
     sourceChannel: string;
+    /** The site that forwarded the resume to the recruiting mailbox (渠道名称). */
+    sourceName?: string | null;
     consentAt: string | null;
     retentionUntil: string | null;
     anonymizedAt?: string | null;

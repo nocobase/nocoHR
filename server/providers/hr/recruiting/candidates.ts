@@ -169,6 +169,7 @@ export function presentCandidate(row: Record<string, unknown>) {
     ),
     parseStatus: str(row.parseStatus ?? 'none'),
     sourceChannel: str(row.sourceChannel),
+    sourceName: row.sourceName ? str(row.sourceName) : null,
     consentAt: iso(row.consentAt),
     consentBy: str(row.consentBy),
     retentionUntil: day(row.retentionUntil),
@@ -367,6 +368,7 @@ export function createCandidateService(
         parseConfidence: candidate.parseConfidence,
         parseStatus: candidate.parseStatus,
         sourceChannel: candidate.sourceChannel,
+        sourceName: candidate.sourceName,
         consentAt: candidate.consentAt,
         retentionUntil: candidate.retentionUntil,
         anonymizedAt: candidate.anonymizedAt,
@@ -476,6 +478,8 @@ export function createCandidateService(
       email: string | null;
       file: UploadedFile | null;
       sourceChannel: string;
+      /** The site that forwarded a resume to the recruiting mailbox (渠道名称). */
+      sourceName?: string | null;
       consentBy: 'page' | 'recruiter' | 'email';
       knockoutAnswers: { key: string; answer: string }[];
       customFields: Record<string, unknown>;
@@ -548,6 +552,7 @@ export function createCandidateService(
             parseConfidence: null,
             parseStatus: resumeFileId ? 'pending' : 'none',
             sourceChannel: input.sourceChannel,
+            sourceName: input.sourceName?.trim().slice(0, 100) || null,
             consentAt: now,
             consentBy: input.consentBy,
             retentionUntil,
@@ -611,6 +616,7 @@ export function createCandidateService(
           postingId: input.posting.id,
           stage: 'applied',
           sourceChannel: input.sourceChannel,
+          sourceName: input.sourceName?.trim().slice(0, 100) || null,
           screeningSuggestion: null,
           screenedAt: null,
           knockoutAnswers: answers,
