@@ -902,15 +902,18 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
 
     /**
      * 客户审核包: a cover PDF with the risks and one workbook; only what the caller may read.
-     * `materials` (an audit request's confirmed 资料类型) keeps only those sheets; without it,
-     * as on the 审计导出 page, every sheet is included.
+     * For an audit request (`options.forCustomer`) the pack goes to the customer by link: it keeps
+     * only the confirmed 资料类型 (`options.materials`) and its cover carries no risks — those stay
+     * on the request for internal audit (V3-11: whether to tell the auditor is quality's decision).
+     * On the 审计导出 page every sheet and the risks are included.
      */
     async pack(
       ctx: ActorContext,
       scope: AuditScope,
       via = 'page',
-      materials?: readonly string[],
+      options: { materials?: readonly string[]; forCustomer?: boolean } = {},
     ) {
+      const { materials, forCustomer = false } = options;
       if (materials && !materials.length)
         throw new HrError('AUDIT_MATERIALS_REQUIRED', 400);
       const people = await inScope(await scoped(ctx, 'exportAuditPack'), scope);
@@ -1141,14 +1144,21 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
             text: `数据范围：${range}（在职 ${people.length} 人）`,
           },
           { kind: 'text', text: `生成人：${generatedBy}` },
-          { kind: 'heading', text: '审核前应处理的风险' },
-          ...(risks.length
-            ? risks.map((r, i) => ({
-                kind: 'text' as const,
-                text: `${i + 1}. [${r.urgency === 'high' ? '紧急' : '关注'}] ${r.text}`,
-              }))
+          ...(forCustomer
+            ? []
             : [
-                { kind: 'text' as const, text: '没有需要在审核前处理的风险。' },
+                { kind: 'heading' as const, text: '审核前应处理的风险' },
+                ...(risks.length
+                  ? risks.map((r, i) => ({
+                      kind: 'text' as const,
+                      text: `${i + 1}. [${r.urgency === 'high' ? '紧急' : '关注'}] ${r.text}`,
+                    }))
+                  : [
+                      {
+                        kind: 'text' as const,
+                        text: '没有需要在审核前处理的风险。',
+                      },
+                    ]),
               ]),
           { kind: 'heading', text: '包内文件' },
           {
@@ -1157,7 +1167,9 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
           },
           {
             kind: 'muted',
-            text: '本审核包只包含生成人有权查看的数据，不含手机号、证件号、住址与薪资。是否向审核方说明风险由质量部决定。',
+            text: forCustomer
+              ? '本审核包只包含所请求的资料，不含手机号、证件号、住址与薪资。'
+              : '本审核包只包含生成人有权查看的数据，不含手机号、证件号、住址与薪资。是否向审核方说明风险由质量部决定。',
           },
         ],
         { title: '客户审核包', footer: 'NocoHR 客户审核包' },

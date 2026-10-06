@@ -1341,6 +1341,11 @@ describe('V3-11 audit exports and the customer audit pack', () => {
     expect(names).toEqual(
       expect.arrayContaining(['cover.pdf', 'audit-pack.xlsx']),
     );
+    // The page's pack is for the company: its cover keeps the risks (an audit request's pack does not).
+    const { pdfText } =
+      await import('../../server/providers/hr/profile/pdf.ts');
+    const cover = (XLSX as any).CFB.find(zip, 'cover.pdf');
+    expect(pdfText(cover.content)).toContain('审核前应处理的风险');
     const auditor = await call('qa_audit', 'POST', '/audit/pack', scope);
     expect(auditor.status).toBe(200);
     const CFB = (XLSX as any).CFB;

@@ -335,9 +335,16 @@ describe('审核邮箱 (V3-11)', () => {
       '证书及有效期',
       '过期与吊销处理',
     ]);
-    expect(pdfText(entry('/cover.pdf')!)).toContain(
+    const cover = pdfText(entry('/cover.pdf')!);
+    expect(cover).toContain(
       'audit-pack.xlsx：培训与考试记录、证书及有效期、过期与吊销处理。',
     );
+    // The pack goes to the customer: the risks stay on the request, not on its cover.
+    expect(cover).not.toMatch(/审核前应处理的风险|钱进|刘洋|吴敏|紧急|关注/u);
+    expect(
+      (await call('qa_audit', 'GET', `/audit-requests/${requestId}`)).json.data
+        .risks.length,
+    ).toBeGreaterThan(0);
     const thread = (
       await call(
         'qa_audit',
