@@ -31,6 +31,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
+import { ReceiptTemplateControl } from './receipt-template.js';
+
 const FILTERS = ['all', 'unmatched', 'drafts'] as const;
 type Filter = (typeof FILTERS)[number];
 
@@ -210,6 +212,10 @@ export default function MailPage(): ReactElement {
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
+            {/* V2-07: the resume receipt a recruiter confirms once. */}
+            {mailbox.purpose === 'recruiting' && mailbox.canSend ? (
+              <ReceiptTemplateControl />
+            ) : null}
           </div>
           {mailbox.adapter === 'local-files' ? (
             <Alert>

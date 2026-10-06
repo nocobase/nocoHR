@@ -174,6 +174,28 @@ const en = {
     },
     // V2-06 邮件往来 (client/pages/talent/mail, client/components/talent/mail-thread.tsx)
     mail: {
+      receipt: {
+        open: 'Resume receipt',
+        review: 'Review the receipt',
+        unconfirmed:
+          'Resumes are taken in, but no receipt is sent until a recruiter confirms its wording once.',
+        title: 'Resume receipt',
+        description:
+          'Sent once per address within 30 days to a candidate whose resume arrived in the recruiting mailbox. It says only that the resume arrived, how the information is used and kept, and how to have it deleted.',
+        subject: 'Subject',
+        body: 'Text',
+        placeholders: 'Placeholders: {{list}}',
+        placeholder: {
+          name: 'candidate name',
+          posting: 'position',
+          months: 'months kept (required)',
+          sender: 'sender name',
+        },
+        confirmedBy: 'Confirmed by {{name}} on {{at}}.',
+        confirm: 'Confirm receipt',
+        confirmed: 'Receipt confirmed',
+        required: 'Enter a subject and a text.',
+      },
       title: 'Business mail',
       description:
         'Mail from outside the company, linked to the records it belongs to. The assistant drafts replies; nothing is sent until you send it.',
@@ -273,7 +295,8 @@ const en = {
         linkOnSend:
           'The document and its link are made when you send: the link replaces “【文件链接在发送时生成】”, is valid for 7 days and opens with a code sent to the registered personal email.',
         hrSends: 'An HR administrator sends it.',
-        notYoursPayroll: 'You can read this draft; payroll confirms the amounts and sends it.',
+        notYoursPayroll:
+          'You can read this draft; payroll confirms the amounts and sends it.',
         notYoursHr: 'You can read this draft; an HR administrator sends it.',
         payrollSends:
           'It states pay, so payroll checks the amounts and sends it.',
@@ -655,6 +678,8 @@ const en = {
     MAIL_ACCOUNT_INVALID:
       'Choose a connected mailbox account; it is bound with its owner.',
     MAIL_ACCOUNT_IN_USE: 'A mailbox account can serve only one purpose.',
+    MAIL_RECEIPT_RETENTION_REQUIRED:
+      'The receipt must state how long the information is kept: keep the months-kept placeholder in the text.',
     AUDIT_REQUEST_NOT_FOUND: 'The audit request was not found.',
     AUDIT_REQUEST_LOCKED:
       'The scope can no longer be changed: the pack was built or the request was answered.',
@@ -879,6 +904,28 @@ const zh: Shape = {
       required: '请填写证明正文。',
     },
     mail: {
+      receipt: {
+        open: '简历回执',
+        review: '查看并确认',
+        unconfirmed:
+          '收到的简历会正常入库，但简历回执模板还没确认，确认一次后才会自动回执。',
+        title: '简历回执',
+        description:
+          '招聘邮箱收到简历后自动回给候选人，同一地址 30 天内只回一次。内容只含已收到简历、个人信息的用途与保存期限，以及如何申请删除。',
+        subject: '主题',
+        body: '正文',
+        placeholders: '可用占位符：{{list}}',
+        placeholder: {
+          name: '候选人姓名',
+          posting: '职位',
+          months: '保存月数（必填）',
+          sender: '发件人名称',
+        },
+        confirmedBy: '{{name}} 已于 {{at}} 确认。',
+        confirm: '确认回执',
+        confirmed: '回执已确认',
+        required: '请填写主题和正文。',
+      },
       title: '邮件往来',
       description:
         '和系统外的人的邮件往来，挂在对应的单据上。回复由 AI 员工起草，你确认发送后才会发出。',
@@ -1336,6 +1383,8 @@ const zh: Shape = {
     MAIL_ACCOUNT_INVALID:
       '请选择一个已关联的邮箱账户，它会连同账户主人一起绑定。',
     MAIL_ACCOUNT_IN_USE: '一个邮箱账户只能承担一种用途。',
+    MAIL_RECEIPT_RETENTION_REQUIRED:
+      '回执须说明信息保存期限，请在正文中保留“保存月数”占位符。',
     AUDIT_REQUEST_NOT_FOUND: '审核请求不存在。',
     AUDIT_REQUEST_LOCKED: '审核包已生成或已回复，范围不能再修改。',
     AUDIT_SCOPE_EMPTY: '请至少选择一个部门或岗位，并勾选资料。',

@@ -653,6 +653,10 @@ const enUS = {
       title: 'A candidate replied',
       body: '{{name}}: {{intent}}. A reply is drafted for you to review and send.',
     },
+    recruitingReceiptTemplateRequired: {
+      title: 'Confirm the resume receipt',
+      body: 'Resumes arrive in the recruiting mailbox, but no receipt is sent until a recruiter confirms its wording once.',
+    },
   },
   // V1-04 办公软件机器人与飞书卡片 (server/providers/hr/im-channel.ts, im-cards/)
   imBot: {

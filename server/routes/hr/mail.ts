@@ -15,6 +15,7 @@ import { HrError } from '../../providers/hr/shared.js';
 import {
   mailServiceToken,
   mailSettingsToken,
+  recruitingMailToken,
 } from '../../providers/hr/tokens.js';
 import { actor, installErrorHandler, readJson, type HrEnv } from './shared.js';
 
@@ -146,6 +147,21 @@ export const mailRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
         ),
       });
     });
+    // V2-07: the resume receipt a recruiter confirms once (招聘邮箱).
+    routes.get('/recruiting/receipt-template', async (c) =>
+      c.json({
+        data: await app.container
+          .resolve(recruitingMailToken)
+          .getReceiptTemplate(actor(c)),
+      }),
+    );
+    routes.put('/recruiting/receipt-template', async (c) =>
+      c.json({
+        data: await app.container
+          .resolve(recruitingMailToken)
+          .confirmReceiptTemplate(actor(c), await readJson(c)),
+      }),
+    );
     routes.patch('/messages/:id/proposal', async (c) => {
       const body = await readJson(c);
       return c.json({

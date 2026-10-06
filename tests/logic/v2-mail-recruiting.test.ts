@@ -660,4 +660,99 @@ describe('招聘邮箱 (V2-07)', () => {
     }
     expect((await thread()).some((m) => m.refId === applicationId)).toBe(true);
   });
+
+  it('sends receipts only from a template a recruiter confirmed once', async () => {
+    const resumeFrom = (who: { name: string; phone: string; email: string }) =>
+      composeMail({
+        from: { name: '蜀才招聘网', address: 'resume@shucai-jobs.test' },
+        to: 'recruiting@qiheng.test',
+        subject: `【蜀才招聘网】${who.name} 应聘 CNC 操作工`,
+        text: `候选人${who.name}投递了贵公司的「CNC 操作工」职位，简历见附件。`,
+        date: new Date(),
+        attachments: [
+          {
+            filename: `${who.name}-简历.docx`,
+            contentType: DOCX,
+            bytes: resumeDocx({
+              ...ZOU_PENG_RESUME,
+              ...who,
+              file: `${who.name}-简历.docx`,
+            }),
+          },
+        ],
+      });
+
+    // The demo has recruit01's confirmation; only recruiters may read or confirm it.
+    const seeded = await call(
+      'recruit01',
+      'GET',
+      '/mail/recruiting/receipt-template',
+    );
+    expect(seeded.status).toBe(200);
+    expect(seeded.json.data.confirmedAt).toBeTruthy();
+    expect(seeded.json.data.body).toContain('{{months}}');
+    expect(
+      (await call('payroll01', 'GET', '/mail/recruiting/receipt-template'))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await call('recruit01', 'PUT', '/mail/recruiting/receipt-template', {
+          subject: '收到',
+          body: '收到你的简历。',
+        })
+      ).json.code,
+    ).toBe('MAIL_RECEIPT_RETENTION_REQUIRED');
+
+    // Without a confirmed template the resume is taken in, but nothing is sent.
+    await (
+      await db()
+    )
+      .query()
+      .deleteFrom('personnelSettings')
+      .where('id', '=', 'recruitingReceipt')
+      .execute();
+    drop(
+      '05-sunhao.eml',
+      resumeFrom({
+        name: '孙浩',
+        phone: '13900007311',
+        email: 'sunhao@mail.test',
+      }),
+    );
+    await call('recruit01', 'POST', '/mail/poll?mailbox=recruiting');
+    expect(
+      (await call('recruit01', 'GET', '/mail/recruiting/receipt-template')).json
+        .data.confirmedAt,
+    ).toBeNull();
+    expect(await sentTo('sunhao@mail.test')).toHaveLength(0);
+
+    // recruit01 confirms new wording; the next resume is answered with it.
+    const confirmed = await call(
+      'recruit01',
+      'PUT',
+      '/mail/recruiting/receipt-template',
+      {
+        subject: '启衡精密已收到你的简历（{{posting}}）',
+        body: '{{name}}，你好：简历已收到。信息保存 {{months}} 个月。\n{{sender}}',
+      },
+    );
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.json.data.confirmedAt).toBeTruthy();
+    drop(
+      '06-zhouli.eml',
+      resumeFrom({
+        name: '周立',
+        phone: '13900007312',
+        email: 'zhouli@mail.test',
+      }),
+    );
+    await call('recruit01', 'POST', '/mail/poll?mailbox=recruiting');
+    const receipts = await sentTo('zhouli@mail.test', 1);
+    expect(receipts).toHaveLength(1);
+    const receipt = await simpleParser(receipts[0]!);
+    expect(receipt.subject).toContain('启衡精密已收到你的简历（');
+    expect(receipt.text).toContain('周立，你好：简历已收到。信息保存');
+    expect(receipt.text).not.toContain('{{');
+  });
 });

@@ -642,6 +642,10 @@ const zhCN: AppServerResource = {
       title: '候选人回信',
       body: '{{name}}{{intent}}，回复已起草，请确认后发送。',
     },
+    recruitingReceiptTemplateRequired: {
+      title: '请确认简历回执',
+      body: '招聘邮箱收到了简历，但回执模板还没有招聘专员确认，确认一次后才会自动回执。',
+    },
   },
   // V1-04 办公软件机器人与飞书卡片 (server/providers/hr/im-channel.ts, im-cards/)
   imBot: {

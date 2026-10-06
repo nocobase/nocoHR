@@ -203,6 +203,34 @@ interface Posting {
   requisitionId: string;
 }
 
+/** The receipt for a resume taken in by mail; `{{name}}`, `{{posting}}`, `{{months}}` and `{{sender}}` are filled. */
+export interface ReceiptTemplateValue {
+  readonly subject: string;
+  readonly body: string;
+  readonly confirmedAt: string | null;
+  readonly confirmedBy: string | null;
+}
+
+export const DEFAULT_RECEIPT_TEMPLATE = {
+  subject: '已收到你的简历：{{posting}}',
+  body: [
+    '{{name}}，你好：',
+    '',
+    '我们已收到你投递「{{posting}}」的简历，招聘负责人会尽快查看，有进展会再联系你。',
+    '',
+    '个人信息处理说明：你的简历与联系方式只用于本次及今后 {{months}} 个月内的岗位匹配与联系，到期后删除；不会用于其他用途。',
+    '如需删除你的信息，直接回复本邮件说明即可。',
+    '',
+    '{{sender}}',
+  ].join('\n'),
+};
+
+function fillReceipt(text: string, values: Record<string, string>): string {
+  return text.replace(/\{\{(\w+)\}\}/gu, (whole, key: string) =>
+    key in values ? values[key] : whole,
+  );
+}
+
 export function createRecruitingMailHandler(deps: {
   mail: MailService;
   settings: MailSettingsService;
@@ -245,6 +273,11 @@ export function createRecruitingMailHandler(deps: {
   }) => Promise<'sent' | 'channelNotConfigured' | 'failed'>;
   /** Whether this address had a receipt in the last days. */
   receiptSince: (address: string, since: Date) => Promise<boolean>;
+  /** The receipt template a recruiter confirmed (V2-07: 招聘负责人确认过一次的回执模板). */
+  receiptTemplate: {
+    read(): Promise<ReceiptTemplateValue | null>;
+    write(value: ReceiptTemplateValue): Promise<void>;
+  };
   now: () => Date;
   /** The company's time zone, for the times a reply names. */
   timeZone: () => string;
@@ -295,24 +328,42 @@ export function createRecruitingMailHandler(deps: {
       )
     )
       return;
+    const template = await receiptTemplate();
+    // Sent only from a template a recruiter confirmed once; until then the recruiters are asked to.
+    if (!template.confirmedAt) {
+      await deps.notify({
+        key: 'recruitingReceiptTemplate',
+        userIds: await deps.recruiters(),
+        message: 'recruitingReceiptTemplateRequired',
+        params: {},
+        path: '/talent/mail?mailbox=recruiting',
+      });
+      return;
+    }
     const settings = (await deps.settings.read()).value;
-    const months = await deps.retentionMonths();
+    const values = {
+      name,
+      posting: postingTitle,
+      months: String(await deps.retentionMonths()),
+      sender: settings.senderName,
+    };
     await deps.sendEmail({
       key: `receipt:${to.toLowerCase()}:${now.toISOString().slice(0, 10)}`,
       to,
       applicationId,
-      subject: `已收到你的简历：${postingTitle}`,
-      body: [
-        `${name}，你好：`,
-        '',
-        `我们已收到你投递「${postingTitle}」的简历，招聘负责人会尽快查看，有进展会再联系你。`,
-        '',
-        `个人信息处理说明：你的简历与联系方式只用于本次及今后 ${months} 个月内的岗位匹配与联系，到期后删除；不会用于其他用途。`,
-        '如需删除你的信息，直接回复本邮件说明即可。',
-        '',
-        settings.senderName,
-      ].join('\n'),
+      subject: fillReceipt(template.subject, values),
+      body: fillReceipt(template.body, values),
     });
+  }
+
+  async function receiptTemplate() {
+    const stored = await deps.receiptTemplate.read();
+    return {
+      subject: stored?.subject || DEFAULT_RECEIPT_TEMPLATE.subject,
+      body: stored?.body || DEFAULT_RECEIPT_TEMPLATE.body,
+      confirmedAt: stored?.confirmedAt ?? null,
+      confirmedBy: stored?.confirmedBy ?? null,
+    };
   }
 
   async function sort(message: MailMessage, attempt?: string) {
@@ -624,7 +675,45 @@ export function createRecruitingMailHandler(deps: {
     },
   };
 
-  return { handler };
+  /** The receipt template, for the recruiters who send this mailbox's mail. */
+  async function requireRecruiter(ctx: ActorContext) {
+    if (!(await handler.canSend(ctx))) throw new HrError('FORBIDDEN', 403);
+  }
+
+  return {
+    handler,
+    async getReceiptTemplate(ctx: ActorContext) {
+      await requireRecruiter(ctx);
+      return receiptTemplate();
+    },
+    /** A recruiter saves and confirms the receipt; receipts are sent only once it is confirmed. */
+    async confirmReceiptTemplate(ctx: ActorContext, input: unknown) {
+      await requireRecruiter(ctx);
+      const { subject, body } = (input ?? {}) as {
+        subject?: unknown;
+        body?: unknown;
+      };
+      if (
+        typeof subject !== 'string' ||
+        typeof body !== 'string' ||
+        !subject.trim() ||
+        subject.length > 200 ||
+        !body.trim() ||
+        body.length > 4000
+      )
+        throw new HrError('INVALID_INPUT', 400);
+      // The receipt must state how long the information is kept (个人信息处理说明).
+      if (!body.includes('{{months}}'))
+        throw new HrError('MAIL_RECEIPT_RETENTION_REQUIRED', 400);
+      await deps.receiptTemplate.write({
+        subject: subject.trim(),
+        body: body.trim(),
+        confirmedAt: deps.now().toISOString(),
+        confirmedBy: ctx.userId,
+      });
+      return receiptTemplate();
+    },
+  };
 }
 
 export type RecruitingMailHandler = ReturnType<

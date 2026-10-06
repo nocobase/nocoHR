@@ -139,7 +139,10 @@ import { createDepartedMail } from './departed/service.js';
 import { createDocumentShares } from './departed/shares.js';
 import { createAuditMail } from './mail/audit.js';
 import { localMailProvider } from './mail/local-provider.js';
-import { createRecruitingMailHandler } from './mail/recruiting.js';
+import {
+  createRecruitingMailHandler,
+  type ReceiptTemplateValue,
+} from './mail/recruiting.js';
 import { extractResumeText, readIdentity } from './recruiting/resume-text.js';
 import { createMailService } from './mail/service.js';
 import { createMailSettingsService } from './mail/settings.js';
@@ -761,6 +764,43 @@ export default class HrProvider extends ServiceProvider<Application> {
         retentionMonths: async () =>
           (await recruiting().context.settings()).retention.months,
         sendEmail: (input) => recruiting().context.sendEmail(input),
+        // The confirmed receipt template, in the personnelSettings row `recruitingReceipt`.
+        receiptTemplate: {
+          read: async () => {
+            const row = await database
+              .repository('personnelSettings')
+              .findOne({ filter: { id: 'recruitingReceipt' } });
+            return (row?.value ?? null) as ReceiptTemplateValue | null;
+          },
+          write: async (value) => {
+            const repo = database.repository('personnelSettings');
+            const previous = await repo.findOne({
+              filter: { id: 'recruitingReceipt' },
+            });
+            const stamp = new Date();
+            if (previous)
+              await repo.updateOne({
+                filter: { id: 'recruitingReceipt' },
+                values: {
+                  value: { ...value },
+                  revision: Number(previous.revision ?? 0) + 1,
+                  updatedBy: value.confirmedBy ?? 'system',
+                  updatedAt: stamp,
+                },
+              });
+            else
+              await repo.createOne({
+                values: {
+                  id: 'recruitingReceipt',
+                  value: { ...value },
+                  revision: 1,
+                  updatedBy: value.confirmedBy ?? 'system',
+                  createdAt: stamp,
+                  updatedAt: stamp,
+                },
+              });
+          },
+        },
         receiptSince: async (address, since) =>
           Boolean(
             await database
@@ -1392,6 +1432,8 @@ export default class HrProvider extends ServiceProvider<Application> {
         // V2-07 招聘邮箱: a resume taken in, a candidate's reply with its drafted answer.
         mailResumeReceived: 'mailSort',
         mailCandidateReplied: 'mailReply',
+        // V2-07: receipts wait for a recruiter to confirm their template once.
+        recruitingReceiptTemplateRequired: 'mailSort',
         // V3-11 审核邮箱: a customer's request to prepare, the reply drafted after the pack.
         mailAuditRequest: 'mailSort',
         mailAuditDraftReady: 'mailReply',
@@ -1493,6 +1535,7 @@ export default class HrProvider extends ServiceProvider<Application> {
         recruitingInterviewSummary: 'recruitingAssistant',
         mailResumeReceived: 'recruitingAssistant',
         mailCandidateReplied: 'recruitingAssistant',
+        recruitingReceiptTemplateRequired: 'recruitingAssistant',
         mailAuditRequest: 'certificationSteward',
         mailAuditDraftReady: 'certificationSteward',
         departedTemplateRequired: 'hrAssistant',
