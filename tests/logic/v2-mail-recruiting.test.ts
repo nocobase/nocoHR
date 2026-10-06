@@ -28,6 +28,7 @@ import {
 import {
   candidateReplyIntent,
   forwardingSite,
+  answerFromPosting,
   postingForSubject,
 } from '../../server/providers/hr/mail/recruiting.ts';
 import {
@@ -244,6 +245,26 @@ afterAll(async () => {
 });
 
 describe('招聘邮箱 rules', () => {
+  it('answers from the posting only', () => {
+    const facts = {
+      title: 'CNC 操作工',
+      location: '成都工厂',
+      description: '操作数控车床，首件送检。',
+      requirements: ['数控车床经验 1 年以上', '能看懂图纸'],
+    };
+    expect(answerFromPosting('在哪里上班？', facts)).toEqual({
+      lines: ['「CNC 操作工」的工作地点是成都工厂。'],
+      open: [],
+    });
+    expect(answerFromPosting('我没有经验可以吗？工资多少？', facts)).toEqual({
+      lines: ['这个岗位的要求是：数控车床经验 1 年以上；能看懂图纸。'],
+      open: ['薪资待遇'],
+    });
+    expect(answerFromPosting('有班车吗', facts)).toEqual({
+      lines: [],
+      open: ['班车'],
+    });
+  });
   it('names the site that forwarded a resume, and none for a candidate writing in', () => {
     const base = {
       fromName: '蜀才招聘网',
@@ -459,6 +480,46 @@ describe('招聘邮箱 (V2-07)', () => {
     );
     expect(sent.status).toBe(200);
     expect(await sentTo('zoupeng@mail.test', 2)).toHaveLength(2);
+  });
+
+  it('answers a candidate question from the posting, leaving pay and housing to the recruiter', async () => {
+    drop(
+      '04b-zoupeng-question.eml',
+      composeMail({
+        from: { name: '邹鹏', address: 'zoupeng@mail.test' },
+        to: 'recruiting@qiheng.test',
+        subject: `回复：已收到你的简历 [#${threadKey}]`,
+        text: '请问上班地点在哪里？有没有宿舍？',
+        date: new Date(),
+      }),
+    );
+    await call('recruit01', 'POST', '/mail/poll?mailbox=recruiting');
+    const thread = await eventually(
+      async () =>
+        (
+          await call(
+            'recruit01',
+            'GET',
+            `/mail/by-record/application/${applicationId}?mailbox=recruiting`,
+          )
+        ).json.data as Json[],
+      (items) =>
+        items?.some(
+          (m) => m.status === 'draft' && String(m.bodyText).includes('住宿'),
+        ),
+    );
+    const question = thread.find(
+      (m) => m.direction === 'inbound' && String(m.bodyText).includes('宿舍'),
+    )!;
+    expect(question).toMatchObject({ status: 'linked', aiIntent: 'question' });
+    expect(question.aiSummary).toContain('职位信息里没有住宿');
+    const draft = thread.find(
+      (m) => m.status === 'draft' && String(m.bodyText).includes('住宿'),
+    )!;
+    // The location comes from the posting; housing is not promised.
+    expect(draft.bodyText).toContain('工作地点是成都工厂');
+    expect(draft.bodyText).toContain('你问到的住宿，招聘负责人会再单独回复你');
+    expect(draft.bodyText).not.toMatch(/提供宿舍|包住/u);
   });
 
   it('proposes the free Thursday afternoon times for a reschedule reply, and moves the interview only when the reply is sent', async () => {

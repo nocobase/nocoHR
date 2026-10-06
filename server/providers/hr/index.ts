@@ -816,6 +816,35 @@ export default class HrProvider extends ServiceProvider<Application> {
               });
           },
         },
+        postingFacts: async (postingId) => {
+          const posting = await recruiting()
+            .postings.get(postingId)
+            .catch(() => null);
+          return posting
+            ? {
+                title: posting.title,
+                location: posting.location,
+                description: posting.description,
+                requirements: posting.requirements
+                  .filter((r) => r.origin !== 'competency')
+                  .map((r) => r.text),
+              }
+            : null;
+        },
+        structured: async (run, title, prompt, schema) => {
+          const { data, sessionId } = await createAIRunner(
+            container,
+          ).structured({
+            employee: 'recruitingAssistant',
+            userId: run.owner.userId,
+            title,
+            prompt,
+            schema,
+            timeZone: this.talentConfig().timeZone,
+          });
+          run.usedConversation(sessionId);
+          return data;
+        },
         deletionLink: async (applicationId) => {
           const service = recruiting();
           const application =

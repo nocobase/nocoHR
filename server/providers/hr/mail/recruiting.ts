@@ -17,6 +17,9 @@
  *
  * Mail content is data: it only selects among these outcomes.
  */
+import { z } from 'zod';
+
+import { AIUnavailableError } from '../ai-runner.js';
 import type { AutomationRunContext } from '../automation.js';
 import { tryAuthorizeAction } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
@@ -251,6 +254,49 @@ export function forwardingSite(input: {
   );
 }
 
+/** What a posting tells a candidate (V2-07: 询问时按职位信息起草回复). */
+export interface PostingFacts {
+  readonly title: string;
+  readonly location: string;
+  readonly description: string;
+  readonly requirements: readonly string[];
+}
+
+/** Topics a posting never settles: the recruiter answers them. */
+const OPEN_TOPICS: [string, RegExp][] = [
+  ['薪资待遇', /薪资|工资|待遇|薪酬|收入|底薪|提成|奖金/u],
+  ['住宿', /住宿|宿舍|住的地方/u],
+  ['班车', /班车|通勤|接送/u],
+  ['食堂', /食堂|吃饭|餐补/u],
+  ['社保', /社保|五险|公积金/u],
+  ['班次与加班', /倒班|夜班|加班|班次|休息/u],
+];
+
+/**
+ * The rule-based answer to a candidate's question, from the posting only:
+ * where, what is asked of them, what the work is. Anything else (pay,
+ * housing, shuttles…) is named as left to the recruiter; nothing is invented.
+ */
+export function answerFromPosting(
+  question: string,
+  posting: PostingFacts,
+): { lines: string[]; open: string[] } {
+  const lines: string[] = [];
+  if (/地点|地址|在哪|哪里|位置|城市/u.test(question) && posting.location)
+    lines.push(`「${posting.title}」的工作地点是${posting.location}。`);
+  if (
+    /要求|条件|经验|学历|证书|年龄|能不能|可以吗|符合/u.test(question) &&
+    posting.requirements.length
+  )
+    lines.push(`这个岗位的要求是：${posting.requirements.join('；')}。`);
+  if (/做什么|工作内容|职责|干什么|负责/u.test(question) && posting.description)
+    lines.push(`工作内容：${posting.description}`);
+  const open = OPEN_TOPICS.filter(
+    ([, words]) => words.test(question) && !words.test(posting.description),
+  ).map(([topic]) => topic);
+  return { lines, open };
+}
+
 function fillReceipt(text: string, values: Record<string, string>): string {
   return text.replace(/\{\{(\w+)\}\}/gu, (whole, key: string) =>
     key in values ? values[key] : whole,
@@ -301,6 +347,15 @@ export function createRecruitingMailHandler(deps: {
   }) => Promise<'sent' | 'channelNotConfigured' | 'failed'>;
   /** Whether this address had a receipt in the last days. */
   receiptSince: (address: string, since: Date) => Promise<boolean>;
+  /** What the posting says, for answering a candidate's question. */
+  postingFacts: (postingId: string) => Promise<PostingFacts | null>;
+  /** The recruiting assistant's structured answer; throws AIUnavailableError without a model. */
+  structured: <T>(
+    run: AutomationRunContext,
+    title: string,
+    prompt: string,
+    schema: z.ZodType<T>,
+  ) => Promise<T>;
   /** V2-07 删除申请: a new deletion link for the application's candidate (public URL). */
   deletionLink: (applicationId: string) => Promise<string>;
   /** The receipt template a recruiter confirmed (V2-07: 招聘负责人确认过一次的回执模板). */
@@ -540,6 +595,55 @@ export function createRecruitingMailHandler(deps: {
     question: '提出问题',
   };
 
+  /** The model's answer from the posting, else the rules'; never a promise the posting does not make. */
+  async function answerQuestion(
+    run: AutomationRunContext,
+    question: string,
+    facts: PostingFacts,
+  ): Promise<{ text: string; open: string[] }> {
+    const ruled = answerFromPosting(question, facts);
+    const openText = (open: string[]) =>
+      open.length
+        ? `你问到的${open.join('、')}，招聘负责人会再单独回复你。`
+        : '';
+    try {
+      const data = await deps.structured(
+        run,
+        '候选人询问回复',
+        [
+          '候选人来信提问。只根据下面的职位信息作答，语气礼貌简短；职位信息里没有的内容（如薪资、住宿、班车）不要编造或承诺，把这些话题列入 open。不要提及其他候选人或公司内部信息。',
+          `职位信息：${JSON.stringify(facts)}`,
+          `来信：${question}`,
+        ].join('\n'),
+        z.object({
+          answer: z.string().max(800),
+          open: z.array(z.string().max(20)).max(6),
+        }),
+      );
+      const text = data.answer.trim();
+      if (text) {
+        const open = [...new Set([...data.open, ...ruled.open])];
+        return {
+          text: [text, openText(open)].filter(Boolean).join('\n\n'),
+          open,
+        };
+      }
+      run.markFallback();
+    } catch (error) {
+      if (!(error instanceof AIUnavailableError)) throw error;
+      run.markFallback();
+    }
+    const body = ruled.lines.length
+      ? ruled.lines.join('\n')
+      : ruled.open.length
+        ? ''
+        : '你的问题我们已转给招聘负责人，会尽快回复你。';
+    return {
+      text: [body, openText(ruled.open)].filter(Boolean).join('\n\n'),
+      open: ruled.lines.length || ruled.open.length ? ruled.open : ['你的问题'],
+    };
+  }
+
   async function reply(message: MailMessage) {
     if (message.refType !== 'application' || !message.refId) return;
     const applicationId = message.refId;
@@ -596,6 +700,22 @@ export function createRecruitingMailHandler(deps: {
                 '所提时段内没有面试官都空闲的时间，请与面试官协调后在面试安排中调整。';
           }
         }
+        // 询问: answered from the posting; what it does not settle is left to the recruiter.
+        let answer: { text: string; open: string[] } | null = null;
+        if (intent === 'question') {
+          const facts = await deps.postingFacts(application.postingId);
+          if (facts)
+            answer = await answerQuestion(
+              run,
+              (message.bodyText ?? message.subject).slice(0, 2000),
+              facts,
+            );
+        }
+        const questionNote = answer
+          ? answer.open.length
+            ? `已按职位信息起草回答；职位信息里没有${answer.open.join('、')}，草稿写明会由招聘负责人另行答复，请补充后发送。`
+            : '已按职位信息起草回答，请核对后发送。'
+          : '';
         await mail.link({
           id: message.id,
           refType: 'application',
@@ -604,19 +724,29 @@ export function createRecruitingMailHandler(deps: {
           summary: `${application.candidateName}${SUMMARY[intent]}${line ? `：“${line}”` : ''}。${
             intent === 'withdraw'
               ? '确认后请在投递中点“标记放弃”。'
-              : rescheduleNote
+              : intent === 'question'
+                ? questionNote
+                : rescheduleNote
           }`,
         });
         const draft = await mail.draftReply({
           replyTo: message.id,
           body: proposal
             ? rescheduleText(proposal, tz, settings.senderName)
-            : replyDraft(
-                intent,
-                application.candidateName,
-                application.postingTitle,
-                settings.senderName,
-              ),
+            : answer
+              ? [
+                  `${application.candidateName}，你好：`,
+                  '',
+                  answer.text,
+                  '',
+                  settings.senderName,
+                ].join('\n')
+              : replyDraft(
+                  intent,
+                  application.candidateName,
+                  application.postingTitle,
+                  settings.senderName,
+                ),
           proposal: proposal as unknown as Record<string, unknown> | null,
         });
         const recruiter = await deps.recruiterOf(application.postingId);
