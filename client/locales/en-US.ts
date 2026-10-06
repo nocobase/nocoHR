@@ -4011,6 +4011,7 @@ const enUS = {
       noModel:
         'No AI model is configured. Ask an administrator to configure ai.llmServices and enable a model.',
       unavailable: 'The framework advisor is unavailable',
+      assistantUnavailable: 'The AI assistant is unavailable',
       taskTitle: 'Competency model for {{title}}',
       prompt: 'Please propose a competency model for the position "{{title}}".',
     },
@@ -5751,6 +5752,8 @@ const enUS = {
       PAYROLL_CYCLE_LOCKED:
         'The cycle is submitted or approved and can no longer change.',
       PAYROLL_RECALCULATE_REQUIRED: 'Calculate again before submitting.',
+      ORG_SYNC_REAL_FEISHU_CONFIGURED:
+        'Real Feishu is configured. Comment out FEISHU_APP_ID and FEISHU_APP_SECRET in .env.local, wait for the development server to restart, then switch to the mock.',
       PAYROLL_CHECK_PENDING:
         'The HR assistant is still checking this calculation for anomalies. Wait a moment and submit once the notes appear.',
       PAYROLL_NEGATIVE_NET: 'Net pay is negative for: {{names}}.',

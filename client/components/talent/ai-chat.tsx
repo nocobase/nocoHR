@@ -123,7 +123,9 @@ function Launcher({
           width={420}
         >
           <div className='space-y-3 p-6'>
-            <p className='font-medium'>{t('talent.advisor.unavailable')}</p>
+            <p className='font-medium'>
+              {t('talent.advisor.assistantUnavailable')}
+            </p>
             <p className='text-sm text-muted-foreground' role='alert'>
               {problem}
             </p>

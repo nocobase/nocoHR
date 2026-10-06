@@ -103,6 +103,55 @@ export const orgSyncRoutes: AppApiRouteContribution<Application> =
           .cards.resend(c.req.param('id')),
       });
     });
+    // 切换到模拟飞书 (development only): a demo database rebuilt with real Feishu credentials binds staff to
+    // the real tenant, and the tutorial's mock-Feishu steps (/dev/im-mock, fs-u-*) then find nobody. With the
+    // credentials commented out, this clears the Feishu bindings and runs a full sync against the mock.
+    if (process.env.NODE_ENV !== 'production')
+      routes.post('/org-sync/dev/use-mock', async (c) => {
+        await authorizeAction(actor(c).authz, ORG_SYNC, 'run');
+        const feishu =
+          app.config.get<{ appId?: string; appSecret?: string }>('feishu') ??
+          {};
+        if (feishu.appId && feishu.appSecret)
+          throw new HrError('ORG_SYNC_REAL_FEISHU_CONFIGURED', 409);
+        const query = app.container.resolve(databaseManagerToken).query();
+        const stamp = new Date();
+        const count = async (table: 'employees' | 'departments') =>
+          (
+            await query
+              .selectFrom(table)
+              .select(['id'])
+              .where('externalProvider', '=', 'feishu')
+              .execute()
+          ).length;
+        const clearedEmployees = await count('employees');
+        const clearedDepartments = await count('departments');
+        await query
+          .updateTable('employees')
+          .set({
+            externalProvider: null,
+            externalUserId: null,
+            updatedAt: stamp,
+          })
+          .where('externalProvider', '=', 'feishu')
+          .execute();
+        await query
+          .updateTable('departments')
+          .set({ externalProvider: null, externalId: null, updatedAt: stamp })
+          .where('externalProvider', '=', 'feishu')
+          .execute();
+        const run = await sync().run({
+          mode: 'full',
+          triggeredBy: actor(c).userId,
+        });
+        return c.json({
+          data: {
+            clearedEmployees,
+            clearedDepartments,
+            runId: run,
+          },
+        });
+      });
     routes.post('/org-sync/run', async (c) =>
       c.json({ data: await sync().runNow(actor(c)) }),
     );

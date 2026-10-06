@@ -264,6 +264,11 @@ describe('设置 / 持证上岗', () => {
     expect(
       data.permissionSets.find((s: Json) => s.key === 'root').protectedByOther,
     ).toBe(true);
+    // The page names who grants a set (the 权限检查器 shows only the set).
+    expect(
+      data.permissionSets.find((s: Json) => s.key === 'prod.cncOperator')
+        .certificationTitles,
+    ).toEqual(['CNC 岗位上岗证']);
     expect((await call('emp_njl_2', 'GET', '/licensed/settings')).status).toBe(
       403,
     );

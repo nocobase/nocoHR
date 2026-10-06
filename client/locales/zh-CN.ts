@@ -3744,6 +3744,7 @@ const zhCN: AppResource = {
       noModel:
         '尚未配置可用的 AI 模型，请管理员在 config.yml 的 ai.llmServices 中配置并启用模型。',
       unavailable: '体系顾问暂不可用',
+      assistantUnavailable: 'AI 助手暂不可用',
       taskTitle: '为「{{title}}」建模',
       prompt: '请为「{{title}}」岗位生成能力模型方案。',
     },
@@ -5428,6 +5429,8 @@ const zhCN: AppResource = {
       PAYROLL_CYCLE_EXISTS: '该月份已有算薪周期。',
       PAYROLL_CYCLE_LOCKED: '周期已提交或已批准，不能再修改。',
       PAYROLL_RECALCULATE_REQUIRED: '请先重新计算再提交。',
+      ORG_SYNC_REAL_FEISHU_CONFIGURED:
+        '已配置真实飞书：请先在 .env.local 里注释掉 FEISHU_APP_ID 和 FEISHU_APP_SECRET，开发服务重启后再切换到模拟飞书。',
       PAYROLL_CHECK_PENDING:
         '人事助理还在检查本次计算的异常，请稍等片刻、看到异常说明后再提交。',
       PAYROLL_NEGATIVE_NET: '以下员工实发为负数：{{names}}。',

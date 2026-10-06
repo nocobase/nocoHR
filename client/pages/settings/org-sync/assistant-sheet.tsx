@@ -90,7 +90,7 @@ function AssistantChat({
     return (
       <Alert>
         <AlertCircleIcon />
-        <AlertTitle>{t('talent.advisor.unavailable')}</AlertTitle>
+        <AlertTitle>{t('talent.advisor.assistantUnavailable')}</AlertTitle>
         <AlertDescription>{problem}</AlertDescription>
       </Alert>
     );

@@ -300,7 +300,7 @@ function RoutedChat({
       <div className='p-4'>
         <Alert>
           <AlertCircleIcon />
-          <AlertTitle>{t('talent.advisor.unavailable')}</AlertTitle>
+          <AlertTitle>{t('talent.advisor.assistantUnavailable')}</AlertTitle>
           <AlertDescription>{problem}</AlertDescription>
         </Alert>
       </div>

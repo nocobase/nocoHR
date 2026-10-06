@@ -76,6 +76,8 @@ export interface LicensedSettingsView {
     otherAssignments: number;
     /** Certifications it is assigned to. */
     certifications: readonly string[];
+    /** The certifications' titles: the 权限检查器 names only the permission set, this names who grants it. */
+    certificationTitles: readonly string[];
   }[];
 }
 
@@ -251,6 +253,15 @@ export function createLicensedSettings(deps: {
     async get(ctx: ActorContext): Promise<LicensedSettingsView> {
       await authorizeAction(ctx.authz, LICENSED_SETTINGS, 'manage');
       const rows = await readPackRows(database.query());
+      const certificationTitle = new Map(
+        (
+          await database
+            .query()
+            .selectFrom('certifications')
+            .select(['id', 'title'])
+            .execute()
+        ).map((c) => [String(c.id), String(c.title)]),
+      );
       const permissionSets = [];
       for (const set of await authz.permissionSets.list()) {
         const assignments = await authz.permissionSets.listAssignments(set.key);
@@ -267,6 +278,9 @@ export function createLicensedSettings(deps: {
           certifications: assignments
             .filter((a) => a.subject.type === CERTIFICATION_SUBJECT_TYPE)
             .map((a) => a.subject.id),
+          certificationTitles: assignments
+            .filter((a) => a.subject.type === CERTIFICATION_SUBJECT_TYPE)
+            .map((a) => certificationTitle.get(a.subject.id) ?? a.subject.id),
         });
       }
       return {

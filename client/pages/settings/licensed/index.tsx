@@ -56,6 +56,7 @@ export interface LicensedSettingsData {
     protectedByOther: boolean;
     otherAssignments: number;
     certifications: string[];
+    certificationTitles?: string[];
   }[];
 }
 
@@ -238,9 +239,13 @@ export function LicensedSettingsForm({
                         </Badge>
                       ) : set.certifications.length ? (
                         <Badge variant='secondary'>
-                          {t('licensed.settings.assignedTo', {
-                            count: set.certifications.length,
-                          })}
+                          {set.certificationTitles?.length
+                            ? t('licensed.settings.grantedBy', {
+                                names: set.certificationTitles.join('、'),
+                              })
+                            : t('licensed.settings.assignedTo', {
+                                count: set.certifications.length,
+                              })}
                         </Badge>
                       ) : null}
                     </li>

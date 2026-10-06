@@ -652,3 +652,30 @@ describe('boundaries', () => {
     );
   });
 });
+
+describe('切换到模拟飞书', () => {
+  it('clears the Feishu bindings and syncs the mock again, for whoever runs the sync', async () => {
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const query = () =>
+      server.application.container.resolve(databaseManagerToken).query();
+    // As if the demo had been bound to a real tenant.
+    await query()
+      .updateTable('employees')
+      .set({ externalProvider: 'feishu', externalUserId: 'real-tenant-user-1' })
+      .where('id', '=', 'emp-wanglei')
+      .execute();
+    expect(
+      (await call('mgr_njl', 'POST', '/org-sync/dev/use-mock', {})).status,
+    ).toBe(403);
+    const switched = await call('hr01', 'POST', '/org-sync/dev/use-mock', {});
+    expect(switched.status).toBe(200);
+    expect(switched.json.data.clearedEmployees).toBeGreaterThan(0);
+    const wang = await query()
+      .selectFrom('employees')
+      .select(['externalUserId'])
+      .where('id', '=', 'emp-wanglei')
+      .executeTakeFirstOrThrow();
+    // Bound again by the mock directory, not the real tenant.
+    expect(wang.externalUserId).not.toBe('real-tenant-user-1');
+  });
+});
