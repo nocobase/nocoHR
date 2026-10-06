@@ -449,4 +449,69 @@ describe('审核邮箱 (V3-11)', () => {
     expect((await pub('GET', `/${token}`)).status).toBe(404);
     expect((await pub('POST', `/${token}/code`, {})).status).toBe(404);
   });
+
+  it('creates a request by hand and answers it with a new mail', async () => {
+    const input = {
+      customerName: '华驰汽车',
+      requesterAddress: 'sqe@huachi-auto.test',
+      dueDate: '2026-10-20',
+    };
+    expect(
+      (await call('mgr_njl', 'POST', '/audit-requests', input)).status,
+    ).toBe(403);
+    expect(
+      (
+        await call('qa_audit', 'POST', '/audit-requests', {
+          ...input,
+          requesterAddress: 'not-an-address',
+        })
+      ).json.code,
+    ).toBe('AUDIT_REQUESTER_INVALID');
+    const created = await call('qa_audit', 'POST', '/audit-requests', input);
+    expect(created.status).toBe(201);
+    const id = created.json.data.id as string;
+    expect(created.json.data).toMatchObject({
+      customerName: '华驰汽车',
+      requesterAddress: 'sqe@huachi-auto.test',
+      status: 'draft',
+      sourceMailId: null,
+    });
+    // Without a scope it cannot be confirmed; once chosen, its risks follow.
+    expect(
+      (await call('qa_audit', 'POST', `/audit-requests/${id}/confirm`)).json
+        .code,
+    ).toBe('AUDIT_SCOPE_EMPTY');
+    const scoped = await call('qa_audit', 'PATCH', `/audit-requests/${id}`, {
+      departmentIds: ['sz-mc', 'cd-mc'],
+      positionIds: ['pos-cnc-operator'],
+      materials: ['certificates'],
+    });
+    expect((scoped.json.data.risks as Json[]).length).toBeGreaterThan(0);
+    await call('qa_audit', 'POST', `/audit-requests/${id}/confirm`);
+    expect(
+      (await call('qa_audit', 'POST', `/audit-requests/${id}/pack`)).json.data
+        .status,
+    ).toBe('packReady');
+    const thread = (
+      await call(
+        'qa_audit',
+        'GET',
+        `/mail/by-record/auditRequest/${id}?mailbox=audit`,
+      )
+    ).json.data as Json[];
+    const draft = thread.find((m) => m.status === 'draft')!;
+    expect(draft).toBeTruthy();
+    expect(draft.to).toEqual(['sqe@huachi-auto.test']);
+    expect(draft.subject).toContain('华驰汽车');
+    expect(draft.bodyText).toContain(SHARE_LINK_PLACEHOLDER);
+    expect(
+      (await call('qa_audit', 'POST', `/mail/messages/${draft.id}/send`))
+        .status,
+    ).toBe(200);
+    const sent = await sentTo('sqe@huachi-auto.test', 1);
+    expect(sent[0]).toMatch(/\/audit-pack\/[A-Za-z0-9_-]{20,}/u);
+    expect(
+      (await call('qa_audit', 'GET', `/audit-requests/${id}`)).json.data.status,
+    ).toBe('replied');
+  });
 });

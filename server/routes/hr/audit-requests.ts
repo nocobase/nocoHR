@@ -53,6 +53,12 @@ export const auditRequestRoutes: AppApiRouteContribution<Application> =
     guarded.get('/', async (c) =>
       c.json({ data: await audit().service.list(actor(c)) }),
     );
+    guarded.post('/', async (c) =>
+      c.json(
+        { data: await audit().service.create(actor(c), await readJson(c)) },
+        201,
+      ),
+    );
     guarded.get('/:id', async (c) =>
       c.json({ data: await audit().service.get(actor(c), c.req.param('id')) }),
     );

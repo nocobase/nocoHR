@@ -496,14 +496,14 @@ export function createAuditMail(deps: {
     people: number,
     packFileId: string,
   ) {
-    if (!request.sourceMailId) return null;
+    // A request created by hand has no message to answer: the reply is a new mail to the requester.
     const sourceMailId = request.sourceMailId;
     let draftId: string | null = null;
     await deps.run(
       MAIL_REPLY_AUDIT,
       {
         dedupeKey: `${request.id}:${packFileId}`,
-        triggerRef: { requestId: request.id, mailId: sourceMailId },
+        triggerRef: { requestId: request.id, mailId: sourceMailId ?? null },
       },
       async (run) => {
         const settings = (await deps.settings.read()).value;
@@ -524,7 +524,16 @@ export function createAuditMail(deps: {
           '',
           settings.senderName,
         ].join('\n');
-        const draft = await mail.draftReply({ replyTo: sourceMailId, body });
+        const draft = sourceMailId
+          ? await mail.draftReply({ replyTo: sourceMailId, body })
+          : await mail.draftNew({
+              purpose: 'audit',
+              to: request.requesterAddress,
+              subject: `${deps.companyName()}审核资料（${request.customerName}）`,
+              body,
+              refType: 'auditRequest',
+              refId: request.id,
+            });
         draftId = draft.id;
         await deps.notify({
           key: `mail:${draft.id}:auditDraft`,
@@ -577,6 +586,66 @@ export function createAuditMail(deps: {
     },
 
     /** Edits the recognised scope; a confirmed scope goes back to draft. */
+    /**
+     * 手工新建: a request that did not come by mail (V3-11). It starts as a draft
+     * with the customer and the requester's address; the scope is chosen and
+     * confirmed as for one read from mail, and the reply is a new mail.
+     */
+    async create(ctx: ActorContext, input: unknown) {
+      await authorizeAction(ctx.authz, RESOURCE, 'confirm');
+      const body = (input ?? {}) as Record<string, unknown>;
+      const customerName =
+        typeof body.customerName === 'string' ? body.customerName.trim() : '';
+      const requesterAddress =
+        typeof body.requesterAddress === 'string'
+          ? body.requesterAddress.trim().toLowerCase()
+          : '';
+      const dueDate =
+        typeof body.dueDate === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/u.test(body.dueDate)
+          ? body.dueDate
+          : null;
+      if (!customerName || customerName.length > 200)
+        throw new HrError('AUDIT_CUSTOMER_REQUIRED', 400);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(requesterAddress))
+        throw new HrError('AUDIT_REQUESTER_INVALID', 400);
+      const id = newId();
+      const now = deps.now();
+      await database
+        .query()
+        .insertInto('auditRequests')
+        .values({
+          id,
+          customerName,
+          requesterAddress,
+          scope: { departmentIds: [], positionIds: [], materials: [] },
+          excludedRequests: [],
+          unmatchedNames: [],
+          dueDate,
+          status: 'draft',
+          reviewStatus: 'draft',
+          risks: [],
+          packFileId: null,
+          packFileName: null,
+          shareTokenHash: null,
+          shareExpiresAt: null,
+          shareRevokedAt: null,
+          shareCodeHash: null,
+          shareCodeExpiresAt: null,
+          shareCodeAttempts: 0,
+          shareCodeSentAt: null,
+          downloads: [],
+          sourceMailId: null,
+          createdBy: ctx.userId,
+          confirmedBy: null,
+          confirmedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .execute();
+      return service.get(ctx, id);
+    },
+
     async updateScope(ctx: ActorContext, id: string, input: unknown) {
       await authorizeAction(ctx.authz, RESOURCE, 'confirm');
       const request = present(await rowOf(id));
@@ -611,10 +680,22 @@ export function createAuditMail(deps: {
               /^\d{4}-\d{2}-\d{2}$/u.test(body.dueDate)
             ? body.dueDate
             : request.dueDate;
+      // The risks follow the scope (a request created by hand starts without any).
+      const risks =
+        checked.departmentIds.length || checked.positionIds.length
+          ? await deps
+              .audit()
+              .risks(ctx, checked)
+              .catch((error: unknown) => {
+                if (error instanceof HrError) return request.risks;
+                throw error;
+              })
+          : [];
       await update(id, {
         customerName,
         dueDate,
         scope: { ...checked, materials },
+        risks,
         unmatchedNames: [],
         status: 'draft',
         reviewStatus: 'draft',

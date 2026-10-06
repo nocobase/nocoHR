@@ -925,6 +925,81 @@ export function createMailService(deps: MailServiceDeps) {
       return row(id);
     },
 
+    /**
+     * A new draft to someone, not a reply (a manually created audit request
+     * has no message to answer). It joins the thread of the record when one
+     * exists; a person still sends it.
+     */
+    async draftNew(input: {
+      purpose: MailPurpose;
+      to: string;
+      subject: string;
+      body: string;
+      refType: string;
+      refId: string;
+    }): Promise<MailMessage> {
+      const thread = await database
+        .query()
+        .selectFrom('businessMailMessages')
+        .select(['threadKey'])
+        .where('mailbox', '=', input.purpose)
+        .where('refType', '=', input.refType)
+        .where('refId', '=', input.refId)
+        .orderBy('createdAt', 'desc')
+        .executeTakeFirst();
+      // One open draft per record: a new one replaces an unsent one.
+      await database
+        .query()
+        .deleteFrom('businessMailMessages')
+        .where('mailbox', '=', input.purpose)
+        .where('refType', '=', input.refType)
+        .where('refId', '=', input.refId)
+        .where('status', '=', 'draft')
+        .where('draftOf', 'is', null)
+        .execute();
+      const settings = (await deps.settings.read()).value;
+      const now = new Date();
+      const id = randomUUID();
+      await database
+        .query()
+        .insertInto('businessMailMessages')
+        .values({
+          id,
+          mailbox: input.purpose,
+          direction: 'outbound',
+          status: 'draft',
+          messageId: null,
+          inReplyTo: null,
+          threadKey: thread ? str(thread.threadKey) : newThreadKey(),
+          fromAddress: mailboxConfig(input.purpose).address,
+          fromName: null,
+          toAddresses: [input.to.toLowerCase()],
+          ccAddresses: [],
+          subject: input.subject.slice(0, 500),
+          bodyText: input.body.slice(0, 100_000),
+          attachmentFileIds: [],
+          rejectedAttachments: [],
+          refType: input.refType,
+          refId: input.refId,
+          aiIntent: null,
+          aiSummary: null,
+          draftOf: null,
+          proposal: null,
+          sentBy: null,
+          sentAt: null,
+          deliveryError: null,
+          receivedAt: null,
+          retentionUntil: addDays(
+            now,
+            settings.mailboxes[input.purpose].retentionDays,
+          ),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .execute();
+      return row(id);
+    },
+
     /** A person picks another proposed option of a draft (a reschedule time); the text follows. */
     async chooseProposal(ctx: ActorContext, id: string, choice: unknown) {
       const mail = await service.get(ctx, id);

@@ -1,6 +1,6 @@
 import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { DownloadIcon, XIcon } from 'lucide-react';
+import { DownloadIcon, PlusIcon, XIcon } from 'lucide-react';
 import { useReducer, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -31,7 +31,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Field, FieldLabel } from '@/components/ui/field';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
   NativeSelect,
@@ -112,10 +120,27 @@ export function AuditRequestsTab(): ReactElement {
     else next.delete('request');
     setParams(next, { replace: true });
   };
+  const [creating, setCreating] = useState(false);
   if (list.error) return <LoadError error={list.error} onRetry={list.reload} />;
   if (!list.data) return <BlockSkeleton rows={3} />;
   return (
     <>
+      {/* 手工新建 (V3-11): a request that did not come by mail; the server checks who may. */}
+      <div className='flex justify-end'>
+        <Button variant='outline' onClick={() => setCreating(true)}>
+          <PlusIcon data-icon='inline-start' />
+          {t('auditRequests.create')}
+        </Button>
+      </div>
+      <CreateRequestDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onCreated={(id) => {
+          setCreating(false);
+          list.reload();
+          setOpen(id);
+        }}
+      />
       {!list.data.length ? (
         <EmptyState title={t('auditRequests.empty')} />
       ) : (
@@ -156,6 +181,104 @@ export function AuditRequestsTab(): ReactElement {
         </SheetContent>
       </Sheet>
     </>
+  );
+}
+
+/** 新建审核请求: the customer and the requester; the scope is chosen in the request afterwards. */
+function CreateRequestDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (id: string) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const api = useApiClient();
+  const [customerName, setCustomerName] = useState('');
+  const [requesterAddress, setRequesterAddress] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function create(): Promise<void> {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const response = await api.request<{ data: { id: string } }>({
+        path: 'talent/audit-requests',
+        method: 'POST',
+        json: { customerName, requesterAddress, dueDate: dueDate || null },
+      });
+      toast.add({ type: 'success', title: t('auditRequests.created') });
+      setCustomerName('');
+      setRequesterAddress('');
+      setDueDate('');
+      onCreated(response.data.id);
+    } catch (cause) {
+      setError(errorMessage(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('auditRequests.createTitle')}</DialogTitle>
+          <DialogDescription>
+            {t('auditRequests.createDescription')}
+          </DialogDescription>
+        </DialogHeader>
+        <div className='space-y-3'>
+          <Field>
+            <FieldLabel htmlFor='audit-new-customer'>
+              {t('auditRequests.customer')}
+            </FieldLabel>
+            <Input
+              id='audit-new-customer'
+              maxLength={200}
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor='audit-new-requester'>
+              {t('auditRequests.requesterAddress')}
+            </FieldLabel>
+            <Input
+              id='audit-new-requester'
+              type='email'
+              value={requesterAddress}
+              onChange={(e) => setRequesterAddress(e.target.value)}
+            />
+          </Field>
+          <Field data-invalid={Boolean(error)}>
+            <FieldLabel htmlFor='audit-new-due'>
+              {t('auditRequests.due')}
+            </FieldLabel>
+            <Input
+              id='audit-new-due'
+              type='date'
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+            {error ? <FieldError>{error}</FieldError> : null}
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button
+            disabled={busy || !customerName.trim() || !requesterAddress.trim()}
+            onClick={() => void create()}
+          >
+            {busy ? <Spinner data-icon='inline-start' /> : null}
+            {t('auditRequests.createSubmit')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

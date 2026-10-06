@@ -67,6 +67,13 @@ const en = {
       empty:
         'No audit requests. A customer’s request in the audit mailbox appears here.',
       summary: 'Due {{due}} · {{risks}} risks',
+      create: 'New audit request',
+      createTitle: 'New audit request',
+      createDescription:
+        'For a request that did not come through the audit mailbox. After creating it, choose the departments, positions and material, then confirm.',
+      requesterAddress: 'Requester’s email',
+      createSubmit: 'Create',
+      created: 'Audit request created',
       noDue: 'no due date',
       requester: 'From {{address}} · due {{due}}',
       scope: 'Scope',
@@ -688,6 +695,9 @@ const en = {
       'The scope can no longer be changed: the pack was built or the request was answered.',
     AUDIT_SCOPE_EMPTY:
       'Choose at least one department or position, and the material.',
+    AUDIT_CUSTOMER_REQUIRED: 'Enter the customer’s name.',
+    AUDIT_REQUESTER_INVALID:
+      'Enter the requester’s email correctly; the code is sent only there.',
     AUDIT_MATERIALS_REQUIRED:
       'Tick at least one kind of material; the pack holds only what is ticked.',
     AUDIT_SCOPE_NOT_CONFIRMED: 'Confirm the scope before building the pack.',
@@ -811,6 +821,13 @@ const zh: Shape = {
       tab: '审核请求',
       empty: '暂无审核请求。客户发到审核邮箱的资料请求会出现在这里。',
       summary: '期限 {{due}} · 风险 {{risks}} 条',
+      create: '新建审核请求',
+      createTitle: '新建审核请求',
+      createDescription:
+        '用于没有经过审核邮箱的资料请求。建好后在请求里选择部门、岗位和资料，再确认范围。',
+      requesterAddress: '请求人邮箱',
+      createSubmit: '新建',
+      created: '审核请求已新建',
       noDue: '未写期限',
       requester: '来自 {{address}} · 期限 {{due}}',
       scope: '范围',
@@ -1396,6 +1413,8 @@ const zh: Shape = {
     AUDIT_REQUEST_NOT_FOUND: '审核请求不存在。',
     AUDIT_REQUEST_LOCKED: '审核包已生成或已回复，范围不能再修改。',
     AUDIT_SCOPE_EMPTY: '请至少选择一个部门或岗位，并勾选资料。',
+    AUDIT_CUSTOMER_REQUIRED: '请填写客户名称。',
+    AUDIT_REQUESTER_INVALID: '请填写正确的请求人邮箱，验证码只发到这个地址。',
     AUDIT_MATERIALS_REQUIRED: '请至少勾选一种资料，审核包只包含所选资料。',
     AUDIT_SCOPE_NOT_CONFIRMED: '请先确认范围，再生成审核包。',
     AUDIT_SHARE_NONE: '还没有分享链接。',
