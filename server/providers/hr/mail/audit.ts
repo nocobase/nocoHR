@@ -336,6 +336,86 @@ export function createAuditMail(deps: {
 
   // ---------- 审核问询分拣与准备 ----------
 
+  /** Creates the draft request for a message, links the message to it and tells the reviewers. */
+  async function createRequest(
+    message: MailMessage,
+    input: {
+      customerName: string;
+      scope: AuditScope;
+      materials: AuditMaterial[];
+      excluded: string[];
+      dueDate: string | null;
+      unmatched: string[];
+      risks: AuditRisk[];
+      by: string;
+    },
+  ): Promise<string> {
+    const { customerName, scope, unmatched, risks } = input;
+    const id = newId();
+    const now = deps.now();
+    await database
+      .query()
+      .insertInto('auditRequests')
+      .values({
+        id,
+        customerName: customerName.slice(0, 200),
+        requesterAddress: message.from.address.toLowerCase(),
+        scope: { ...scope, materials: input.materials },
+        excludedRequests: input.excluded,
+        unmatchedNames: unmatched,
+        dueDate: input.dueDate,
+        status: 'draft',
+        reviewStatus: 'draft',
+        risks,
+        packFileId: null,
+        packFileName: null,
+        shareTokenHash: null,
+        shareExpiresAt: null,
+        shareRevokedAt: null,
+        shareCodeHash: null,
+        shareCodeExpiresAt: null,
+        shareCodeAttempts: 0,
+        shareCodeSentAt: null,
+        downloads: [],
+        sourceMailId: message.id,
+        createdBy: input.by,
+        confirmedBy: null,
+        confirmedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+    const range = await scopeLabel(scope);
+    await mail.link({
+      id: message.id,
+      refType: 'auditRequest',
+      refId: id,
+      intent: 'auditRequest',
+      summary: [
+        `${customerName}请求审核资料：${range}；资料为${input.materials.map((m) => MATERIAL_LABEL[m]).join('、')}`,
+        input.dueDate ? `，期限 ${input.dueDate}` : '',
+        '。',
+        input.excluded.length
+          ? `另要${input.excluded.join('、')}，不在提供范围内。`
+          : '',
+        unmatched.length ? `${unmatched.join('和')}没能识别，请确认范围。` : '',
+        risks.length ? `审核前有 ${risks.length} 条风险待处理。` : '',
+      ].join(''),
+    });
+    await deps.notify({
+      key: `mail:${message.id}:auditRequest`,
+      userIds: await deps.reviewers(),
+      message: 'mailAuditRequest',
+      params: {
+        customer: customerName,
+        due: input.dueDate ?? '—',
+        risks: String(risks.length),
+      },
+      path: `/talent/audit?tab=requests&request=${id}`,
+    });
+    return id;
+  }
+
   async function sort(message: MailMessage, attempt?: string) {
     await deps.run<{ mailId: string; requestId: string | null }>(
       MAIL_SORT_AUDIT,
@@ -395,69 +475,15 @@ export function createAuditMail(deps: {
                 .risks(run.owner, scope)
                 .catch(() => [])
             : [];
-        const id = newId();
-        const now = deps.now();
-        await database
-          .query()
-          .insertInto('auditRequests')
-          .values({
-            id,
-            customerName: customerName.slice(0, 200),
-            requesterAddress: message.from.address.toLowerCase(),
-            scope: { ...scope, materials: read.materials },
-            excludedRequests: read.excluded,
-            unmatchedNames: unmatched,
-            dueDate: read.dueDate,
-            status: 'draft',
-            reviewStatus: 'draft',
-            risks,
-            packFileId: null,
-            packFileName: null,
-            shareTokenHash: null,
-            shareExpiresAt: null,
-            shareRevokedAt: null,
-            shareCodeHash: null,
-            shareCodeExpiresAt: null,
-            shareCodeAttempts: 0,
-            shareCodeSentAt: null,
-            downloads: [],
-            sourceMailId: message.id,
-            createdBy: run.owner.userId,
-            confirmedBy: null,
-            confirmedAt: null,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .execute();
-        const range = await scopeLabel(scope);
-        await mail.link({
-          id: message.id,
-          refType: 'auditRequest',
-          refId: id,
-          intent: 'auditRequest',
-          summary: [
-            `${customerName}请求审核资料：${range}；资料为${read.materials.map((m) => MATERIAL_LABEL[m]).join('、')}`,
-            read.dueDate ? `，期限 ${read.dueDate}` : '',
-            '。',
-            read.excluded.length
-              ? `另要${read.excluded.join('、')}，不在提供范围内。`
-              : '',
-            unmatched.length
-              ? `${unmatched.join('和')}没能识别，请确认范围。`
-              : '',
-            risks.length ? `审核前有 ${risks.length} 条风险待处理。` : '',
-          ].join(''),
-        });
-        await deps.notify({
-          key: `mail:${message.id}:auditRequest`,
-          userIds: await deps.reviewers(),
-          message: 'mailAuditRequest',
-          params: {
-            customer: customerName,
-            due: read.dueDate ?? '—',
-            risks: String(risks.length),
-          },
-          path: `/talent/audit?tab=requests&request=${id}`,
+        const id = await createRequest(message, {
+          customerName,
+          scope,
+          materials: read.materials,
+          excluded: read.excluded,
+          dueDate: read.dueDate,
+          unmatched,
+          risks,
+          by: run.owner.userId,
         });
         run.summarize(
           `${customerName} 的审核资料请求已建立（风险 ${risks.length} 条）`,
@@ -585,7 +611,114 @@ export function createAuditMail(deps: {
       };
     },
 
-    /** Edits the recognised scope; a confirmed scope goes back to draft. */
+    /**
+     * 认证管家 getMailMessage: the audit mailbox only. Without an id, the
+     * messages still waiting to be sorted (待归类); with one, that message.
+     */
+    async auditMail(ctx: ActorContext, mailId?: string) {
+      await authorizeAction(ctx.authz, RESOURCE, 'view');
+      const brief = (m: MailMessage) => ({
+        id: m.id,
+        from: m.from,
+        subject: m.subject,
+        receivedAt: m.receivedAt,
+        status: m.status,
+        summary: m.aiSummary,
+        auditRequestId: m.refType === 'auditRequest' ? m.refId : null,
+      });
+      if (!mailId)
+        return {
+          unsorted: (
+            await mail.list(ctx, 'audit', { status: 'unmatched' })
+          ).map(brief),
+        };
+      const message = await mail.get(ctx, mailId);
+      if (message.mailbox !== 'audit') throw new HrError('MAIL_NOT_FOUND', 404);
+      return { message: { ...brief(message), bodyText: message.bodyText } };
+    },
+
+    /**
+     * 认证管家 createAuditRequestFromMail (V3-11): a draft request from an
+     * audit mailbox message, linked to it. Departments and positions are
+     * matched by name; names that match nothing are listed for a person to
+     * settle before the scope is confirmed.
+     */
+    async createFromMail(
+      ctx: ActorContext,
+      input: {
+        mailId: string;
+        customerName: string;
+        departments?: string[];
+        positions?: string[];
+        materials?: string[];
+        dueDate?: string | null;
+      },
+    ) {
+      await authorizeAction(ctx.authz, RESOURCE, 'confirm');
+      const message = await mail.get(ctx, input.mailId);
+      if (message.mailbox !== 'audit' || message.direction !== 'inbound')
+        throw new HrError('MAIL_NOT_FOUND', 404);
+      if (message.refType === 'auditRequest' && message.refId)
+        throw new HrError('AUDIT_MAIL_ALREADY_LINKED', 409, {
+          requestId: message.refId,
+        });
+      const customerName = input.customerName.trim().slice(0, 200);
+      if (!customerName) throw new HrError('AUDIT_CUSTOMER_REQUIRED', 400);
+      const departmentIds: string[] = [];
+      const positionIds: string[] = [];
+      const unmatched: string[] = [];
+      for (const name of (input.departments ?? []).slice(0, 20)) {
+        const found = await deps.audit().resolveScope({ text: name });
+        if (found.departmentIds.length)
+          departmentIds.push(...found.departmentIds);
+        else unmatched.push(name);
+      }
+      for (const name of (input.positions ?? []).slice(0, 20)) {
+        const found = await deps.audit().resolveScope({ text: name });
+        if (found.positionIds.length) positionIds.push(...found.positionIds);
+        else unmatched.push(name);
+      }
+      const scope = await deps.audit().resolveScope({
+        departmentIds: [...new Set(departmentIds)],
+        positionIds: [...new Set(positionIds)],
+      });
+      const text = `${message.subject}\n${bodyLines(message.bodyText)}`.slice(
+        0,
+        4000,
+      );
+      const read = readAuditRequest(
+        text,
+        (message.receivedAt ?? message.createdAt).slice(0, 10) || deps.today(),
+      );
+      const materials = (input.materials ?? read.materials).filter(
+        (m): m is AuditMaterial =>
+          (AUDIT_MATERIALS as readonly string[]).includes(m),
+      );
+      const dueDate =
+        typeof input.dueDate === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/u.test(input.dueDate)
+          ? input.dueDate
+          : read.dueDate;
+      const risks =
+        scope.departmentIds.length || scope.positionIds.length
+          ? await deps
+              .audit()
+              .risks(ctx, scope)
+              .catch(() => [])
+          : [];
+      const id = await createRequest(message, {
+        customerName,
+        scope,
+        materials,
+        excluded: read.excluded,
+        dueDate,
+        unmatched,
+        risks,
+        by: ctx.userId,
+      });
+      return service.get(ctx, id);
+    },
+
     /**
      * 手工新建: a request that did not come by mail (V3-11). It starts as a draft
      * with the customer and the requester's address; the scope is chosen and
@@ -646,6 +779,7 @@ export function createAuditMail(deps: {
       return service.get(ctx, id);
     },
 
+    /** Edits the recognised scope; a confirmed scope goes back to draft. */
     async updateScope(ctx: ActorContext, id: string, input: unknown) {
       await authorizeAction(ctx.authz, RESOURCE, 'confirm');
       const request = present(await rowOf(id));

@@ -514,4 +514,98 @@ describe('审核邮箱 (V3-11)', () => {
       (await call('qa_audit', 'GET', `/audit-requests/${id}`)).json.data.status,
     ).toBe('replied');
   });
+
+  it('lets the certification steward turn an unsorted message into a draft request', async () => {
+    drop(
+      '02-huachi.eml',
+      composeMail({
+        from: {
+          name: '华驰汽车 质量部 赵工',
+          address: 'zhao@huachi-auto.test',
+        },
+        to: 'audit@qiheng.test',
+        subject: '下周来访',
+        text: '你好，麻烦下周三前把苏州机加工车间 CNC 操作工的上岗情况发我们看看，顺便给一下他们的手机号。',
+        date: new Date(),
+      }),
+    );
+    await call('hr01', 'POST', '/mail/poll?mailbox=audit');
+    const { getMailMessage, createAuditRequestFromMail } =
+      await import('../../server/ai/tools/profile-tools.ts');
+    const { authorizationToken } =
+      await import('@nocobase/app-plugin-authorization/server');
+    const { auditMailToken } =
+      await import('../../server/providers/hr/tokens.ts');
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const container = server.application.container;
+    const userId = async (username: string) =>
+      String(
+        (
+          await container
+            .resolve(databaseManagerToken)
+            .query()
+            .selectFrom('user')
+            .select(['id'])
+            .where('username', '=', username)
+            .executeTakeFirstOrThrow()
+        ).id,
+      );
+    const deps = {
+      auditMail: container.resolve(auditMailToken),
+      authz: container.resolve(authorizationToken),
+    };
+    const read = getMailMessage.invoke as (
+      c: unknown,
+      a: unknown,
+    ) => Promise<Json>;
+    const create = createAuditRequestFromMail.invoke as (
+      c: unknown,
+      a: unknown,
+    ) => Promise<Json>;
+    const as = async (username: string) => ({
+      actor: { id: await userId(username) },
+      deps,
+    });
+
+    // The rules missed it: it waits in 待归类, where the steward finds it.
+    const listed = await read(await as('qa_audit'), {});
+    const unsorted = (listed.content.unsorted as Json[]).find((m) =>
+      String(m.from.address).includes('huachi'),
+    )!;
+    expect(unsorted).toBeTruthy();
+    const message = await read(await as('qa_audit'), { mailId: unsorted.id });
+    expect(message.content.message.bodyText).toContain('上岗情况');
+
+    const input = {
+      mailId: unsorted.id,
+      customerName: '华驰汽车',
+      departments: ['苏州机加工车间', '火星车间'],
+      positions: ['CNC 操作工'],
+      materials: ['certificates'],
+      dueDate: '2026-10-14',
+    };
+    expect((await create(await as('mgr_njl'), input)).status).toBe('error');
+    const created = await create(await as('qa_audit'), input);
+    expect(created.status).toBe('success');
+    expect(created.content.unmatchedNames).toEqual(['火星车间']);
+    expect(created.content.scope.departmentIds).toEqual(['sz-mc']);
+    expect(created.content.scope.materials).toEqual(['certificates']);
+    const request = (
+      await call('qa_audit', 'GET', `/audit-requests/${created.content.id}`)
+    ).json.data;
+    expect(request).toMatchObject({
+      status: 'draft',
+      reviewStatus: 'draft',
+      requesterAddress: 'zhao@huachi-auto.test',
+      dueDate: '2026-10-14',
+      sourceMailId: unsorted.id,
+      excludedRequests: ['联系方式'],
+    });
+    // The message now belongs to the request, and is not taken twice.
+    const linked = await read(await as('qa_audit'), { mailId: unsorted.id });
+    expect(linked.content.message.auditRequestId).toBe(created.content.id);
+    expect((await create(await as('qa_audit'), input)).content.code).toBe(
+      'AUDIT_MAIL_ALREADY_LINKED',
+    );
+  });
 });
