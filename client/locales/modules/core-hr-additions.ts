@@ -688,6 +688,8 @@ const en = {
       'The scope can no longer be changed: the pack was built or the request was answered.',
     AUDIT_SCOPE_EMPTY:
       'Choose at least one department or position, and the material.',
+    AUDIT_MATERIALS_REQUIRED:
+      'Tick at least one kind of material; the pack holds only what is ticked.',
     AUDIT_SCOPE_NOT_CONFIRMED: 'Confirm the scope before building the pack.',
     AUDIT_SHARE_NONE: 'There is no share link yet.',
     AUDIT_PACK_MISSING: 'Build the audit pack before sending the reply.',
@@ -1394,6 +1396,7 @@ const zh: Shape = {
     AUDIT_REQUEST_NOT_FOUND: '审核请求不存在。',
     AUDIT_REQUEST_LOCKED: '审核包已生成或已回复，范围不能再修改。',
     AUDIT_SCOPE_EMPTY: '请至少选择一个部门或岗位，并勾选资料。',
+    AUDIT_MATERIALS_REQUIRED: '请至少勾选一种资料，审核包只包含所选资料。',
     AUDIT_SCOPE_NOT_CONFIRMED: '请先确认范围，再生成审核包。',
     AUDIT_SHARE_NONE: '还没有分享链接。',
     AUDIT_PACK_MISSING: '请先生成审核包，再发送回复。',

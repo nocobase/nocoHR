@@ -224,11 +224,14 @@ export interface AuditServices {
     ctx: ActorContext,
     scope: AuditScope,
     via?: string,
+    /** The material types to include; all of them when left out. */
+    materials?: readonly string[],
   ): Promise<{
     bytes: Uint8Array;
     fileName: string;
     people: number;
     risks: AuditRisk[];
+    sheets: string[];
   }>;
 }
 
@@ -651,7 +654,10 @@ export function createAuditMail(deps: {
         !['confirmed', 'packReady'].includes(request.status)
       )
         throw new HrError('AUDIT_SCOPE_NOT_CONFIRMED', 409);
-      const pack = await deps.audit().pack(ctx, request.scope, 'auditRequest');
+      // Only the material types the scope names (V3-11: 审核包只含 scope 内的资料).
+      const pack = await deps
+        .audit()
+        .pack(ctx, request.scope, 'auditRequest', request.scope.materials);
       const fileId = await deps.storePack(pack);
       await update(id, {
         status: 'packReady',

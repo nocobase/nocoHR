@@ -18,7 +18,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import * as XLSX from 'xlsx';
+
 import { composeMail } from '../../database/seed-data/demo-mail.ts';
+import { pdfText } from '../../server/providers/hr/profile/pdf.ts';
 import {
   addWorkdays,
   readAuditRequest,
@@ -314,6 +317,27 @@ describe('审核邮箱 (V3-11)', () => {
     );
     expect(built.status).toBe(200);
     expect(built.json.data.status).toBe('packReady');
+    // 审核包只含 scope 内的资料: certificates and training records were asked for, nothing else.
+    const zipped = await server.fetch(
+      new Request(`${base}/api/talent/audit-requests/${requestId}/pack`, {
+        headers: { cookie: await signIn('qa_audit') },
+      }),
+    );
+    expect(zipped.status).toBe(200);
+    const zip = XLSX.CFB.read(new Uint8Array(await zipped.arrayBuffer()), {
+      type: 'array',
+    });
+    const entry = (name: string) =>
+      XLSX.CFB.find(zip, name)?.content as Uint8Array | undefined;
+    const workbook = XLSX.read(entry('/audit-pack.xlsx')!, { type: 'array' });
+    expect(workbook.SheetNames).toEqual([
+      '培训与考试记录',
+      '证书及有效期',
+      '过期与吊销处理',
+    ]);
+    expect(pdfText(entry('/cover.pdf')!)).toContain(
+      'audit-pack.xlsx：培训与考试记录、证书及有效期、过期与吊销处理。',
+    );
     const thread = (
       await call(
         'qa_audit',

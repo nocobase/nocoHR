@@ -900,8 +900,19 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
       );
     },
 
-    /** 客户审核包: a cover PDF with the risks and one workbook; only what the caller may read. */
-    async pack(ctx: ActorContext, scope: AuditScope, via = 'page') {
+    /**
+     * 客户审核包: a cover PDF with the risks and one workbook; only what the caller may read.
+     * `materials` (an audit request's confirmed 资料类型) keeps only those sheets; without it,
+     * as on the 审计导出 page, every sheet is included.
+     */
+    async pack(
+      ctx: ActorContext,
+      scope: AuditScope,
+      via = 'page',
+      materials?: readonly string[],
+    ) {
+      if (materials && !materials.length)
+        throw new HrError('AUDIT_MATERIALS_REQUIRED', 400);
       const people = await inScope(await scoped(ctx, 'exportAuditPack'), scope);
       if (!people.length) throw new HrError('AUDIT_SCOPE_EMPTY', 400);
       const risks = await service.risksFor(people);
@@ -924,6 +935,7 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
       );
       const names = new Map(people.map((p) => [p.id, p]));
       const book = await service.ledgerBook(people);
+      const ledgerSheets = [...book.SheetNames];
       // 能力矩阵: requirement × current level.
       const columns = [
         ...new Set(
@@ -1097,6 +1109,24 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
             (iso(a.completedAt) ?? '').slice(0, 10),
           ]),
       ]);
+      // 审核包只含 scope 内的资料: drop the sheets of the material types not asked for.
+      if (materials) {
+        const sheetsOf: Record<string, readonly string[]> = {
+          qualificationLedger: ledgerSheets,
+          competencyMatrix: ['能力矩阵'],
+          trainingRecords: ['培训与考试记录'],
+          certificates: ['证书及有效期', '过期与吊销处理'],
+          revisionTraining: ['差异培训完成情况'],
+        };
+        const keep = new Set(materials.flatMap((m) => sheetsOf[m] ?? []));
+        for (const name of [...book.SheetNames])
+          if (!keep.has(name)) {
+            book.SheetNames.splice(book.SheetNames.indexOf(name), 1);
+            delete book.Sheets[name];
+          }
+        if (!book.SheetNames.length)
+          throw new HrError('AUDIT_MATERIALS_REQUIRED', 400);
+      }
       const generatedBy = (await platform.userName(ctx.userId)) ?? ctx.userId;
       const range = await scopeText(scope);
       const cover = renderPdf(
@@ -1123,7 +1153,7 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
           { kind: 'heading', text: '包内文件' },
           {
             kind: 'text',
-            text: 'audit-pack.xlsx：培训与资格台账、能力矩阵、培训与考试记录、证书及有效期、过期与吊销处理、差异培训完成情况。',
+            text: `audit-pack.xlsx：${book.SheetNames.join('、')}。`,
           },
           {
             kind: 'muted',
@@ -1167,7 +1197,13 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
         summary: `客户审核包：${range}，${people.length} 人，风险 ${risks.length} 条`,
         via,
       });
-      return { bytes, fileName, people: people.length, risks };
+      return {
+        bytes,
+        fileName,
+        people: people.length,
+        risks,
+        sheets: [...book.SheetNames],
+      };
     },
   };
   return service;
