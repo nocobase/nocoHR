@@ -766,6 +766,13 @@ export default class HrProvider extends ServiceProvider<Application> {
         sendEmail: (input) => recruiting().context.sendEmail(input),
         // The confirmed receipt template, in the personnelSettings row `recruitingReceipt`.
         receiptTemplate: {
+          userName: async (id) =>
+            (
+              await container
+                .resolve(userAdministrationServiceToken)
+                .get(id)
+                .catch(() => undefined)
+            )?.name ?? null,
           read: async () => {
             const row = await database
               .repository('personnelSettings')

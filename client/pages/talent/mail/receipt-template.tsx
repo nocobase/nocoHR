@@ -41,6 +41,7 @@ interface ReceiptTemplate {
   body: string;
   confirmedAt: string | null;
   confirmedBy: string | null;
+  confirmedByName: string | null;
 }
 
 const PLACEHOLDERS = ['name', 'posting', 'months', 'sender'] as const;
@@ -107,13 +108,7 @@ function ReceiptForm({
   const [body, setBody] = useState(loaded.body);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  const users = useRemote<{ id: string; name: string }[]>(
-    loaded.confirmedBy ? 'talent/users' : null,
-  );
-  const confirmedBy = loaded.confirmedBy
-    ? (users.data?.find((u) => u.id === loaded.confirmedBy)?.name ??
-      loaded.confirmedBy)
-    : '';
+  const confirmedBy = loaded.confirmedByName ?? '';
   const changed = subject !== loaded.subject || body !== loaded.body;
   const format = new Intl.DateTimeFormat(i18n.language, {
     dateStyle: 'medium',

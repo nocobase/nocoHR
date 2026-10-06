@@ -275,6 +275,8 @@ export function createRecruitingMailHandler(deps: {
   receiptSince: (address: string, since: Date) => Promise<boolean>;
   /** The receipt template a recruiter confirmed (V2-07: 招聘负责人确认过一次的回执模板). */
   receiptTemplate: {
+    /** Who confirmed it, by name: recruiters may not read the user list. */
+    userName(id: string): Promise<string | null>;
     read(): Promise<ReceiptTemplateValue | null>;
     write(value: ReceiptTemplateValue): Promise<void>;
   };
@@ -363,6 +365,9 @@ export function createRecruitingMailHandler(deps: {
       body: stored?.body || DEFAULT_RECEIPT_TEMPLATE.body,
       confirmedAt: stored?.confirmedAt ?? null,
       confirmedBy: stored?.confirmedBy ?? null,
+      confirmedByName: stored?.confirmedBy
+        ? await deps.receiptTemplate.userName(stored.confirmedBy)
+        : null,
     };
   }
 
