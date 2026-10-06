@@ -93,6 +93,11 @@ const ITEM_TEXT: Record<string, (p: Record<string, string>) => string> = {
   salaryStructureCheck: () =>
     '岗位变化，核对薪资结构是否需要调整（发起调薪单）',
   salaryFinalSettlement: () => '离职结算：核对最后一期工资并办理社保减员',
+  // V1-02 V2 增补 provider (departed/service.ts); the address itself is never in the text.
+  personalEmailGiven: () =>
+    '已填写离职后联系邮箱，离职证明和最后一个月的工资条会发到这里',
+  personalEmailMissing: () =>
+    '还没有离职后联系邮箱，离职证明和工资条无法通过邮件发送',
 };
 
 // The template wording of a compliance prompt lives in compliance.ts, where the page falls back to it.
