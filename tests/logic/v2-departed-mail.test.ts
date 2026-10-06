@@ -414,4 +414,40 @@ describe('离职员工的邮件往来 (V1-02 V2 增补)', () => {
     expect(draft.proposal ?? null).toBeNull();
     expect(draft.bodyText).not.toMatch(/邓凯|QH3004|成都|机加工|CNC/u);
   });
+
+  it('shows payroll only the mail about pay', async () => {
+    const all = (await call('hr01', 'GET', '/mail/messages?mailbox=hr')).json
+      .data as Json[];
+    const separation = all.find(
+      (m) =>
+        m.direction === 'outbound' && String(m.subject).includes('离职证明'),
+    )!;
+    expect(separation).toBeTruthy();
+    const mine = (await call('payroll01', 'GET', '/mail/messages?mailbox=hr'))
+      .json.data as Json[];
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.length).toBeLessThan(all.length);
+    for (const m of mine)
+      expect(
+        [m.proposal?.document, m.aiIntent].some(
+          (d) => d === 'incomeCertificate' || d === 'payslip',
+        ),
+      ).toBe(true);
+    expect(JSON.stringify(mine)).not.toContain(STRANGER);
+    expect(
+      (await call('payroll01', 'GET', `/mail/messages/${separation.id}`))
+        .status,
+    ).toBe(404);
+    const boxes = (await call('payroll01', 'GET', '/mail/mailboxes')).json
+      .data as Json[];
+    expect(boxes.find((b) => b.purpose === 'hr')?.unmatched).toBe(0);
+    const record = (
+      await call(
+        'payroll01',
+        'GET',
+        '/mail/by-record/employee/emp-dengkai?mailbox=hr',
+      )
+    ).json.data as Json[];
+    expect(record.some((m) => m.id === separation.id)).toBe(false);
+  });
 });

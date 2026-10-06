@@ -72,6 +72,12 @@ export interface MailHandler {
   canView(ctx: ActorContext): Promise<boolean>;
   /** Whether the user may send drafts of this purpose. */
   canSend(ctx: ActorContext): Promise<boolean>;
+  /**
+   * Narrows what a user who may view the purpose sees, message by message
+   * (人事邮箱: payroll sees only income certificate and payslip mail). Every
+   * message is visible when a step leaves this out.
+   */
+  canSee?(ctx: ActorContext, mail: MailMessage): Promise<boolean>;
   /** Users notified about new mail of this purpose. */
   recipients(): Promise<string[]>;
   /**

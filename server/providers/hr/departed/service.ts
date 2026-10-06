@@ -351,6 +351,7 @@ export function createDepartedMail(deps: {
         storedText: stored.join('\n'),
         refType: 'employee',
         refId: employeeId,
+        proposal: { kind: 'documentSent', document: kind, employeeId },
       })) ?? 'channelNotConfigured'
     );
   }
@@ -481,12 +482,23 @@ export function createDepartedMail(deps: {
     );
   }
 
+  /** The documents that state pay: only payroll drafts, sends and sees their mail. */
+  const PAY_DOCUMENTS = new Set<string>(['incomeCertificate', 'payslip']);
+
   const handler: MailHandler = {
     async canView(ctx) {
       return (await canAdminister(ctx)) || (await canPay(ctx));
     },
     async canSend(ctx) {
       return (await canAdminister(ctx)) || (await canPay(ctx));
+    },
+    // HR administrators see the whole mailbox; payroll only the mail about pay (收入证明, 工资条).
+    async canSee(ctx, mail) {
+      if (await canAdminister(ctx)) return true;
+      const document = (mail.proposal as { document?: unknown } | null)
+        ?.document;
+      const about = typeof document === 'string' ? document : mail.aiIntent;
+      return Boolean(about && PAY_DOCUMENTS.has(about)) && (await canPay(ctx));
     },
     async recipients() {
       return deps.holdersOf('hr.admin');

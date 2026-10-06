@@ -415,6 +415,17 @@ export function createMailService(deps: MailServiceDeps) {
       throw new HrError('MAIL_NOT_FOUND', 404);
   }
 
+  /** The messages of a purpose this user may see, when its step narrows them. */
+  async function visible(ctx: ActorContext, mails: MailMessage[]) {
+    if (!mails.length) return mails;
+    const handler = handlerFor(mails[0].mailbox);
+    if (!handler.canSee) return mails;
+    const out: MailMessage[] = [];
+    for (const mail of mails)
+      if (await handler.canSee(ctx, mail)) out.push(mail);
+    return out;
+  }
+
   async function requireSend(ctx: ActorContext, purpose: MailPurpose) {
     if (!(await handlerFor(purpose).canSend(ctx)))
       throw new HrError('FORBIDDEN', 403);
@@ -646,13 +657,18 @@ export function createMailService(deps: MailServiceDeps) {
       for (const purpose of MAIL_PURPOSES) {
         const handler = handlers.get(purpose);
         if (!handler || !(await handler.canView(ctx))) continue;
-        const unmatched = await database
-          .query()
-          .selectFrom('businessMailMessages')
-          .select(['id'])
-          .where('mailbox', '=', purpose)
-          .where('status', '=', 'unmatched')
-          .execute();
+        const unmatched = await visible(
+          ctx,
+          (
+            await database
+              .query()
+              .selectFrom('businessMailMessages')
+              .selectAll()
+              .where('mailbox', '=', purpose)
+              .where('status', '=', 'unmatched')
+              .execute()
+          ).map((r) => toMail(r as Record<string, unknown>)),
+        );
         const connection = connections.find((c) => c.purpose === purpose)!;
         out.push({
           purpose,
@@ -685,12 +701,17 @@ export function createMailService(deps: MailServiceDeps) {
         .orderBy('createdAt', 'desc')
         .limit(200)
         .execute();
-      return rows.map((r) => toMail(r as Record<string, unknown>));
+      return visible(
+        ctx,
+        rows.map((r) => toMail(r as Record<string, unknown>)),
+      );
     },
 
     async get(ctx: ActorContext, id: string) {
       const mail = await row(id);
       await requireView(ctx, mail.mailbox);
+      if (!(await visible(ctx, [mail])).length)
+        throw new HrError('MAIL_NOT_FOUND', 404);
       return mail;
     },
 
@@ -711,7 +732,10 @@ export function createMailService(deps: MailServiceDeps) {
         .where('refId', '=', refId)
         .orderBy('createdAt', 'asc')
         .execute();
-      return rows.map((r) => toMail(r as Record<string, unknown>));
+      return visible(
+        ctx,
+        rows.map((r) => toMail(r as Record<string, unknown>)),
+      );
     },
 
     /** A file of a message the user may read. */
@@ -1023,6 +1047,8 @@ export function createMailService(deps: MailServiceDeps) {
       redirectTo?: string;
       /** What the thread keeps when the sent text must not be stored (a one-time code). */
       storedText?: string;
+      /** What the message carries, for the step's own use (人事邮箱: which document). */
+      proposal?: Record<string, unknown> | null;
     }): Promise<'sent' | 'channelNotConfigured' | 'failed' | null> {
       // null: the mailbox is off or has no account, so the step sends the way it did before mail was connected.
       const settings = (await deps.settings.read()).value;
@@ -1098,6 +1124,7 @@ export function createMailService(deps: MailServiceDeps) {
             refId: input.refId,
             aiIntent: null,
             aiSummary: null,
+            proposal: input.proposal ?? null,
             draftOf: null,
             sentBy: null,
             sentAt: state === 'sent' ? now : null,

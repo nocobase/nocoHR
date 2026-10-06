@@ -168,6 +168,12 @@ export function createDocumentShares(deps: {
         storedText: `验证码：******（${CODE_MINUTES} 分钟内有效，不保存原文）`,
         refType: 'employee',
         refId: str(row.employeeId),
+        // Which document the code opens: the mail is seen by whoever sees that document's mail.
+        proposal: {
+          kind: 'documentCode',
+          document: str(row.kind),
+          employeeId: str(row.employeeId),
+        },
       });
       if (state !== 'sent') throw new HrError('DOCUMENT_CODE_UNAVAILABLE', 409);
       await update(id, {
