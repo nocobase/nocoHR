@@ -98,7 +98,12 @@ export const MAIL_SETTINGS_DEFAULTS: MailSettings = {
 const ROW_ID = 'mail';
 
 export function createMailSettingsService(database: DatabaseManager) {
-  async function read(): Promise<{ value: MailSettings; revision: number }> {
+  async function read(): Promise<{
+    value: MailSettings;
+    revision: number;
+    /** Who saved it last: a user id, `system` for the demo seed and the automatic binding, or null when never saved. */
+    updatedBy: string | null;
+  }> {
     const row = await database
       .repository('personnelSettings')
       .findOne({ filter: { id: ROW_ID } });
@@ -106,6 +111,7 @@ export function createMailSettingsService(database: DatabaseManager) {
     return {
       value: parsed.success ? parsed.data : MAIL_SETTINGS_DEFAULTS,
       revision: Number(row?.revision ?? 0),
+      updatedBy: row?.updatedBy ? String(row.updatedBy) : null,
     };
   }
   return {

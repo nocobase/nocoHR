@@ -203,6 +203,8 @@ export function createMailService(deps: MailServiceDeps) {
   async function ensureLocalAccounts(): Promise<void> {
     if (!deps.localProvider || deps.production) return;
     const current = await deps.settings.read();
+    // Once an administrator has saved 设置 / 邮件, the bindings are theirs: an unbound mailbox stays unbound.
+    if (current.updatedBy && current.updatedBy !== 'system') return;
     let changed = false;
     const mailboxes = { ...current.value.mailboxes };
     for (const purpose of MAIL_PURPOSES) {
@@ -1134,6 +1136,12 @@ export function createMailService(deps: MailServiceDeps) {
       mailboxes: Record<string, { accountId?: string; ownerUserId?: string }>,
     ) {
       const accounts = await service.accounts();
+      // One account serves one purpose: two purposes reading one inbox would each take every message.
+      const bound = Object.values(mailboxes)
+        .map((m) => m.accountId)
+        .filter((id): id is string => Boolean(id));
+      if (new Set(bound).size !== bound.length)
+        throw new HrError('MAIL_ACCOUNT_IN_USE', 400);
       for (const mailbox of Object.values(mailboxes)) {
         if (!mailbox.accountId && !mailbox.ownerUserId) continue;
         const account = accounts.find((a) => a.id === mailbox.accountId);

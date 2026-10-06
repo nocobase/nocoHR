@@ -214,21 +214,7 @@ function MailSettingsForm({
         </CardHeader>
         <CardContent>
           <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor='mail-channel'>
-                {t('mailSettings.channel')}
-              </FieldLabel>
-              <Input
-                id='mail-channel'
-                value={draft.channel}
-                onChange={(e) =>
-                  setDraft({ ...draft, channel: e.target.value })
-                }
-              />
-              <FieldDescription>
-                {t('mailSettings.channelHint')}
-              </FieldDescription>
-            </Field>
+            {/* Business mail is sent through the Mail plugin account of each purpose, not a notification channel. */}
             <Field>
               <FieldLabel htmlFor='mail-sender'>
                 {t('mailSettings.senderName')}

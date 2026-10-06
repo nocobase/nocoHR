@@ -44,7 +44,7 @@ export const mailRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
     routes.get('/settings', async (c) => {
       const current = await settings().get(actor(c));
       return c.json({
-        data: { ...current, connections: mail().connections() },
+        data: { ...current, connections: await mail().connections() },
       });
     });
     routes.put('/settings', async (c) => {

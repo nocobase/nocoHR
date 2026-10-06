@@ -218,10 +218,8 @@ const en = {
     mailSettings: {
       title: 'Mail',
       description:
-        'The business mailboxes and how they are used. Connection details and passwords are in the application configuration, not here.',
+        'The business mailboxes and how they are used. Each purpose is served by a mailbox connected through the Mail plugin (on My mailbox); its owner reads and sends as it. Passwords stay with that connection, not here.',
       sending: 'Sending',
-      channel: 'Notification email channel',
-      channelHint: 'The email channel configured in the notification plugin.',
       senderName: 'Sender name',
       redirectTo: 'Test address outside production',
       redirectToHint:
@@ -582,6 +580,7 @@ const en = {
     MAIL_MAILBOX_UNAVAILABLE: 'This mailbox is not available.',
     MAIL_ACCOUNT_INVALID:
       'Choose a connected mailbox account; it is bound with its owner.',
+    MAIL_ACCOUNT_IN_USE: 'A mailbox account can serve only one purpose.',
     AUDIT_REQUEST_NOT_FOUND: 'The audit request was not found.',
     AUDIT_REQUEST_LOCKED:
       'The scope can no longer be changed: the pack was built or the request was answered.',
@@ -833,10 +832,8 @@ const zh: Shape = {
     mailSettings: {
       title: '邮件',
       description:
-        '业务邮箱的用途与收发规则。邮箱的连接信息和密码写在应用配置中，不在这里。',
+        '业务邮箱的用途与收发规则。每种用途由一个通过 Mail 插件关联的邮箱承担（在“我的邮箱”里关联），以账户主人的身份收发；密码只保存在邮箱连接里，不在这里。',
       sending: '发信',
-      channel: '通知插件的邮件渠道',
-      channelHint: '通知插件中配置的邮件渠道名称。',
       senderName: '发件人名称',
       redirectTo: '非生产环境的测试地址',
       redirectToHint: '填写后，非生产环境的所有邮件都改发到这个地址。',
@@ -1177,6 +1174,7 @@ const zh: Shape = {
     MAIL_MAILBOX_UNAVAILABLE: '这个邮箱暂不可用。',
     MAIL_ACCOUNT_INVALID:
       '请选择一个已关联的邮箱账户，它会连同账户主人一起绑定。',
+    MAIL_ACCOUNT_IN_USE: '一个邮箱账户只能承担一种用途。',
     AUDIT_REQUEST_NOT_FOUND: '审核请求不存在。',
     AUDIT_REQUEST_LOCKED: '审核包已生成或已回复，范围不能再修改。',
     AUDIT_SCOPE_EMPTY: '请至少选择一个部门或岗位，并勾选资料。',

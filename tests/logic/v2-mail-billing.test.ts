@@ -546,6 +546,27 @@ describe('Mail plugin accounts behind the business mailboxes', () => {
     expect((await call('payroll01', 'GET', '/mail/accounts')).status).toBe(403);
     const current = await call('hr01', 'GET', '/mail/settings');
     const value = current.json.data.value as Json;
+    // The page reads each purpose's bound account.
+    expect(current.json.data.connections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          purpose: 'billing',
+          address: 'billing@qiheng.test',
+          adapter: 'local-files',
+        }),
+      ]),
+    );
+    const twice = await call('hr01', 'PUT', '/mail/settings', {
+      revision: current.json.data.revision,
+      value: {
+        ...value,
+        mailboxes: {
+          ...value.mailboxes,
+          hr: { ...value.mailboxes.billing },
+        },
+      },
+    });
+    expect(twice.status).toBe(400);
     const wrongOwner = await call('hr01', 'PUT', '/mail/settings', {
       revision: current.json.data.revision,
       value: {
