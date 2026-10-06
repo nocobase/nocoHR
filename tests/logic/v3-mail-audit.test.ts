@@ -608,4 +608,94 @@ describe('审核邮箱 (V3-11)', () => {
       'AUDIT_MAIL_ALREADY_LINKED',
     );
   });
+
+  it('moves a message that came to the wrong mailbox, where it is sorted again', async () => {
+    const billingInbox = path.join(
+      directory,
+      'storage',
+      'mail',
+      'local',
+      'billing@qiheng.test',
+      'inbox',
+    );
+    mkdirSync(billingInbox, { recursive: true });
+    writeFileSync(
+      path.join(billingInbox, '09-wrong-box.eml'),
+      composeMail({
+        from: { name: '远航汽车 供应商质量 何嘉', address: REQUESTER },
+        to: 'billing@qiheng.test',
+        subject: '补充审核资料请求（装配工）',
+        text: '请在 5 个工作日内提供苏州机加工车间 CNC 操作工的培训记录。',
+        date: new Date(),
+      }),
+    );
+    await call('payroll01', 'POST', '/mail/poll?mailbox=billing');
+    const unsorted = (
+      (
+        await call(
+          'payroll01',
+          'GET',
+          '/mail/messages?mailbox=billing&status=unmatched',
+        )
+      ).json.data as Json[]
+    ).find((m) => m.subject.startsWith('补充审核资料请求'))!;
+    expect(unsorted).toBeTruthy();
+    const boxes = (await call('payroll01', 'GET', '/mail/mailboxes')).json
+      .data as Json[];
+    expect(boxes.find((b) => b.purpose === 'billing')?.canAssign).toBe(true);
+
+    // Only who sorts the billing mailbox may move it; not to the same mailbox.
+    expect(
+      (
+        await call(
+          'qa_audit',
+          'POST',
+          `/mail/messages/${unsorted.id}/transfer`,
+          {
+            mailbox: 'audit',
+          },
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await call(
+          'payroll01',
+          'POST',
+          `/mail/messages/${unsorted.id}/transfer`,
+          {
+            mailbox: 'billing',
+          },
+        )
+      ).status,
+    ).toBe(400);
+    const moved = await call(
+      'payroll01',
+      'POST',
+      `/mail/messages/${unsorted.id}/transfer`,
+      { mailbox: 'audit' },
+    );
+    expect(moved.status).toBe(200);
+    // The audit mailbox's step took it: a draft request linked to the message.
+    const message = (
+      await call('qa_audit', 'GET', `/mail/messages/${unsorted.id}`)
+    ).json.data;
+    expect(message).toMatchObject({
+      mailbox: 'audit',
+      status: 'linked',
+      refType: 'auditRequest',
+    });
+    const request = (
+      await call('qa_audit', 'GET', `/audit-requests/${message.refId}`)
+    ).json.data;
+    expect(request).toMatchObject({
+      customerName: '远航汽车',
+      sourceMailId: unsorted.id,
+      status: 'draft',
+    });
+    // It left the billing mailbox.
+    expect(
+      (await call('payroll01', 'GET', `/mail/messages/${unsorted.id}`)).status,
+    ).toBe(404);
+  });
 });

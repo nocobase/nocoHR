@@ -59,6 +59,8 @@ export interface Mailbox {
   readonly adapter:
     'local-files' | 'imap-smtp' | 'gmail' | 'microsoft' | 'none';
   readonly canSend: boolean;
+  /** 归类: sort the unsorted mail (recognise again, ignore, transfer). */
+  readonly canAssign: boolean;
   readonly unmatched: number;
 }
 

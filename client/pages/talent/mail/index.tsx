@@ -27,6 +27,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -34,6 +38,13 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ReceiptTemplateControl } from './receipt-template.js';
 
 const FILTERS = ['all', 'unmatched', 'drafts'] as const;
+/** Every mailbox purpose, for 转给其他用途 (also those the user cannot open). */
+const PURPOSES: readonly MailPurpose[] = [
+  'billing',
+  'recruiting',
+  'audit',
+  'hr',
+];
 type Filter = (typeof FILTERS)[number];
 
 /**
@@ -114,6 +125,31 @@ export default function MailPage(): ReactElement {
         method: 'POST',
       });
       toast.add({ type: 'success', title: t('mail.resorted') });
+      messages.reload();
+      mailboxes.reload();
+    } catch (error) {
+      toast.add({ type: 'error', title: errorMessage(error, t) });
+    }
+  }
+
+  /** 转给其他用途: the message leaves this mailbox; that mailbox's assistant sorts it. */
+  async function transfer(
+    message: MailMessage,
+    target: MailPurpose,
+  ): Promise<void> {
+    try {
+      await api.request({
+        path: `talent/mail/messages/${encodeURIComponent(message.id)}/transfer`,
+        method: 'POST',
+        json: { mailbox: target },
+      });
+      toast.add({
+        type: 'success',
+        title: t('mail.transferred', {
+          mailbox: t(`mail.purposes.${target}`),
+        }),
+      });
+      setOpenId(null);
       messages.reload();
       mailboxes.reload();
     } catch (error) {
@@ -300,7 +336,7 @@ export default function MailPage(): ReactElement {
                     mailboxes.reload();
                   }}
                 />
-                {open.status === 'unmatched' && mailbox?.canSend ? (
+                {open.status === 'unmatched' && mailbox?.canAssign ? (
                   <div className='flex flex-wrap gap-2'>
                     <Button variant='outline' onClick={() => void resort(open)}>
                       {t('mail.resort')}
@@ -308,6 +344,23 @@ export default function MailPage(): ReactElement {
                     <Button variant='outline' onClick={() => void ignore(open)}>
                       {t('mail.ignore')}
                     </Button>
+                    <NativeSelect
+                      value=''
+                      aria-label={t('mail.transfer')}
+                      onChange={(e) =>
+                        e.target.value &&
+                        void transfer(open, e.target.value as MailPurpose)
+                      }
+                    >
+                      <NativeSelectOption value=''>
+                        {t('mail.transfer')}
+                      </NativeSelectOption>
+                      {PURPOSES.filter((p) => p !== open.mailbox).map((p) => (
+                        <NativeSelectOption key={p} value={p}>
+                          {t(`mail.purposes.${p}`)}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
                   </div>
                 ) : null}
               </div>

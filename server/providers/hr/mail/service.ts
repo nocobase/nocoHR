@@ -662,6 +662,8 @@ export function createMailService(deps: MailServiceDeps) {
         enabled: boolean;
         adapter: string;
         canSend: boolean;
+        /** 归类: sort the unsorted mail (resort, ignore, transfer). */
+        canAssign: boolean;
         unmatched: number;
       }[] = [];
       for (const purpose of MAIL_PURPOSES) {
@@ -686,6 +688,13 @@ export function createMailService(deps: MailServiceDeps) {
           enabled: settings.mailboxes[purpose].enabled,
           adapter: connection.adapter,
           canSend: await handler.canSend(ctx),
+          canAssign: Boolean(
+            await tryAuthorizeAction(
+              ctx.authz,
+              MAIL_RESOURCE[purpose],
+              'assign',
+            ),
+          ),
           unmatched: unmatched.length,
         });
       }
@@ -854,6 +863,59 @@ export function createMailService(deps: MailServiceDeps) {
         .where('id', '=', id)
         .execute();
       await handlerFor(mail.mailbox).onUnmatched(await row(id), randomUUID());
+      return row(id);
+    },
+
+    /**
+     * 待归类 · 转给其他用途 (V2-06): a message that came to the wrong mailbox
+     * (a resume in the billing mailbox) moves to another purpose, whose step
+     * sorts it anew. Sorting the source mailbox (assign) is enough: the person
+     * need not read the target. The message keeps its subject tag for
+     * threading; its link to the source account's copy is dropped, so a reply
+     * goes out from the target mailbox as a new message.
+     */
+    async transfer(ctx: ActorContext, id: string, target: unknown) {
+      const mail = await service.get(ctx, id);
+      await requireAssign(ctx, mail.mailbox);
+      if (mail.direction !== 'inbound' || mail.status !== 'unmatched')
+        throw new HrError('INVALID_INPUT', 400);
+      if (
+        typeof target !== 'string' ||
+        !(MAIL_PURPOSES as readonly string[]).includes(target) ||
+        target === mail.mailbox
+      )
+        throw new HrError('INVALID_INPUT', 400);
+      const purpose = target as MailPurpose;
+      const settings = (await deps.settings.read()).value;
+      if (!settings.mailboxes[purpose].enabled || !handlers.has(purpose))
+        throw new HrError('MAIL_MAILBOX_UNAVAILABLE', 409);
+      const now = new Date();
+      await database
+        .query()
+        .deleteFrom('businessMailMessages')
+        .where('draftOf', '=', id)
+        .where('status', '=', 'draft')
+        .execute();
+      await database
+        .query()
+        .updateTable('businessMailMessages')
+        .set({
+          mailbox: purpose,
+          status: 'received',
+          refType: null,
+          refId: null,
+          aiIntent: null,
+          aiSummary: null,
+          mailMessageRef: null,
+          retentionUntil: addDays(
+            now,
+            settings.mailboxes[purpose].retentionDays,
+          ),
+          updatedAt: now,
+        })
+        .where('id', '=', id)
+        .execute();
+      await handlerFor(purpose).onUnmatched(await row(id), randomUUID());
       return row(id);
     },
 

@@ -134,6 +134,12 @@ export const mailRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
     routes.post('/messages/:id/resort', async (c) =>
       c.json({ data: await mail().resort(actor(c), c.req.param('id')) }),
     );
+    routes.post('/messages/:id/transfer', async (c) => {
+      const body = (await readJson(c)) as { mailbox?: unknown } | null;
+      return c.json({
+        data: await mail().transfer(actor(c), c.req.param('id'), body?.mailbox),
+      });
+    });
     routes.post('/messages/:id/ignore', async (c) =>
       c.json({ data: await mail().ignore(actor(c), c.req.param('id')) }),
     );
