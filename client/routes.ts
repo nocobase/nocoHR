@@ -1388,6 +1388,15 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
     authz: 'skip',
     componentLoader: () => import('./pages/talent/recruiting/public/jobs.js'),
   },
+  // V2-07 删除申请: the link in the resume receipt; /api/public/recruiting/deletion checks the token.
+  {
+    name: 'public-job-deletion',
+    path: '/jobs/deletion/:token',
+    auth: 'optional',
+    authz: 'skip',
+    componentLoader: () =>
+      import('./pages/talent/recruiting/public/deletion.js'),
+  },
   {
     name: 'public-job-booking',
     path: '/jobs/booking/:token',

@@ -102,6 +102,10 @@ export const recruitingServerEn = {
       'Please check in with a new employee in person',
       '{{name}} is on day {{day}} without an account or Feishu binding. Ask how housing, mentoring and the schedule are going.',
     ),
+    recruitingDeletionRequested: n(
+      'A candidate asked to have their information deleted',
+      'They asked through the link in the resume receipt. Open the candidate and anonymize them.',
+    ),
     recruitingStaleApplications: n(
       '{{count}} applications waiting over {{days}} days',
       'Please process the applications that stayed in one stage.',
@@ -278,6 +282,10 @@ export const recruitingServerZh: typeof recruitingServerEn = {
     recruitingCheckInFaceToFace: n(
       '请当面了解新员工近况',
       '{{name}}入职第 {{day}} 天，没有账号或未绑定飞书，请当面了解住宿、带教和排班是否适应。',
+    ),
+    recruitingDeletionRequested: n(
+      '有候选人申请删除个人信息',
+      '候选人通过简历回执中的链接提交了删除申请，请打开候选人并执行匿名化。',
     ),
     recruitingStaleApplications: n(
       '有 {{count}} 份投递超过 {{days}} 天未处理',

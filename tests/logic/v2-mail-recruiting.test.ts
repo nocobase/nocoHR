@@ -703,6 +703,14 @@ describe('招聘邮箱 (V2-07)', () => {
         })
       ).json.code,
     ).toBe('MAIL_RECEIPT_RETENTION_REQUIRED');
+    expect(
+      (
+        await call('recruit01', 'PUT', '/mail/recruiting/receipt-template', {
+          subject: '收到',
+          body: '收到你的简历，保存 {{months}} 个月。',
+        })
+      ).json.code,
+    ).toBe('MAIL_RECEIPT_DELETE_LINK_REQUIRED');
 
     // Without a confirmed template the resume is taken in, but nothing is sent.
     await (
@@ -734,7 +742,7 @@ describe('招聘邮箱 (V2-07)', () => {
       '/mail/recruiting/receipt-template',
       {
         subject: '启衡精密已收到你的简历（{{posting}}）',
-        body: '{{name}}，你好：简历已收到。信息保存 {{months}} 个月。\n{{sender}}',
+        body: '{{name}}，你好：简历已收到。信息保存 {{months}} 个月。删除：{{deleteLink}}\n{{sender}}',
       },
     );
     expect(confirmed.status).toBe(200);
@@ -754,5 +762,74 @@ describe('招聘邮箱 (V2-07)', () => {
     expect(receipt.subject).toContain('启衡精密已收到你的简历（');
     expect(receipt.text).toContain('周立，你好：简历已收到。信息保存');
     expect(receipt.text).not.toContain('{{');
+  });
+
+  it('lets a candidate ask through the receipt to be deleted, until the recruiter anonymizes them', async () => {
+    const receipt = (await sentTo('zoupeng@mail.test', 1))[0]!;
+    const text = (await simpleParser(receipt)).text ?? '';
+    const token = /\/jobs\/deletion\/([\w-]{20,})/u.exec(text)?.[1];
+    expect(token).toBeTruthy();
+    expect(text).not.toContain('{{');
+    const pub = async (method: string) => {
+      const response = await server.fetch(
+        new Request(`${base}/api/public/recruiting/deletion/${token}`, {
+          method,
+          headers:
+            method === 'GET'
+              ? {}
+              : {
+                  'content-type': 'application/json',
+                  origin: 'http://localhost',
+                },
+          body: method === 'GET' ? undefined : '{}',
+        }),
+      );
+      const body = await response.text();
+      return {
+        status: response.status,
+        json: body ? (JSON.parse(body) as Json) : {},
+      };
+    };
+    const view = await pub('GET');
+    expect(view.status).toBe(200);
+    expect(view.json.data).toEqual({
+      company: expect.any(String),
+      requestedAt: null,
+    });
+    expect(JSON.stringify(view.json.data)).not.toContain('邹鹏');
+    const asked = await pub('POST');
+    expect(asked.json.data.requestedAt).toBeTruthy();
+    // Asking again changes nothing.
+    expect((await pub('POST')).json.data.requestedAt).toBe(
+      asked.json.data.requestedAt,
+    );
+    const detail = await call(
+      'recruit01',
+      'GET',
+      `/recruiting/candidates/${applicationId}`,
+    );
+    expect(detail.json.data.candidate.deletionRequestedAt).toBeTruthy();
+    const notified = await (
+      await db()
+    )
+      .query()
+      .selectFrom('workItems')
+      .select(['id'])
+      .where('type', '=', 'candidateDeletion')
+      .execute();
+    expect(notified.length).toBeGreaterThan(0);
+
+    const anonymized = await call(
+      'recruit01',
+      'POST',
+      `/recruiting/candidates/${detail.json.data.candidate.id}/anonymize`,
+      {},
+    );
+    expect(anonymized.status).toBe(200);
+    expect((await pub('GET')).status).toBe(404);
+    expect((await pub('POST')).status).toBe(404);
+    expect((await pub('GET')).json.code ?? 'DELETION_LINK_INVALID').toBe(
+      'DELETION_LINK_INVALID',
+    );
   });
 });

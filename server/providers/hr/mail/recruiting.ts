@@ -203,7 +203,7 @@ interface Posting {
   requisitionId: string;
 }
 
-/** The receipt for a resume taken in by mail; `{{name}}`, `{{posting}}`, `{{months}}` and `{{sender}}` are filled. */
+/** The receipt for a resume taken in by mail; `{{name}}`, `{{posting}}`, `{{months}}`, `{{sender}}` and `{{deleteLink}}` are filled. */
 export interface ReceiptTemplateValue {
   readonly subject: string;
   readonly body: string;
@@ -219,7 +219,8 @@ export const DEFAULT_RECEIPT_TEMPLATE = {
     '我们已收到你投递「{{posting}}」的简历，招聘负责人会尽快查看，有进展会再联系你。',
     '',
     '个人信息处理说明：你的简历与联系方式只用于本次及今后 {{months}} 个月内的岗位匹配与联系，到期后删除；不会用于其他用途。',
-    '如需删除你的信息，直接回复本邮件说明即可。',
+    '如需删除你的信息，请打开下面的链接提交申请：',
+    '{{deleteLink}}',
     '',
     '{{sender}}',
   ].join('\n'),
@@ -273,6 +274,8 @@ export function createRecruitingMailHandler(deps: {
   }) => Promise<'sent' | 'channelNotConfigured' | 'failed'>;
   /** Whether this address had a receipt in the last days. */
   receiptSince: (address: string, since: Date) => Promise<boolean>;
+  /** V2-07 删除申请: a new deletion link for the application's candidate (public URL). */
+  deletionLink: (applicationId: string) => Promise<string>;
   /** The receipt template a recruiter confirmed (V2-07: 招聘负责人确认过一次的回执模板). */
   receiptTemplate: {
     /** Who confirmed it, by name: recruiters may not read the user list. */
@@ -348,13 +351,18 @@ export function createRecruitingMailHandler(deps: {
       posting: postingTitle,
       months: String(await deps.retentionMonths()),
       sender: settings.senderName,
+      deleteLink: await deps.deletionLink(applicationId),
     };
+    // A template confirmed before the link existed still carries it, after the text.
+    const body = template.body.includes('{{deleteLink}}')
+      ? template.body
+      : `${template.body}\n\n如需删除你的信息，请打开：{{deleteLink}}`;
     await deps.sendEmail({
       key: `receipt:${to.toLowerCase()}:${now.toISOString().slice(0, 10)}`,
       to,
       applicationId,
       subject: fillReceipt(template.subject, values),
-      body: fillReceipt(template.body, values),
+      body: fillReceipt(body, values),
     });
   }
 
@@ -710,6 +718,9 @@ export function createRecruitingMailHandler(deps: {
       // The receipt must state how long the information is kept (个人信息处理说明).
       if (!body.includes('{{months}}'))
         throw new HrError('MAIL_RECEIPT_RETENTION_REQUIRED', 400);
+      // …and how to have it deleted (删除申请链接).
+      if (!body.includes('{{deleteLink}}'))
+        throw new HrError('MAIL_RECEIPT_DELETE_LINK_REQUIRED', 400);
       await deps.receiptTemplate.write({
         subject: subject.trim(),
         body: body.trim(),

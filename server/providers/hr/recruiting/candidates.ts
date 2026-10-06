@@ -174,6 +174,8 @@ export function presentCandidate(row: Record<string, unknown>) {
     retentionUntil: day(row.retentionUntil),
     lastActivityAt: iso(row.lastActivityAt),
     anonymizedAt: iso(row.anonymizedAt),
+    /** V2-07 删除申请: when the candidate asked to be deleted through the receipt's link. */
+    deletionRequestedAt: iso(row.deletionRequestedAt),
     customFields: json<Record<string, unknown>>(row.customFields, {}),
   };
 }
@@ -368,6 +370,8 @@ export function createCandidateService(
         consentAt: candidate.consentAt,
         retentionUntil: candidate.retentionUntil,
         anonymizedAt: candidate.anonymizedAt,
+        // The recruiter acts on a deletion request; a hiring manager is not told.
+        deletionRequestedAt: a.recruiter ? candidate.deletionRequestedAt : null,
         customFields: customValues(definitions, candidate.customFields, {
           sensitive: a.recruiter,
         }),
@@ -1206,6 +1210,8 @@ export function createCandidateService(
           customFields: null,
           anonymizedAt: now,
           anonymizedBy: by,
+          // The deletion link stops working; deletionRequestedAt stays as the record of the request.
+          deletionTokenHash: null,
           updatedAt: now,
         })
         .where('id', '=', candidateId)
@@ -1272,6 +1278,19 @@ export function createCandidateService(
       for (const r of rows)
         if (await service.anonymizeTrusted(str(r.id), owner)) count += 1;
       return count;
+    },
+
+    /** V2-07 删除申请: a link for the resume receipt; a new one replaces the previous one. */
+    async issueDeletionToken(candidateId: string) {
+      const { token, hash } = newToken();
+      await database
+        .query()
+        .updateTable('candidates')
+        .set({ deletionTokenHash: hash, updatedAt: new Date() })
+        .where('id', '=', candidateId)
+        .where('anonymizedAt', 'is', null)
+        .execute();
+      return token;
     },
 
     /** A booking link for the candidate (self-booking reschedule / cancel). */

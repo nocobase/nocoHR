@@ -44,7 +44,13 @@ interface ReceiptTemplate {
   confirmedByName: string | null;
 }
 
-const PLACEHOLDERS = ['name', 'posting', 'months', 'sender'] as const;
+const PLACEHOLDERS = [
+  'name',
+  'posting',
+  'months',
+  'sender',
+  'deleteLink',
+] as const;
 
 /** The reminder and the button; rendered on the 招聘邮箱 only. */
 export function ReceiptTemplateControl(): ReactElement | null {

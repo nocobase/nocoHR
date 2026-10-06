@@ -190,6 +190,7 @@ const en = {
           posting: 'position',
           months: 'months kept (required)',
           sender: 'sender name',
+          deleteLink: 'deletion link (required)',
         },
         confirmedBy: 'Confirmed by {{name}} on {{at}}.',
         confirm: 'Confirm receipt',
@@ -678,6 +679,8 @@ const en = {
     MAIL_ACCOUNT_INVALID:
       'Choose a connected mailbox account; it is bound with its owner.',
     MAIL_ACCOUNT_IN_USE: 'A mailbox account can serve only one purpose.',
+    MAIL_RECEIPT_DELETE_LINK_REQUIRED:
+      'The receipt must tell the candidate how to have their information deleted: keep the deletion-link placeholder in the text.',
     MAIL_RECEIPT_RETENTION_REQUIRED:
       'The receipt must state how long the information is kept: keep the months-kept placeholder in the text.',
     AUDIT_REQUEST_NOT_FOUND: 'The audit request was not found.',
@@ -920,6 +923,7 @@ const zh: Shape = {
           posting: '职位',
           months: '保存月数（必填）',
           sender: '发件人名称',
+          deleteLink: '删除申请链接（必填）',
         },
         confirmedBy: '{{name}} 已于 {{at}} 确认。',
         confirm: '确认回执',
@@ -1383,6 +1387,8 @@ const zh: Shape = {
     MAIL_ACCOUNT_INVALID:
       '请选择一个已关联的邮箱账户，它会连同账户主人一起绑定。',
     MAIL_ACCOUNT_IN_USE: '一个邮箱账户只能承担一种用途。',
+    MAIL_RECEIPT_DELETE_LINK_REQUIRED:
+      '回执须告诉候选人如何申请删除，请在正文中保留“删除申请链接”占位符。',
     MAIL_RECEIPT_RETENTION_REQUIRED:
       '回执须说明信息保存期限，请在正文中保留“保存月数”占位符。',
     AUDIT_REQUEST_NOT_FOUND: '审核请求不存在。',

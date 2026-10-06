@@ -117,6 +117,20 @@ export function createPublicService(
     attempts.set(key, recent);
   }
 
+  async function deletionCandidate(token: string) {
+    if (!/^[\w-]{20,64}$/u.test(token))
+      throw new HrError('DELETION_LINK_INVALID', 404);
+    const row = await database
+      .query()
+      .selectFrom('candidates')
+      .select(['id', 'deletionRequestedAt'])
+      .where('deletionTokenHash', '=', sha256(token))
+      .where('anonymizedAt', 'is', null)
+      .executeTakeFirst();
+    if (!row) throw new HrError('DELETION_LINK_INVALID', 404);
+    return row as Record<string, unknown>;
+  }
+
   async function bookingContext(token: string) {
     if (!/^[\w-]{20,64}$/u.test(token))
       throw new HrError('BOOKING_LINK_INVALID', 404);
@@ -501,6 +515,66 @@ export function createPublicService(
           .where('id', '=', offer.id)
           .execute();
       return service.offer(token);
+    },
+
+    /** V2-07 删除申请: what the receipt's link shows; nothing about the candidate but whether they asked. */
+    async deletion(token: string) {
+      const candidate = await deletionCandidate(token);
+      return {
+        company: ctx.companyName(),
+        requestedAt: candidate.deletionRequestedAt
+          ? new Date(str(candidate.deletionRequestedAt)).toISOString()
+          : null,
+      };
+    },
+
+    /** The candidate asks to be deleted; the recruiters responsible anonymize them (once, however often it is sent). */
+    async requestDeletion(token: string) {
+      const candidate = await deletionCandidate(token);
+      const id = str(candidate.id);
+      if (!candidate.deletionRequestedAt) {
+        const now = new Date();
+        await database
+          .query()
+          .updateTable('candidates')
+          .set({ deletionRequestedAt: now, updatedAt: now })
+          .where('id', '=', id)
+          .execute();
+        const applications = await database
+          .query()
+          .selectFrom('applications')
+          .innerJoin('jobPostings', 'jobPostings.id', 'applications.postingId')
+          .innerJoin(
+            'jobRequisitions',
+            'jobRequisitions.id',
+            'jobPostings.requisitionId',
+          )
+          .select([
+            'applications.id as id',
+            'jobRequisitions.recruiterUserId as recruiterUserId',
+          ])
+          .where('applications.candidateId', '=', id)
+          .orderBy('applications.createdAt', 'desc')
+          .execute();
+        const owners = [
+          ...new Set(
+            applications
+              .map((a) => (a.recruiterUserId ? str(a.recruiterUserId) : ''))
+              .filter(Boolean),
+          ),
+        ];
+        await platform.notify({
+          key: `deletionRequest:${id}`,
+          userIds: owners.length ? owners : await ctx.holdersOf('hr.recruiter'),
+          message: 'recruitingDeletionRequested',
+          params: {},
+          path: applications[0]
+            ? `/talent/candidates/${str(applications[0].id)}`
+            : '/talent/candidates',
+        });
+        ctx.audit({ event: 'recruiting.deletionRequested', candidateId: id });
+      }
+      return service.deletion(token);
     },
 
     /** 候选人通过专属链接上传证件与银行卡照片 (本人材料 only). */

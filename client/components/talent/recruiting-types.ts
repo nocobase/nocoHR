@@ -214,6 +214,8 @@ export interface ApplicationDetail {
     consentAt: string | null;
     retentionUntil: string | null;
     anonymizedAt?: string | null;
+    /** V2-07 删除申请: when the candidate asked to be deleted through the receipt's link. */
+    deletionRequestedAt?: string | null;
     customFields: Record<string, unknown>;
   };
   posting: {

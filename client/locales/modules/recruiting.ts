@@ -447,6 +447,8 @@ export const recruitingEn = {
     anonymizeDescription:
       'Contact data, the resume, the parsed resume and AI interview records are deleted. Statistics keep only stages and channels.',
     anonymized: 'Anonymized',
+    deletionRequested:
+      'The candidate asked on {{at}} to have their information deleted. Anonymize them to complete the request.',
     customFields: 'Additional fields',
     retention: 'Kept until {{date}}',
     consentAt: 'Consent given {{date}}',
@@ -625,6 +627,12 @@ export const recruitingEn = {
     noAccount: 'No account holds the ERP integration permission set.',
   },
   public: {
+    deletionTitle: 'Delete my information',
+    deletionDescription:
+      'Ask {{company}} to delete the resume and contact details you sent for its open positions. Your information is removed and no longer used.',
+    deletionSubmit: 'Ask to delete my information',
+    deletionSent:
+      'Your request was received on {{at}}. The recruiter will delete your information; you will not be contacted again about this application.',
     jobsTitle: 'Join us',
     jobsDescription: 'Open positions',
     noJobs: 'No open positions right now.',
@@ -727,6 +735,8 @@ export const recruitingEn = {
     BOOKING_SLOT_FULL: 'That time is full. Please pick another.',
     BOOKING_CHANGE_USED: 'The booking was already changed once.',
     BOOKING_LINK_INVALID: 'This link is not valid.',
+    DELETION_LINK_INVALID:
+      'This link is not valid or the information was already deleted.',
     INTERVIEW_CALENDAR_CONFLICT: 'Busy then: {{names}}.',
     INTERVIEW_PLAN_REQUIREMENT_INVALID:
       'Each question must name a requirement.',
@@ -1165,6 +1175,8 @@ export const recruitingZh: typeof recruitingEn = {
     anonymizeDescription:
       '联系方式、简历原件、解析结果和初面记录将被删除，统计只保留阶段和渠道。',
     anonymized: '已匿名化',
+    deletionRequested:
+      '候选人已于 {{at}} 申请删除个人信息，请执行匿名化完成申请。',
     customFields: '追加字段',
     retention: '保存至 {{date}}',
     consentAt: '{{date}} 授权',
@@ -1332,6 +1344,12 @@ export const recruitingZh: typeof recruitingEn = {
     noAccount: '没有账号持有 ERP 集成权限集。',
   },
   public: {
+    deletionTitle: '删除我的个人信息',
+    deletionDescription:
+      '申请{{company}}删除你为应聘提交的简历和联系方式。删除后这些信息不再保留，也不会再被使用。',
+    deletionSubmit: '提交删除申请',
+    deletionSent:
+      '已于 {{at}} 收到你的申请。招聘负责人会删除你的信息，之后不会再就这次投递联系你。',
     jobsTitle: '加入我们',
     jobsDescription: '正在招聘的职位',
     noJobs: '暂时没有开放的职位。',
@@ -1427,6 +1445,7 @@ export const recruitingZh: typeof recruitingEn = {
     BOOKING_SLOT_FULL: '该时段已满，请选择其他时间。',
     BOOKING_CHANGE_USED: '面试时间已修改过一次。',
     BOOKING_LINK_INVALID: '这个链接无效。',
+    DELETION_LINK_INVALID: '这个链接无效，或者信息已经删除。',
     INTERVIEW_CALENDAR_CONFLICT: '该时间有安排：{{names}}。',
     INTERVIEW_PLAN_REQUIREMENT_INVALID: '每道题须对应一条任职要求。',
     INTERVIEW_NOT_INTERVIEWER: '你不是这场面试的面试官。',

@@ -808,6 +808,15 @@ export default class HrProvider extends ServiceProvider<Application> {
               });
           },
         },
+        deletionLink: async (applicationId) => {
+          const service = recruiting();
+          const application =
+            await service.candidates.applicationRow(applicationId);
+          const token = await service.candidates.issueDeletionToken(
+            application.candidateId,
+          );
+          return service.context.publicUrl(`/jobs/deletion/${token}`);
+        },
         receiptSince: async (address, since) =>
           Boolean(
             await database
@@ -1475,6 +1484,8 @@ export default class HrProvider extends ServiceProvider<Application> {
         recruitingNewHireIssue: 'newHireIssue',
         recruitingCheckInFaceToFace: 'newHireIssue',
         recruitingStaleApplications: 'candidateStale',
+        // V2-07 删除申请: a candidate asked to be deleted; the recruiter anonymizes them.
+        recruitingDeletionRequested: 'candidateDeletion',
         recruitingDigest: 'recruitingDigest',
         // V4-12: performance to-dos (never a rating in the title or body).
         performanceGoalSetting: 'performanceTask',

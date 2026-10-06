@@ -38,6 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -147,6 +148,16 @@ export default function CandidateDetail(): ReactElement {
           <BlockSkeleton rows={6} />
         ) : (
           <div className='space-y-4'>
+            {/* V2-07 删除申请: the candidate asked through the receipt's link; anonymizing settles it. */}
+            {c.deletionRequestedAt && !c.anonymizedAt ? (
+              <Alert>
+                <AlertDescription>
+                  {t('recruiting.candidates.deletionRequested', {
+                    at: formatDateTime(c.deletionRequestedAt),
+                  })}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {scheduling ? (
               <ScheduleCard
                 applicationId={applicationId}

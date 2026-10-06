@@ -7,7 +7,8 @@
  *   its own talent.* recruiting action and checks the record relation
  *   (recruiter, hiring manager, interviewer, approver).
  * - `/api/public/recruiting/*` is deliberately public: the careers page, the
- *   application, self-booking, the offer page and the AI interview. Each
+ *   application, self-booking, the offer page, the AI interview and the
+ *   deletion request from the resume receipt. Each
  *   call carries only its own slug or link token; applying can only create a
  *   candidate and an application, uploads are checked for type and size, and
  *   the application is rate-limited per address.
@@ -421,6 +422,9 @@ export const recruitingRoutes: AppApiRouteContribution<Application> =
         201,
       );
     });
+    // V2-07 删除申请: the link in the resume receipt.
+    open.get('/deletion/:token', async (c) => c.json({ data: await s().publicPages.deletion(c.req.param('token')) }));
+    open.post('/deletion/:token', async (c) => c.json({ data: await s().publicPages.requestDeletion(c.req.param('token')) }));
     open.get('/booking/:token', async (c) => c.json({ data: await s().publicPages.booking(c.req.param('token')) }));
     open.post('/booking/:token', async (c) => {
       const body = (await readJson(c)) as { start?: unknown };
