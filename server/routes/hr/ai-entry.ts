@@ -8,8 +8,11 @@ import {
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
-import { createHmac, timingSafeEqual } from 'node:crypto';
-
+import {
+  callbackSignatureValid,
+  SIGNATURE_HEADER,
+  TIMESTAMP_HEADER,
+} from '../../http/signed-callback.js';
 import { authorizeAction } from '../../providers/hr/authorize.js';
 import type { IncomingMessage } from '../../providers/hr/im-channel.js';
 import type { CardCallback } from '../../providers/hr/im-cards/service.js';
@@ -63,19 +66,6 @@ function parseCardAction(provider: string, body: unknown): CardCallback {
     comment:
       typeof body.comment === 'string' ? body.comment.slice(0, 500) : null,
   };
-}
-
-/** The HMAC-SHA256 of the raw body with IM_CALLBACK_SECRET; no secret accepts nothing. */
-function signatureValid(raw: string, signature: string): boolean {
-  const secret = process.env.IM_CALLBACK_SECRET;
-  const expected = secret
-    ? createHmac('sha256', secret).update(raw).digest('hex')
-    : '';
-  return (
-    Boolean(expected) &&
-    signature.length === expected.length &&
-    timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-  );
 }
 
 function parseRaw(raw: string): unknown {
@@ -196,7 +186,21 @@ export const aiEntryRoutes: AppApiRouteContribution<Application> =
       });
     }
 
-    // Public: the office suite's message callbacks, accepted only with a valid signature.
+    // Public: the office suite's message callbacks, accepted only with a valid, recent signature
+    // (server/http/signed-callback.ts; publicEndpoints.imCallbackSecret, no secret accepts nothing).
+    const signed = (
+      c: { req: { header(name: string): string | undefined } },
+      raw: string,
+    ) =>
+      callbackSignatureValid({
+        secret: app.config.get<string>('publicEndpoints.imCallbackSecret'),
+        raw,
+        signature: c.req.header(SIGNATURE_HEADER),
+        timestamp: c.req.header(TIMESTAMP_HEADER),
+        toleranceSeconds:
+          app.config.get<number>('publicEndpoints.callbackToleranceSeconds') ??
+          300,
+      });
     const callbacks = new Hono<HrEnv>();
     installErrorHandler(callbacks);
     callbacks.post(
@@ -204,8 +208,7 @@ export const aiEntryRoutes: AppApiRouteContribution<Application> =
       bodyLimit({ maxSize: 32 * 1024 }),
       async (c) => {
         const raw = await c.req.text();
-        if (!signatureValid(raw, c.req.header('x-nocohr-signature') ?? ''))
-          throw new HrError('IM_BAD_SIGNATURE', 403);
+        if (!signed(c, raw)) throw new HrError('IM_BAD_SIGNATURE', 403);
         return c.json({
           data: await app.container
             .resolve(imChannelToken)
@@ -220,8 +223,7 @@ export const aiEntryRoutes: AppApiRouteContribution<Application> =
       bodyLimit({ maxSize: 16 * 1024 }),
       async (c) => {
         const raw = await c.req.text();
-        if (!signatureValid(raw, c.req.header('x-nocohr-signature') ?? ''))
-          throw new HrError('IM_BAD_SIGNATURE', 403);
+        if (!signed(c, raw)) throw new HrError('IM_BAD_SIGNATURE', 403);
         return c.json({
           data: await app.container
             .resolve(imChannelToken)

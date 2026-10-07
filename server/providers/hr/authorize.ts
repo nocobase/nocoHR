@@ -45,6 +45,14 @@ export async function tryAuthorizeAction(
   }
 }
 
+/** Whether a policy reads every record of its collection (an all-records grant, or an unrestricted identity). */
+export function coversAllRecords(policy: RepositoryPolicy): boolean {
+  const read = policy.read;
+  if (read === true) return true;
+  if (read === false) return false;
+  return read.scope === true;
+}
+
 export function policyOf(
   policies: CollectionPolicies,
   collection: string,

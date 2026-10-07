@@ -603,6 +603,10 @@ const zhCN: AppServerResource = {
       body: '{{diffPeople}} 人工时有差异，合计 {{diffHours}} 小时。',
     },
     // V2-06 邮件往来 (server/providers/hr/mail/)
+    businessMailboxBound: {
+      title: '你的邮箱 {{address}} 已绑定为业务邮箱',
+      body: '系统会以你的名义收发其中的邮件；它承担的用途见“我的邮箱”。',
+    },
     mailUnmatched: {
       title: '业务邮箱有一封来信待归类',
       body: '{{from}}：{{subject}}',

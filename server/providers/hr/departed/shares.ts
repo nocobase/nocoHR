@@ -2,8 +2,13 @@
  * 文件分享链接 (V1-02 V2 增补): a document handed to someone outside the
  * company by a link instead of an attachment. The link is stored as a hash
  * and lasts 7 days; opening it asks for a one-time code sent only to the
- * recipient's address (10 minutes, 5 attempts, never stored); each download
- * is recorded; a revoked or expired link opens nothing.
+ * recipient's address (10 minutes, 5 attempts, never stored); a link sends
+ * at most 5 codes; each download is recorded; a revoked or expired link
+ * opens nothing.
+ *
+ * Attempts are counted before a code is compared, by a conditional update
+ * (compare-and-set on the count), so parallel guesses cannot all slip under
+ * the limit (readiness review 2026-10-07).
  */
 import {
   createHash,
@@ -21,6 +26,7 @@ import { DOCUMENT_TITLES, type DocumentKind } from './documents.js';
 export const SHARE_DAYS = 7;
 export const CODE_MINUTES = 10;
 export const CODE_ATTEMPTS = 5;
+export const CODE_SENDS = 5;
 const CODE_RESEND_SECONDS = 60;
 
 const hash = (value: string): string =>
@@ -79,6 +85,33 @@ export function createDocumentShares(deps: {
       .execute();
   }
 
+  /**
+   * Counts one attempt at the current code, atomically: the count is raised
+   * only from the value read and only below the limit, retried when another
+   * request moved it first. False when the code is used up.
+   */
+  async function takeAttempt(id: string): Promise<boolean> {
+    for (let tries = 0; tries < 20; tries++) {
+      const row = await database
+        .query()
+        .selectFrom('documentShares')
+        .select(['codeAttempts'])
+        .where('id', '=', id)
+        .executeTakeFirst();
+      const attempts = Number(row?.codeAttempts ?? CODE_ATTEMPTS);
+      if (attempts >= CODE_ATTEMPTS) return false;
+      const result = await database
+        .query()
+        .updateTable('documentShares')
+        .set({ codeAttempts: attempts + 1, updatedAt: deps.now() })
+        .where('id', '=', id)
+        .where('codeAttempts', '=', attempts)
+        .execute();
+      if (result.updatedCount) return true;
+    }
+    return false;
+  }
+
   return {
     /** Stores the document and makes its link; answers the link (shown once, never stored). */
     async create(input: {
@@ -113,6 +146,7 @@ export function createDocumentShares(deps: {
           codeHash: null,
           codeExpiresAt: null,
           codeAttempts: 0,
+          codeSends: 0,
           codeSentAt: null,
           downloads: [],
           createdBy: input.createdBy,
@@ -158,6 +192,20 @@ export function createDocumentShares(deps: {
       )
         throw new HrError('DOCUMENT_CODE_TOO_SOON', 409);
       const id = str(row.id);
+      // Reserved before sending (compare-and-set on the count): parallel requests send one code, and a link
+      // sends at most CODE_SENDS, since each new code allows CODE_ATTEMPTS more guesses.
+      const sends = Number(row.codeSends ?? 0);
+      if (sends >= CODE_SENDS)
+        throw new HrError('DOCUMENT_CODE_SENDS_EXCEEDED', 409);
+      const reserved = await database
+        .query()
+        .updateTable('documentShares')
+        .set({ codeSends: sends + 1, codeSentAt: now, updatedAt: now })
+        .where('id', '=', id)
+        .where('codeSends', '=', sends)
+        .execute();
+      if (!reserved.updatedCount)
+        throw new HrError('DOCUMENT_CODE_TOO_SOON', 409);
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
       const state = await deps.mail().sendDirect({
         purpose: 'hr',
@@ -188,8 +236,7 @@ export function createDocumentShares(deps: {
     async download(token: string, code: unknown, ip: string) {
       const row = await byToken(token);
       const id = str(row.id);
-      const attempts = Number(row.codeAttempts ?? 0);
-      if (attempts >= CODE_ATTEMPTS)
+      if (!(await takeAttempt(id)))
         throw new HrError('DOCUMENT_CODE_LOCKED', 409);
       const now = deps.now();
       const valid =
@@ -201,10 +248,7 @@ export function createDocumentShares(deps: {
           Buffer.from(hash(`${id}:${code}`)),
           Buffer.from(str(row.codeHash)),
         );
-      if (!valid) {
-        await update(id, { codeAttempts: attempts + 1 });
-        throw new HrError('DOCUMENT_CODE_INVALID', 400);
-      }
+      if (!valid) throw new HrError('DOCUMENT_CODE_INVALID', 400);
       const file = await deps.readFile(str(row.fileId));
       if (!file) throw new HrError('DOCUMENT_LINK_INVALID', 404);
       const downloads = [

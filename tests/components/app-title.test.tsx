@@ -26,15 +26,15 @@ describe('application title', () => {
     expect(document.title).toBe(previousTitle);
   });
 
-  it('falls back to NocoBase for a blank configured title', async () => {
+  it('falls back to NocoHR for a blank configured title', async () => {
     const previousTitle = 'Host title';
     document.title = previousTitle;
     const app = await createTestApp('   ');
 
     await app.start();
 
-    expect(app.refineConfig.options?.title).toEqual({ text: 'NocoBase' });
-    expect(document.title).toBe('NocoBase');
+    expect(app.refineConfig.options?.title).toEqual({ text: 'NocoHR' });
+    expect(document.title).toBe('NocoHR');
 
     await app.shutdown();
     expect(document.title).toBe(previousTitle);

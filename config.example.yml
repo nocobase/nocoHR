@@ -12,7 +12,7 @@
 # Values under client are public and embedded in the SPA HTML.
 client:
   app:
-    title: NocoBase
+    title: NocoHR
     # Defaults apply only when no valid browser-local choice is saved.
     # defaultColorScheme: system # light | dark | system
     # defaultTheme: compact # ID from client/theme/theme-presets.ts
@@ -60,6 +60,19 @@ session:
 #     address: audit@example.com
 #   hr:
 #     address: hr@example.com
+
+# What the public endpoints (careers page, document and audit-pack links, IM and directory callbacks) trust.
+# trustedProxies: the reverse proxies (addresses or CIDR ranges) whose X-Forwarded-For / X-Real-IP name the
+# client for per-address limits; from any other peer those headers are ignored. Behind a proxy that is not
+# listed, every visitor shares the proxy's limit. Also settable with APP_TRUSTED_PROXIES (comma-separated).
+# The callback secrets sign `<x-nocohr-timestamp>.<body>` (HMAC-SHA256, hex in x-nocohr-signature); a timestamp
+# more than callbackToleranceSeconds from the server's clock is refused. Empty secrets accept no callback.
+# Set the secrets with IM_CALLBACK_SECRET / ORG_SYNC_CALLBACK_SECRET rather than in this file.
+# Login throttling is the authentication plugin's: give auth.advanced.ipAddress.ipAddressHeaders the header
+# the same proxy sets (e.g. [x-forwarded-for]), and only when every request passes through that proxy.
+# publicEndpoints:
+#   trustedProxies: [127.0.0.1, ::1]
+#   callbackToleranceSeconds: 300
 
 notification:
   channels:

@@ -49,6 +49,14 @@ const tool = <S extends z.ZodType>(input: {
   about: string;
   description: string;
   schema: S;
+  /**
+   * `ASK` for a tool that stores what the model wrote about a candidate after
+   * reading the candidate's own text (resume, knockout answers): such text can
+   * carry instructions, so the user sees and approves the content before it
+   * is saved (readiness review 2026-10-07). Drafts that a person confirms
+   * anyway (posting, message, AI interview plan) stay `ALLOW`.
+   */
+  permission?: 'ASK' | 'ALLOW';
   invoke: (
     services: import('../../providers/hr/recruiting/index.js').RecruitingServices,
     actor: Awaited<ReturnType<typeof actorOf>>,
@@ -58,7 +66,7 @@ const tool = <S extends z.ZodType>(input: {
   defineTools({
     scope: 'SPECIFIED',
     execution: 'backend',
-    defaultPermission: 'ALLOW',
+    defaultPermission: input.permission ?? 'ALLOW',
     i18n: I18N,
     introduction: { title: input.title, about: input.about },
     definition: {
@@ -191,6 +199,7 @@ export const getApplicationForScreening = tool({
 
 export const saveScreeningSuggestion = tool({
   name: 'saveScreeningSuggestion',
+  permission: 'ASK',
   title: 'Save a screening suggestion',
   about: 'A match level with reasons per requirement; never a decision.',
   description:
@@ -238,6 +247,7 @@ export const findPoolCandidates = tool({
 
 export const saveInterviewPlan = tool({
   name: 'saveInterviewPlan',
+  permission: 'ASK',
   title: 'Save interview questions',
   about: 'One behavioural question per requirement.',
   description:
@@ -264,6 +274,7 @@ export const saveInterviewPlan = tool({
 
 export const saveInterviewSummary = tool({
   name: 'saveInterviewSummary',
+  permission: 'ASK',
   title: 'Save an interview summary',
   about: "The scorecards' distribution, divergences and what to verify.",
   description:

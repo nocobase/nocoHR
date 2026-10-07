@@ -31,6 +31,7 @@ import {
   type PayrollEmployee,
 } from './common.js';
 import type { PayrollContext } from './context.js';
+import { payrollScopes, type PayrollScopes } from './scope.js';
 
 const INSURANCE = 'talent.socialInsurance';
 const SUGGESTIONS_ID = 'payroll.baseSuggestions';
@@ -240,35 +241,92 @@ export function createInsuranceService(ctx: PayrollContext) {
   const { platform } = ctx;
   const { database } = platform;
 
-  async function plans(): Promise<Plan[]> {
+  /** The plans; with scopes, those the action's grant reaches. */
+  async function plans(scopes?: PayrollScopes): Promise<Plan[]> {
     const rows = await database
       .query()
       .selectFrom('socialInsurancePlans')
       .selectAll()
       .orderBy('city', 'asc')
       .execute();
-    return rows.map((row) => toPlan(row as Record<string, unknown>));
+    return (
+      scopes ? await scopes.rows('socialInsurancePlans', rows) : rows
+    ).map((row) => toPlan(row as Record<string, unknown>));
   }
 
-  async function enrolments(): Promise<Enrolment[]> {
+  /** The enrolments; with scopes, those the action's grant reaches (and their employees). */
+  async function enrolments(scopes?: PayrollScopes): Promise<Enrolment[]> {
     const rows = await database
       .query()
       .selectFrom('employeeSocialInsurances')
       .selectAll()
       .orderBy('startMonth', 'asc')
       .execute();
-    return rows.map((row) => toEnrolment(row as Record<string, unknown>));
+    return (
+      scopes ? await scopes.rows('employeeSocialInsurances', rows) : rows
+    ).map((row) => toEnrolment(row as Record<string, unknown>));
   }
 
-  async function enrolment(id: string): Promise<Enrolment> {
+  async function enrolment(
+    id: string,
+    scopes?: PayrollScopes,
+  ): Promise<Enrolment> {
     const row = await database
       .query()
       .selectFrom('employeeSocialInsurances')
       .selectAll()
       .where('id', '=', id)
       .executeTakeFirst();
-    if (!row) throw new HrError('ENROLMENT_NOT_FOUND', 404);
+    if (
+      !row ||
+      (scopes && !(await scopes.rows('employeeSocialInsurances', [row])).length)
+    )
+      throw new HrError('ENROLMENT_NOT_FOUND', 404);
     return toEnrolment(row);
+  }
+
+  const scopesOf = async (actor: ActorContext, action: string) =>
+    payrollScopes(
+      database,
+      await authorizeAction(actor.authz, INSURANCE, action),
+    );
+
+  /** 增减员 of a month, as the action's grant reaches them. */
+  async function changesFor(scopes: PayrollScopes, month: string) {
+    const employees = new Map(
+      (await loadEmployees(database.query())).map((e) => [e.id, e]),
+    );
+    const all = await enrolments(scopes);
+    const describe = (e: Enrolment) => ({
+      ...e,
+      employeeName: employees.get(e.employeeId)?.name ?? '',
+      employeeNo: employees.get(e.employeeId)?.employeeNo ?? '',
+      departmentId: employees.get(e.employeeId)?.departmentId ?? null,
+    });
+    return {
+      month,
+      pending: all.filter((e) => e.status === 'pending').map(describe),
+      started: all
+        .filter((e) => e.status === 'active' && e.startMonth === month)
+        .map(describe),
+      stopped: all
+        .filter(
+          (e) =>
+            e.status === 'stopped' && e.endMonth === month && !e.pendingAction,
+        )
+        .map(describe),
+    };
+  }
+
+  /** Base suggestions limited to the enrolments the action's grant reaches. */
+  async function suggestionsIn<
+    T extends { enrolmentId: string; employeeId?: string },
+  >(scopes: PayrollScopes, items: readonly T[]): Promise<T[]> {
+    const rows = items.map((item) => ({ ...item, id: item.enrolmentId }));
+    const kept = new Set(
+      (await scopes.rows('employeeSocialInsurances', rows)).map((r) => r.id),
+    );
+    return items.filter((item) => kept.has(item.enrolmentId));
   }
 
   function parse<T>(schema: z.ZodType<T>, input: unknown): T {
@@ -285,13 +343,13 @@ export function createInsuranceService(ctx: PayrollContext) {
     enrolments,
 
     async overview(actor: ActorContext) {
-      await authorizeAction(actor.authz, INSURANCE, 'view');
+      const scopes = await scopesOf(actor, 'view');
       const employees = new Map(
         (await loadEmployees(database.query())).map((e) => [e.id, e]),
       );
-      const all = await enrolments();
+      const all = await enrolments(scopes);
       return {
-        plans: await plans(),
+        plans: await plans(scopes),
         enrolments: all.map((e) => ({
           ...e,
           employeeName: employees.get(e.employeeId)?.name ?? '',
@@ -302,7 +360,7 @@ export function createInsuranceService(ctx: PayrollContext) {
     },
 
     async savePlan(actor: ActorContext, id: string | null, input: unknown) {
-      await authorizeAction(actor.authz, INSURANCE, 'manage');
+      const scopes = await scopesOf(actor, 'manage');
       const data = parse(planSchema, input);
       if (new Set(data.items.map((i) => i.code)).size !== data.items.length)
         throw new HrError('PLAN_ITEM_DUPLICATE', 400);
@@ -322,7 +380,11 @@ export function createInsuranceService(ctx: PayrollContext) {
           .select(['id'])
           .where('id', '=', id)
           .executeTakeFirst();
-        if (!exists) throw new HrError('NOT_FOUND', 404);
+        if (
+          !exists ||
+          !(await scopes.rows('socialInsurancePlans', [exists])).length
+        )
+          throw new HrError('NOT_FOUND', 404);
         await database
           .query()
           .updateTable('socialInsurancePlans')
@@ -342,13 +404,14 @@ export function createInsuranceService(ctx: PayrollContext) {
 
     /** Creates an active enrolment; bases outside the plan's range are clamped and reported. */
     async createEnrolment(actor: ActorContext, input: unknown) {
-      await authorizeAction(actor.authz, INSURANCE, 'manage');
+      const scopes = await scopesOf(actor, 'manage');
       const data = parse(enrolmentSchema, input);
       const employee = (await loadEmployees(database.query())).find(
         (e) => e.id === data.employeeId,
       );
-      if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
-      const plan = planFor(await plans(), data.planCity, data.startMonth);
+      if (!employee || !(await scopes.employee(employee.id)))
+        throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+      const plan = planFor(await plans(scopes), data.planCity, data.startMonth);
       if (!plan) throw new HrError('PLAN_NOT_FOUND', 400);
       const bases = clampBases(plan, data.socialBase, data.housingFundBase);
       const open = (await enrolments()).find(
@@ -390,15 +453,15 @@ export function createInsuranceService(ctx: PayrollContext) {
 
     /** Changes bases or the end month; clamps and logs the change. */
     async updateEnrolment(actor: ActorContext, id: string, input: unknown) {
-      await authorizeAction(actor.authz, INSURANCE, 'manage');
+      const scopes = await scopesOf(actor, 'manage');
       const data = parse(
         enrolmentSchema.partial().omit({ employeeId: true }).strict(),
         input,
       );
-      const current = await enrolment(id);
+      const current = await enrolment(id, scopes);
       const city = data.planCity ?? current.planCity;
       const plan = planFor(
-        await plans(),
+        await plans(scopes),
         city,
         data.startMonth ?? current.startMonth,
       );
@@ -455,8 +518,8 @@ export function createInsuranceService(ctx: PayrollContext) {
 
     /** 增减员确认: a pending start becomes active, a pending stop ends the enrolment. */
     async confirm(actor: ActorContext, id: string, input: unknown) {
-      await authorizeAction(actor.authz, INSURANCE, 'manage');
-      const current = await enrolment(id);
+      const scopes = await scopesOf(actor, 'manage');
+      const current = await enrolment(id, scopes);
       if (current.status !== 'pending')
         throw new HrError('ENROLMENT_NOT_PENDING', 409);
       const body = parse(
@@ -471,7 +534,7 @@ export function createInsuranceService(ctx: PayrollContext) {
       const now = new Date();
       if (current.pendingAction === 'stop') {
         // The stop applies to the enrolment it was raised for (kept in the suggestion's change log).
-        const target = (await enrolments()).find(
+        const target = (await enrolments(scopes)).find(
           (e) => e.employeeId === current.employeeId && e.status === 'active',
         );
         await database.transaction(async (connection) => {
@@ -512,7 +575,11 @@ export function createInsuranceService(ctx: PayrollContext) {
         });
         return { enrolment: await enrolment(id), clamped: [] };
       }
-      const plan = planFor(await plans(), current.planCity, current.startMonth);
+      const plan = planFor(
+        await plans(scopes),
+        current.planCity,
+        current.startMonth,
+      );
       const bases = clampBases(
         plan,
         body.socialBase ?? current.socialBase,
@@ -545,36 +612,12 @@ export function createInsuranceService(ctx: PayrollContext) {
 
     /** 增减员: the pending suggestions, and the starts and stops of a month. */
     async changes(actor: ActorContext, month: string) {
-      await authorizeAction(actor.authz, INSURANCE, 'view');
-      const employees = new Map(
-        (await loadEmployees(database.query())).map((e) => [e.id, e]),
-      );
-      const all = await enrolments();
-      const describe = (e: Enrolment) => ({
-        ...e,
-        employeeName: employees.get(e.employeeId)?.name ?? '',
-        employeeNo: employees.get(e.employeeId)?.employeeNo ?? '',
-        departmentId: employees.get(e.employeeId)?.departmentId ?? null,
-      });
-      return {
-        month,
-        pending: all.filter((e) => e.status === 'pending').map(describe),
-        started: all
-          .filter((e) => e.status === 'active' && e.startMonth === month)
-          .map(describe),
-        stopped: all
-          .filter(
-            (e) =>
-              e.status === 'stopped' &&
-              e.endMonth === month &&
-              !e.pendingAction,
-          )
-          .map(describe),
-      };
+      return changesFor(await scopesOf(actor, 'view'), month);
     },
 
+    /** The 增减员 file is an export of personal data: it needs the export action, like the payroll files. */
     async changesCsv(actor: ActorContext, month: string) {
-      const data = await service.changes(actor, month);
+      const data = await changesFor(await scopesOf(actor, 'export'), month);
       ctx.audit({
         event: 'payroll.export',
         kind: 'insuranceChanges',
@@ -634,16 +677,19 @@ export function createInsuranceService(ctx: PayrollContext) {
     },
 
     async deductions(actor: ActorContext, year: number) {
-      await authorizeAction(actor.authz, INSURANCE, 'view');
+      const scopes = await scopesOf(actor, 'view');
       const employees = new Map(
         (await loadEmployees(database.query())).map((e) => [e.id, e]),
       );
-      const rows = await database
-        .query()
-        .selectFrom('employeeTaxDeductions')
-        .selectAll()
-        .where('year', '=', year)
-        .execute();
+      const rows = await scopes.rows(
+        'employeeTaxDeductions',
+        await database
+          .query()
+          .selectFrom('employeeTaxDeductions')
+          .selectAll()
+          .where('year', '=', year)
+          .execute(),
+      );
       return rows.map((row) => ({
         id: str(row.id),
         employeeId: str(row.employeeId),
@@ -658,8 +704,10 @@ export function createInsuranceService(ctx: PayrollContext) {
 
     /** 专项附加扣除 as the employee declared it in the tax app; replaces the year's row. */
     async saveDeduction(actor: ActorContext, input: unknown) {
-      await authorizeAction(actor.authz, INSURANCE, 'manage');
+      const scopes = await scopesOf(actor, 'manage');
       const data = parse(deductionSchema, input);
+      if (!(await scopes.employee(data.employeeId)))
+        throw new HrError('EMPLOYEE_NOT_FOUND', 404);
       for (const item of data.items)
         if (
           !item.startMonth.startsWith(String(data.year)) ||
@@ -669,10 +717,15 @@ export function createInsuranceService(ctx: PayrollContext) {
       const exists = await database
         .query()
         .selectFrom('employeeTaxDeductions')
-        .select(['id'])
+        .select(['id', 'employeeId'])
         .where('employeeId', '=', data.employeeId)
         .where('year', '=', data.year)
         .executeTakeFirst();
+      if (
+        exists &&
+        !(await scopes.rows('employeeTaxDeductions', [exists])).length
+      )
+        throw new HrError('NOT_FOUND', 404);
       const now = new Date();
       if (exists)
         await database
@@ -706,7 +759,9 @@ export function createInsuranceService(ctx: PayrollContext) {
      * Stored until confirmed. `trusted` runs as the scheduled task.
      */
     async generateBaseSuggestions(actor: ActorContext | null, year: number) {
-      if (actor) await authorizeAction(actor.authz, INSURANCE, 'manage');
+      // The suggestions are one list for the company (the scheduled task
+      // writes it too); a caller is answered with the part their grant reaches.
+      const scopes = actor ? await scopesOf(actor, 'manage') : null;
       const previous = String(year - 1);
       const slips = await database
         .query()
@@ -809,11 +864,13 @@ export function createInsuranceService(ctx: PayrollContext) {
             updatedAt: now,
           })
           .execute();
-      return value;
+      return scopes
+        ? { ...value, items: await suggestionsIn(scopes, value.items) }
+        : value;
     },
 
     async baseSuggestions(actor: ActorContext) {
-      await authorizeAction(actor.authz, INSURANCE, 'view');
+      const scopes = await scopesOf(actor, 'view');
       const row = await database
         .query()
         .selectFrom('personnelSettings')
@@ -838,7 +895,7 @@ export function createInsuranceService(ctx: PayrollContext) {
       );
       return {
         ...value,
-        items: value.items.map((item) => ({
+        items: (await suggestionsIn(scopes, value.items)).map((item) => ({
           ...item,
           employeeName: employees.get(item.employeeId)?.name ?? '',
           employeeNo: employees.get(item.employeeId)?.employeeNo ?? '',
@@ -848,7 +905,7 @@ export function createInsuranceService(ctx: PayrollContext) {
 
     /** Writes the confirmed suggestions (all pending when no ids are given), with a change-log entry each. */
     async applyBaseSuggestions(actor: ActorContext, input: unknown) {
-      await authorizeAction(actor.authz, INSURANCE, 'manage');
+      const scopes = await scopesOf(actor, 'manage');
       const body = parse(
         z
           .object({
@@ -883,7 +940,9 @@ export function createInsuranceService(ctx: PayrollContext) {
         if (item.status !== 'pending') continue;
         if (body.enrolmentIds && !body.enrolmentIds.includes(item.enrolmentId))
           continue;
-        const current = await enrolment(item.enrolmentId).catch(() => null);
+        const current = await enrolment(item.enrolmentId, scopes).catch(
+          () => null,
+        );
         if (!current) continue;
         await database
           .query()

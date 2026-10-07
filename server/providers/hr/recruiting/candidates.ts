@@ -1231,6 +1231,25 @@ export function createCandidateService(
     async anonymize(actor: ActorContext, candidateId: string) {
       await authorizeAction(actor.authz, COMPOSITE.candidate, 'anonymize');
       const candidate = await candidateRow(candidateId);
+      // Only a recruiter of one of the candidate's applications (the same
+      // relation as the detail page) or an HR administrator; the action alone
+      // let any recruiter erase any candidate (readiness review 2026-10-07).
+      if (!(await ctx.isHrAdmin(actor))) {
+        const applications = await database
+          .query()
+          .selectFrom('applications')
+          .select(['id'])
+          .where('candidateId', '=', candidateId)
+          .execute();
+        let recruiter = false;
+        for (const { id } of applications) {
+          if ((await access(actor, await applicationRow(str(id)))).recruiter) {
+            recruiter = true;
+            break;
+          }
+        }
+        if (!recruiter) throw new HrError('CANDIDATE_NOT_FOUND', 404);
+      }
       if (candidate.anonymizedAt) return { id: candidateId, anonymized: true };
       await service.anonymizeTrusted(candidateId, actor.userId);
       ctx.audit({
@@ -1351,7 +1370,11 @@ export function createCandidateService(
       await database
         .query()
         .updateTable('applications')
-        .set({ bookingTokenHash: hash, updatedAt: new Date() })
+        .set({
+          bookingTokenHash: hash,
+          bookingTokenIssuedAt: new Date(),
+          updatedAt: new Date(),
+        })
         .where('id', '=', applicationId)
         .execute();
       return token;

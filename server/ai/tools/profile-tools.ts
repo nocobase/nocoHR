@@ -561,7 +561,7 @@ export const buildAuditPack = defineTools({
       const profile = ctx.deps.profile;
       const scope = await profile.audit.resolveScope(args);
       const pack = await profile.audit.pack(actor, scope, 'assistant');
-      const fileId = await profile.storeAuditPack(pack);
+      const fileId = await profile.storeAuditPack(pack, actor.userId);
       return {
         status: 'success',
         content: {

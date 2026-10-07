@@ -4,7 +4,6 @@
 // per department, merging, auto-pass, snapshots, preview), promotions by grade order, 更正任职信息 with manual job
 // events, the import switch, self-service fields and the job history scope. Each run boots the real standalone server
 // on a throwaway SQLite database with migrations and seeds, so the demo database stays untouched.
-import { createHmac } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -15,6 +14,7 @@ import {
   createStandaloneServer,
   type StandaloneServer,
 } from '../../server/standalone.ts';
+import { signedHeaders } from '../helpers/callback-signature.ts';
 
 // The database task runner imports seed files through Node itself, outside Vite. Node strips their types but does
 // not map a relative `.js` specifier to its `.ts` source the way `pnpm dev` and the compiled build do, so the seeds'
@@ -439,7 +439,7 @@ describe('unified AI entry', () => {
 });
 
 describe('office-suite bot adapter', () => {
-  const post = (body: Json, secret = 'test-im-secret') => {
+  const post = (body: Json, secret = 'test-im-secret', at = Date.now()) => {
     const raw = JSON.stringify(body);
     return server.fetch(
       new Request(`${base}/api/im-callback/feishu`, {
@@ -447,9 +447,7 @@ describe('office-suite bot adapter', () => {
         headers: {
           'content-type': 'application/json',
           origin: 'http://localhost',
-          'x-nocohr-signature': createHmac('sha256', secret)
-            .update(raw)
-            .digest('hex'),
+          ...signedHeaders(secret, raw, at),
         },
         body: raw,
       }),
@@ -462,6 +460,16 @@ describe('office-suite bot adapter', () => {
         await post(
           { messageId: 'm1', chatType: 'p2p', senderId: 'x', text: 'hi' },
           'wrong',
+        )
+      ).status,
+    ).toBe(403);
+    // Correctly signed but sent ten minutes ago: a replayed capture, refused before it is read.
+    expect(
+      (
+        await post(
+          { messageId: 'm1-old', chatType: 'p2p', senderId: 'x', text: 'hi' },
+          'test-im-secret',
+          Date.now() - 600_000,
         )
       ).status,
     ).toBe(403);

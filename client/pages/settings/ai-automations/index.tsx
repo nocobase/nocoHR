@@ -445,7 +445,11 @@ function SettingsDialog({
   const api = useApiClient();
   const owners = useRemote<
     { userId: string; name: string; employeeNo: string }[]
-  >(automation ? 'talent/automations/owners' : null);
+  >(
+    automation ? 'talent/automations/owners' : null,
+    // Only the people this automation may be handed to (the task runs with its owner's permissions).
+    automation ? { key: automation.key } : undefined,
+  );
   const [form, setForm] = useState({
     ownerUserId: '',
     hour: '9',

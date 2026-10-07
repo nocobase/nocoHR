@@ -23,6 +23,7 @@
 import { z } from 'zod';
 
 import { AIUnavailableError, type AIRunner } from '../ai-runner.js';
+import { guardedAnswer, mentionsInternals } from '../ai-text-guard.js';
 import { authorizeAction, policyOf, tryAuthorizeAction } from '../authorize.js';
 import type { AutomationService, AutomationRunContext } from '../automation.js';
 import { str } from '../shared.js';
@@ -51,6 +52,34 @@ const notesSchema = z.object({
     .array(z.object({ key: z.string().max(200), note: z.string().max(400) }))
     .max(500),
 });
+
+/**
+ * Whether a note reads as written for a person: no field names or codes from the data (“nightRate=40”),
+ * neither the shared guard's camelCase/snake_case tokens nor any of the run's own parameter codes, which
+ * may be a plain word (`rate`) or dotted (`perf.coefficient`).
+ */
+export function readablePayrollNote(
+  text: string,
+  codes: readonly string[] = [],
+): boolean {
+  if (mentionsInternals(text)) return false;
+  return !codes.some((code) => codePattern(code).test(text));
+}
+
+function codePattern(code: string, flags = 'u'): RegExp {
+  return new RegExp(
+    `(?<![A-Za-z0-9_])${code.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![A-Za-z0-9_])`,
+    flags,
+  );
+}
+
+/** A structure's change log names a parameter by its code (“设置参数 nightRate = 40”); a note names it by its title. */
+function titled(text: string, code: string, title: string): string {
+  return code && title ? text.replace(codePattern(code, 'gu'), title) : text;
+}
+
+/** Facts that hold a parameter's or an item's code; the model gets the title beside it instead. */
+const CODE_FACTS = ['param', 'item', 'code'];
 
 const TYPE_LABEL: Record<string, string> = {
   netChange: '实发较上月变化超过阈值',
@@ -188,14 +217,17 @@ export function createPayrollAssistant(deps: {
         const source = docs.find((d) => d.values.includes(value));
         const people = affected.get(`${param}:${str(f.structureId)}`) ?? [name];
         const parts = [
-          `“${str(f.structureTitle)}”的 ${param}（${str(f.paramTitle)}）为 ${value}，“${str(f.referenceStructures)}”为 ${reference}`,
+          `“${str(f.structureTitle)}”的${str(f.paramTitle)}为 ${value}，“${str(f.referenceStructures)}”为 ${reference}`,
         ];
         if (policy) parts.push(`${docName(policy)}写明“${policy.line}”`);
         if (source)
           parts.push(
             `${value} 可能出自${source.current ? '' : '已被取代的'}${docName(source)}（“${source.line}”）`,
           );
-        else if (f.changeLog) parts.push(`结构修改记录：${str(f.changeLog)}`);
+        else if (f.changeLog)
+          parts.push(
+            `结构修改记录：${titled(str(f.changeLog), param, str(f.paramTitle))}`,
+          );
         parts.push(
           `受影响的员工：${people.slice(0, 10).join('、')}${people.length > 10 ? ' 等' : ''}`,
         );
@@ -203,9 +235,9 @@ export function createPayrollAssistant(deps: {
       }
       // V4-12: the review cycle's name only, never a rating.
       case 'perfResultMissing':
-        return `${name}在“${str(f.cycleTitle)}”中没有已发布的考核结果，本月 perf.coefficient 按 0 计算；请向负责 HR 核实。`;
+        return `${name}在“${str(f.cycleTitle)}”中没有已发布的考核结果，本月绩效系数按 0 计算；请向负责 HR 核实。`;
       case 'perfCoefficientsMissing':
-        return `${name}所用考核方案没有设置绩效系数，本月 perf.coefficient 按 0 计算；请在薪酬设置 · 绩效系数中维护。`;
+        return `${name}所用考核方案没有设置绩效系数，本月绩效系数按 0 计算；请在薪酬设置 · 绩效系数中维护。`;
       default:
         return `${name}：${TYPE_LABEL[item.issue.type] ?? item.issue.type}。`;
     }
@@ -249,52 +281,107 @@ export function createPayrollAssistant(deps: {
     let source: 'ai' | 'rule' = 'ai';
     let summary = '';
     if (report.issues.length) {
-      const facts = report.issues.map((item) => ({
-        key: item.issue.key,
+      // The model sees parameters and items by their titles (夜班津贴标准), never their codes (nightRate), and
+      // each issue by its number rather than its key, which carries the code: a code given to it came back in
+      // the note as “nightRate=40”.
+      const codes = [
+        ...new Set(
+          report.issues.flatMap((item) =>
+            CODE_FACTS.map((name) => item.issue.facts[name])
+              .filter((value) => typeof value === 'string' && value)
+              .map(String),
+          ),
+        ),
+      ];
+      const facts = report.issues.map((item, index) => ({
+        key: String(index + 1),
         type: item.issue.type,
         typeLabel: TYPE_LABEL[item.issue.type] ?? item.issue.type,
         employee: item.name,
-        facts: item.issue.facts,
+        facts: Object.fromEntries(
+          Object.entries(item.issue.facts)
+            .filter(([name]) => !CODE_FACTS.includes(name))
+            .map(([name, value]) =>
+              name === 'changeLog' && typeof value === 'string'
+                ? [
+                    name,
+                    titled(
+                      value,
+                      str(item.issue.facts.param),
+                      str(item.issue.facts.paramTitle),
+                    ),
+                  ]
+                : [name, value],
+            ),
+        ),
       }));
+      const keyOf = new Map(
+        report.issues.map((item, index) => [String(index + 1), item.issue.key]),
+      );
       const documents = [...excerpts.entries()].map(([param, list]) => ({
-        param,
+        parameter:
+          str(
+            report.issues.find(
+              (item) =>
+                item.issue.type === 'paramMismatch' &&
+                str(item.issue.facts.param) === param,
+            )?.issue.facts.paramTitle,
+          ) || param,
         excerpts: list.map((d) => ({
           document: docName(d),
           current: d.current,
           text: d.line,
         })),
       }));
-      try {
-        const { data, sessionId } = await deps.ai.structured({
-          employee: 'hrAssistant',
-          userId: run.owner.userId,
-          title: `算薪异常检查 ${report.month}`,
-          prompt: [
-            `为 ${report.month} 的算薪异常逐条写说明（每条不超过 120 字），交给薪酬专员复核。`,
-            '要求：只陈述数据和可能原因（如“本月事假 5 天”“提成或计件数据未导入”），说明需要核对什么、建议向谁核实；不建议调整金额，不评价金额是否合理。',
-            '参数取值不一致时，结合下面的制度摘录写清：哪个结构的哪个参数、与哪份制度的哪一条不一致、这个值可能出自哪份文件（含已被取代的旧版本），并列出受影响的员工；由薪酬专员决定是否修改结构。',
-            '导入缺人时说明可能的原因（如当月入职、导入文件中没有该工号），建议向谁核实。',
-            `异常清单（JSON）：${JSON.stringify(facts)}`,
-            documents.length
-              ? `制度摘录（JSON）：${JSON.stringify(documents)}`
-              : '',
-            'notes 中每条的 key 必须与清单中的 key 一致；summary 用一句话概括。',
-          ]
-            .filter(Boolean)
-            .join('\n'),
-          schema: notesSchema,
-          timeZone: ctx.platform.timeZone,
-        });
-        run.usedConversation(sessionId);
-        summary = data.summary;
-        const keys = new Set(report.issues.map((i) => i.issue.key));
-        for (const note of data.notes)
-          if (keys.has(note.key) && note.note.trim())
-            notes.set(note.key, note.note.trim());
-      } catch (error) {
-        if (!(error instanceof AIUnavailableError)) throw error;
-        run.markFallback();
-        source = 'rule';
+      const answer = await guardedAnswer(
+        async () => {
+          const { data, sessionId } = await deps.ai.structured({
+            employee: 'hrAssistant',
+            userId: run.owner.userId,
+            title: `算薪异常检查 ${report.month}`,
+            prompt: [
+              `为 ${report.month} 的算薪异常逐条写说明（每条不超过 120 字），交给薪酬专员复核。`,
+              '要求：只陈述数据和可能原因（如“本月事假 5 天”“提成或计件数据未导入”），说明需要核对什么、建议向谁核实；不建议调整金额，不评价金额是否合理。',
+              '参数取值不一致时，结合下面的制度摘录写清：哪个结构的哪个参数（用 paramTitle 中的名称）、与哪份制度的哪一条不一致、这个值可能出自哪份文件（含已被取代的旧版本），并列出受影响的员工；由薪酬专员决定是否修改结构。',
+              '导入缺人时说明可能的原因（如当月入职、导入文件中没有该工号），建议向谁核实。',
+              '用中文写给人看的句子：参数、项目和字段一律用中文名称，不要写字段名、英文代码或“代码=值”的写法。',
+              `异常清单（JSON）：${JSON.stringify(facts)}`,
+              documents.length
+                ? `制度摘录（JSON）：${JSON.stringify(documents)}`
+                : '',
+              'notes 中每条的 key 必须与清单中的 key 一致；summary 用一句话概括。',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            schema: notesSchema,
+            timeZone: ctx.platform.timeZone,
+          });
+          run.usedConversation(sessionId);
+          return data;
+        },
+        () => null,
+        {
+          // A note that still names a field or a code is asked for once more, then the rules write them all.
+          accept: (data) =>
+            !data ||
+            (readablePayrollNote(data.summary, codes) &&
+              data.notes.every(
+                (note) =>
+                  !keyOf.has(note.key) || readablePayrollNote(note.note, codes),
+              )),
+          unavailable: (error) => error instanceof AIUnavailableError,
+          onFallback: () => {
+            run.markFallback();
+            source = 'rule';
+          },
+        },
+      );
+      if (answer) {
+        summary = answer.summary;
+        for (const note of answer.notes) {
+          const key = keyOf.get(note.key);
+          if (key && note.note.trim()) notes.set(key, note.note.trim());
+        }
       }
       // Anything the model left without a note gets the rule's.
       for (const item of report.issues)

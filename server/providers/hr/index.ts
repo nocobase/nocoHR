@@ -751,6 +751,10 @@ export default class HrProvider extends ServiceProvider<Application> {
             knockoutAnswers: [],
             customFields: {},
             by: input.by,
+            // The From address and the resume's contact details are not proven
+            // to be the sender's: like the careers page, a match never merges
+            // into the existing candidate, it is flagged as a possible duplicate.
+            separate: true,
           });
           const candidate = await services.candidates.candidateRow(
             outcome.candidateId,
@@ -759,6 +763,7 @@ export default class HrProvider extends ServiceProvider<Application> {
             applicationId: outcome.applicationId,
             candidateName: candidate.name,
             created: outcome.created,
+            possibleDuplicate: Boolean(outcome.possibleDuplicate),
             email: candidate.email,
           };
         },
@@ -1303,6 +1308,8 @@ export default class HrProvider extends ServiceProvider<Application> {
         publicUrl: (path) =>
           `${String(this.app.config.get<{ publicOrigin?: string }>('app')?.publicOrigin ?? '').replace(/\/$/u, '')}${this.app.publicBasePath.replace(/\/$/u, '')}${path}`,
         companyName: () => this.talentConfig().companyName,
+        // The careers page's application tickets are signed with a key derived from it (apply-check.ts).
+        formSecret: this.app.config.get<string>('auth.secret') || undefined,
       }),
     );
   }
@@ -1496,8 +1503,8 @@ export default class HrProvider extends ServiceProvider<Application> {
    * V1-03 组织同步. No office-suite sync plugin is installed: outside production
    * the directory is the mock file (模拟数据源，仅开发环境), created from the
    * demo directory on first use. `ORG_SYNC_MOCK_FILE` points elsewhere (tests);
-   * `ORG_SYNC_CALLBACK_SECRET` signs directory callbacks — unset, every
-   * callback is refused. With a Feishu self-built app configured (`feishu`
+   * `publicEndpoints.orgSyncCallbackSecret` (ORG_SYNC_CALLBACK_SECRET) signs
+   * directory callbacks with their timestamp — unset, every callback is refused. With a Feishu self-built app configured (`feishu`
    * config, FEISHU_APP_ID / FEISHU_APP_SECRET) the real tenant replaces the
    * mock; there is no office-suite plugin to hold those credentials instead.
    */
@@ -1551,7 +1558,14 @@ export default class HrProvider extends ServiceProvider<Application> {
           this.inBackground('hrAssistant.syncExplain', () =>
             container.resolve(automationTasksToken).onOrgSyncFinished(run),
           ),
-        callbackSecret: () => process.env.ORG_SYNC_CALLBACK_SECRET || undefined,
+        callbackSecret: () =>
+          this.app.config.get<string>(
+            'publicEndpoints.orgSyncCallbackSecret',
+          ) || undefined,
+        callbackToleranceSeconds: () =>
+          this.app.config.get<number>(
+            'publicEndpoints.callbackToleranceSeconds',
+          ) ?? 300,
         currentDate: () => platform.currentDate(),
       });
     });

@@ -3256,6 +3256,8 @@ const zhCN: AppResource = {
       AUTOMATION_TIME_INVALID: '请选择有效的运行时间。',
       AUTOMATION_PARAM_INVALID: '请输入有效的数值。',
       AUTOMATION_OWNER_INVALID: '负责人必须是有账号且在职的员工。',
+      AUTOMATION_OWNER_NOT_PERMITTED:
+        '任务按负责人的权限运行：负责人只能是你自己，或同样可以配置这项自动化的人。',
       AUTOMATION_RUN_NOT_FOUND: '找不到该运行记录。',
       AUTOMATION_EVENT_ONLY: '该自动化只由事件触发，不能手动运行。',
       COURSE_NOT_DRAFT: '只能丢弃从未发布过的草稿；已发布的课程请停用。',
@@ -3355,6 +3357,8 @@ const zhCN: AppResource = {
       ACCOUNT_PRIVILEGED:
         '该账号拥有你没有的权限，请由系统管理员在用户管理中处理。',
       ACCOUNT_PRIVILEGED_ROOT: '这是系统管理员账号，不能在这里关联或重置密码。',
+      ACCOUNT_PRIVILEGED_PAYROLL:
+        '该账号可以查看薪资数据，请由系统管理员在用户管理中处理。',
       EMPLOYEE_NOT_LINKED: '你的账号尚未关联员工档案。',
       EMPLOYEE_NO_TAKEN: '工号已存在。',
       EMPLOYEE_POSITION_NOT_FOUND: '岗位不存在或已停用。',
@@ -4527,6 +4531,7 @@ const zhCN: AppResource = {
     toggle: '推送到{{name}}',
     saved: '通知设置已保存',
     noneBound: '你的账号还没有绑定办公软件。',
+    notConfigured: '未配置',
   },
   knowledgeService: {
     clearFilters: '清除筛选',

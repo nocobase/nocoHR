@@ -19,8 +19,9 @@
  * business implementation. No tool reads pay, identity numbers, performance
  * or talent-review data, candidates, or confirms, approves, publishes,
  * issues or grants anything. Each call is written to `agentCallLogs` (user,
- * client, tool, time, a summary without personal data); calls beyond
- * `agentRateLimitPerMinute` per token per minute are refused.
+ * client, tool, time, a summary without personal data); requests beyond
+ * `agentRateLimitPerMinute` per token per minute (counted on the token, see
+ * takeRequest) are refused.
  */
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -115,6 +116,40 @@ export function createAgentService(ctx: TalentReviewContext) {
       .insertInto('agentCallLogs')
       .values({ id: newId(), ...entry, summary: entry.summary.slice(0, 500), calledAt: now, createdAt: now, updatedAt: now })
       .execute();
+  }
+
+  /**
+   * Counts one request of the token in the current minute, atomically (readiness review 2026-10-07: the limit
+   * read the call log, which parallel requests all read before any wrote, and which only tools/call reached).
+   * The token's own `rateWindow` (when its current minute began, in milliseconds since the epoch; a minute starts
+   * with the first request after the last one ended) and `rateCount` change only by a conditional update from
+   * the values read, retried when another request moved them first; false when the minute is used up.
+   */
+  async function takeRequest(tokenId: string, limit: number): Promise<boolean> {
+    for (let tries = 0; tries < 20; tries++) {
+      const now = new Date();
+      const ms = now.getTime();
+      const row = await database
+        .query()
+        .selectFrom('agentTokens')
+        .select(['rateWindow', 'rateCount'])
+        .where('id', '=', tokenId)
+        .executeTakeFirst();
+      if (!row) return false;
+      const window = row.rateWindow === null || row.rateWindow === undefined ? null : Number(row.rateWindow);
+      const count = Number(row.rateCount ?? 0);
+      const fresh = window === null || ms - window >= 60_000 || ms < window;
+      if (!fresh && count >= limit) return false;
+      let update = database
+        .query()
+        .updateTable('agentTokens')
+        .set({ rateWindow: fresh ? ms : window, rateCount: fresh ? 1 : count + 1, lastUsedAt: now })
+        .where('id', '=', tokenId)
+        .where('rateCount', '=', count);
+      update = window === null ? update.where('rateWindow', 'is', null) : update.where('rateWindow', '=', window);
+      if ((await update.execute()).updatedCount) return true;
+    }
+    return false;
   }
 
   async function audienceAllows(actor: ActorContext, audience: string): Promise<boolean> {
@@ -345,23 +380,10 @@ export function createAgentService(ctx: TalentReviewContext) {
         .executeTakeFirst()
         .catch(() => undefined);
       if (!user || (user as { disabledAt?: unknown }).disabledAt) return { error: 'unauthorized' as const, token };
-      // 每分钟调用次数上限 (per token).
+      // 每分钟调用次数上限 (per token): every request counts, initialize, tools/list and ping included.
       const settings = await ctx.settings();
-      const recent = await database
-        .query()
-        .selectFrom('agentCallLogs')
-        .select(['id'])
-        .where('tokenId', '=', token.id)
-        .where('calledAt', '>=', new Date(Date.now() - 60_000))
-        .execute();
-      if (recent.length >= settings.agentRateLimitPerMinute)
+      if (!(await takeRequest(token.id, settings.agentRateLimitPerMinute)))
         return { error: 'rateLimited' as const, token, client };
-      await database
-        .query()
-        .updateTable('agentTokens')
-        .set({ lastUsedAt: new Date() })
-        .where('id', '=', token.id)
-        .execute();
       return {
         token,
         client,

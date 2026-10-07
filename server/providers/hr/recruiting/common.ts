@@ -188,6 +188,26 @@ export function sha256(text: string): string {
 }
 
 /** A link token and the hash the database keeps; the token itself is never stored. */
+/**
+ * How long a candidate's self-booking or AI-interview link lasts after it is
+ * issued (readiness review 2026-10-07); it also closes with its posting.
+ */
+export const CANDIDATE_LINK_DAYS = 30;
+
+/** Whether a link issued at `issuedAt` has passed CANDIDATE_LINK_DAYS (no time: issued before they were recorded). */
+export function candidateLinkExpired(
+  issuedAt: unknown,
+  now = Date.now(),
+): boolean {
+  const at =
+    issuedAt instanceof Date
+      ? issuedAt.getTime()
+      : typeof issuedAt === 'string' || typeof issuedAt === 'number'
+        ? new Date(issuedAt).getTime()
+        : NaN;
+  return !Number.isFinite(at) || now - at > CANDIDATE_LINK_DAYS * 86_400_000;
+}
+
 export function newToken(): { token: string; hash: string } {
   const token = randomBytes(24).toString('base64url');
   return { token, hash: sha256(token) };

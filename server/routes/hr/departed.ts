@@ -5,8 +5,10 @@ import {
   defineApiRoutes,
   type AppApiRouteContribution,
 } from '@nocobase/app-server/router';
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 
+import { clientIpResolver } from '../../http/client-ip.js';
+import { WindowThrottle } from '../../http/throttle.js';
 import { HrError } from '../../providers/hr/shared.js';
 import {
   departedMailToken,
@@ -30,19 +32,6 @@ import { actor, installErrorHandler, readJson, type HrEnv } from './shared.js';
  */
 const WINDOW_MS = 3_600_000;
 const PER_HOUR = 20;
-
-/** The caller's address: the proxy's header, else the socket (Node adapter), else unknown. */
-function clientIp(c: Context): string {
-  const socket = (
-    c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined
-  )?.incoming?.socket?.remoteAddress;
-  return (
-    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-    c.req.header('x-real-ip') ||
-    socket ||
-    'unknown'
-  );
-}
 
 export const departedRoutes: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
@@ -79,16 +68,14 @@ export const departedRoutes: AppApiRouteContribution<Application> =
     );
 
     // ---------- The departed employee's link ----------
-    const attempts = new Map<string, number[]>();
+    // Per client address (trusted proxies only, see server/http/client-ip.ts), in a bounded table.
+    const clientIp = clientIpResolver(app.config);
+    const attempts = new WindowThrottle({
+      limit: PER_HOUR,
+      windowMs: WINDOW_MS,
+    });
     const limit = (ip: string) => {
-      const now = Date.now();
-      const recent = (attempts.get(ip) ?? []).filter(
-        (t) => now - t < WINDOW_MS,
-      );
-      if (recent.length >= PER_HOUR)
-        throw new HrError('DOCUMENT_LINK_LIMITED', 409);
-      recent.push(now);
-      attempts.set(ip, recent);
+      if (!attempts.hit(ip)) throw new HrError('DOCUMENT_LINK_LIMITED', 409);
     };
     const open = new Hono<HrEnv>();
     installErrorHandler(open);

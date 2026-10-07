@@ -254,6 +254,20 @@ describe('通知设置', () => {
       screen.getByText('你的账号还没有绑定办公软件。'),
     ).toBeInTheDocument();
   });
+
+  it('shows a channel without credentials as not configured and switched off', () => {
+    remote.set('talent/notification-channels', {
+      inbox: true,
+      channels: [
+        { provider: 'feishu', configured: false, bound: true, enabled: false },
+      ],
+    });
+    render(<NotificationSettingsCard />);
+    expect(screen.getByText('未配置')).toBeInTheDocument();
+    const toggle = screen.getByRole('switch', { name: '推送到飞书' });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toHaveAttribute('data-disabled');
+  });
 });
 
 describe('自助 card order', () => {

@@ -35,9 +35,11 @@ import {
   recordJobEvent,
   type JobEventProcessor,
 } from './job-events.js';
+import { CERTIFICATION_SUBJECT } from './certification-service.js';
 import type { OrganizationService } from './organization-service.js';
 import type { PersonnelSettingsService } from './personnel-settings.js';
 import { bool } from './platform.js';
+import { DEPARTMENT_HEAD_SUBJECT } from './subjects.js';
 import {
   HrError,
   isRecord,
@@ -550,49 +552,112 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
   /**
    * Why the caller may not take over this login account through linking or a
    * password reset, or `undefined` when they may. Resetting a password and
-   * then signing in hands the caller everything the account holds, so an
-   * account with unrestricted access (root) is never managed here, and one
-   * holding a permission set the caller does not hold themselves (payroll,
-   * settings administration, …) is refused: an HR administrator must not gain
-   * access they were never given. Such accounts are managed on the Users page.
+   * then signing in hands the caller everything the account holds, so these
+   * accounts are managed on the Users page instead:
+   *
+   * - an account with unrestricted access (root);
+   * - an account holding a payroll permission set (salaries, payroll cycles,
+   *   social insurance, vendor bills, payroll settings): pay data is never
+   *   reached through an HR account reset;
+   * - an account holding a set that grants a settings or administer-type
+   *   action the caller cannot perform themselves.
+   *
+   * Sets reached through the department-head subject or a certification are
+   * not counted: they follow the person's place in the organization or a
+   * valid certificate, and refusing them kept HR from resetting department
+   * heads, recruiters, trainers and certified operators (readiness review
+   * 2026-10-07; the earlier rule refused any set the caller did not hold).
    * Reads go through the default connection: call this outside a transaction.
    */
-  async function callerPermissionSets(
-    ctx: ActorContext,
-  ): Promise<ReadonlySet<string>> {
+  async function callerIsUnrestricted(ctx: ActorContext): Promise<boolean> {
     const sets = await authz.permissionSets.getEffective({
       principal: ctx.authz.identity.principal,
       subjects: ctx.authz.identity.subjects,
     });
-    return new Set(sets.map((set) => set.key));
+    return sets.some((set) => isUnrestrictedSet(set.key));
   }
 
   function isUnrestrictedSet(key: string): boolean {
     return Boolean(authz.permissionSets.protection(key)?.unrestricted);
   }
 
+  /** Resources (composite and page) whose grants make a set a payroll set; an employee's own payslips do not. */
+  const PAYROLL_RESOURCES: ReadonlySet<string> = new Set([
+    'talent.salary',
+    'talent.salaries',
+    'talent.payroll',
+    'talent.socialInsurance',
+    'talent.payrollSettings',
+    'talent.vendorBill',
+  ]);
+  const ADMINISTER_ACTIONS: ReadonlySet<string> = new Set([
+    'administer',
+    'configure',
+  ]);
+  /** Subjects whose sets are not counted: see accountTakeoverRisk. */
+  const UNCOUNTED_SUBJECTS: ReadonlySet<string> = new Set([
+    DEPARTMENT_HEAD_SUBJECT,
+    CERTIFICATION_SUBJECT,
+  ]);
+
+  async function callerCan(
+    ctx: ActorContext,
+    resource: { type: string; id: string },
+    action: string,
+  ): Promise<boolean> {
+    try {
+      return Boolean(await ctx.authz.can({ resource, action }));
+    } catch {
+      return false;
+    }
+  }
+
   async function accountTakeoverRisk(
     ctx: ActorContext,
     userId: string,
-    callerSets?: ReadonlySet<string>,
+    callerUnrestricted?: boolean,
   ): Promise<{ code: string; permissionSets: string[] } | undefined> {
     const principal = { type: 'user', id: userId } as const;
-    const target = await authz.permissionSets.getEffective({
+    const subjects = await authz.subjects.resolveFor(principal);
+    const all = await authz.permissionSets.getEffective({
+      principal,
+      subjects: [{ type: 'authenticated', id: '*' }, ...subjects],
+    });
+    if (all.some((set) => isUnrestrictedSet(set.key)))
+      return { code: 'ACCOUNT_PRIVILEGED_ROOT', permissionSets: [] };
+    if (callerUnrestricted ?? (await callerIsUnrestricted(ctx)))
+      return undefined;
+    const counted = await authz.permissionSets.getEffective({
       principal,
       subjects: [
         { type: 'authenticated', id: '*' },
-        ...(await authz.subjects.resolveFor(principal)),
+        ...subjects.filter((subject) => !UNCOUNTED_SUBJECTS.has(subject.type)),
       ],
     });
-    if (target.some((set) => isUnrestrictedSet(set.key)))
-      return { code: 'ACCOUNT_PRIVILEGED_ROOT', permissionSets: [] };
-    const held = callerSets ?? (await callerPermissionSets(ctx));
-    if ([...held].some(isUnrestrictedSet)) return undefined;
-    const missing = [
-      ...new Set(target.map((set) => set.key).filter((key) => !held.has(key))),
-    ].sort();
-    return missing.length
-      ? { code: 'ACCOUNT_PRIVILEGED', permissionSets: missing }
+    const payroll = counted
+      .filter((set) =>
+        set.grants.some((grant) => PAYROLL_RESOURCES.has(grant.resource.id)),
+      )
+      .map((set) => set.key);
+    if (payroll.length)
+      return {
+        code: 'ACCOUNT_PRIVILEGED_PAYROLL',
+        permissionSets: [...new Set(payroll)].sort(),
+      };
+    const missing = new Set<string>();
+    for (const set of counted)
+      for (const grant of set.grants)
+        for (const { action } of grant.actions) {
+          if (
+            grant.resource.type !== 'settings' &&
+            !ADMINISTER_ACTIONS.has(action)
+          )
+            continue;
+          if (!(await callerCan(ctx, grant.resource, action)))
+            missing.add(set.key);
+        }
+    return missing.size
+      ? { code: 'ACCOUNT_PRIVILEGED', permissionSets: [...missing].sort() }
       : undefined;
   }
 
@@ -1918,9 +1983,9 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
     async unmanageableAccounts(ctx, userIds) {
       const result = new Map<string, string>();
       if (!userIds.length) return result;
-      const held = await callerPermissionSets(ctx);
+      const unrestricted = await callerIsUnrestricted(ctx);
       for (const userId of new Set(userIds)) {
-        const risk = await accountTakeoverRisk(ctx, userId, held);
+        const risk = await accountTakeoverRisk(ctx, userId, unrestricted);
         if (risk) result.set(userId, risk.code);
       }
       return result;

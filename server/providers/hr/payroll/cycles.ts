@@ -50,6 +50,7 @@ import {
 } from './common.js';
 import type { PayrollContext } from './context.js';
 import { storeUpload } from './context.js';
+import { payrollScopes, type PayrollScopes } from './scope.js';
 import { numberCell, readSheet, textCell, writeSheet } from './excel.js';
 import { enrolmentFor, planFor, type InsuranceService } from './insurance.js';
 import {
@@ -268,44 +269,85 @@ export function createCycleService(
   const { platform } = ctx;
   const { database } = platform;
 
-  async function cycleRow(id: string): Promise<CycleView> {
+  /** A cycle; with scopes, one outside the action's grant is not found. */
+  async function cycleRow(
+    id: string,
+    scopes?: PayrollScopes,
+  ): Promise<CycleView> {
     const row = await database
       .query()
       .selectFrom('payrollCycles')
       .selectAll()
       .where('id', '=', id)
       .executeTakeFirst();
-    if (!row) throw new HrError('PAYROLL_CYCLE_NOT_FOUND', 404);
+    if (!row || (scopes && !(await scopes.of('payrollCycles')).has(row.id)))
+      throw new HrError('PAYROLL_CYCLE_NOT_FOUND', 404);
     return toCycle(row);
   }
 
-  async function payslipsOf(cycleId: string): Promise<PayslipRow[]> {
+  /**
+   * A cycle's payslips; with scopes, only those the action's grant reaches
+   * (the payslip and its employee), without the fields it does not list.
+   */
+  async function payslipsOf(
+    cycleId: string,
+    scopes?: PayrollScopes,
+  ): Promise<PayslipRow[]> {
     const rows = await database
       .query()
       .selectFrom('payslips')
       .selectAll()
       .where('cycleId', '=', cycleId)
       .execute();
-    return rows.map((row) => toPayslip(row as Record<string, unknown>));
+    if (!scopes)
+      return rows.map((row) => toPayslip(row as Record<string, unknown>));
+    const slips = [];
+    for (const row of await scopes.rows('payslips', rows))
+      slips.push(toPayslip(await scopes.fields('payslips', row)));
+    return slips;
   }
 
-  /** Whether a non-calculating viewer (the approver) may see this cycle. */
-  function visibleToApprover(cycle: CycleView, userId: string): boolean {
-    return (
-      cycle.status === 'pendingApproval' ||
-      cycle.approvals.some((step) => step.decidedBy === userId)
-    );
+  /**
+   * Whether a non-calculating viewer (the approver) may see this cycle: it
+   * waits for a step whose permission set they hold, or they decided a step.
+   */
+  async function visibleToApprover(
+    cycle: CycleView,
+    userId: string,
+    holders: Map<string, string[]> = new Map(),
+  ): Promise<boolean> {
+    if (cycle.approvals.some((step) => step.decidedBy === userId)) return true;
+    if (cycle.status !== 'pendingApproval') return false;
+    const pending = cycle.approvals.find((step) => step.status === 'pending');
+    if (!pending) return false;
+    if (!holders.has(pending.permissionSet))
+      holders.set(
+        pending.permissionSet,
+        await ctx.holdersOf(pending.permissionSet),
+      );
+    return holders.get(pending.permissionSet)!.includes(userId);
   }
 
   async function viewable(actor: ActorContext, id: string) {
-    await authorizeAction(actor.authz, PAYROLL, 'view');
-    const cycle = await cycleRow(id);
-    const full = Boolean(
-      await tryAuthorizeAction(actor.authz, PAYROLL, 'calculate'),
+    const scopes = payrollScopes(
+      database,
+      await authorizeAction(actor.authz, PAYROLL, 'view'),
     );
-    if (!full && !visibleToApprover(cycle, actor.userId))
+    const cycle = await cycleRow(id, scopes);
+    const calculate = await tryAuthorizeAction(
+      actor.authz,
+      PAYROLL,
+      'calculate',
+    );
+    const full = Boolean(calculate);
+    if (!full && !(await visibleToApprover(cycle, actor.userId)))
       throw new HrError('PAYROLL_CYCLE_NOT_FOUND', 404);
-    return { cycle, full };
+    return {
+      cycle,
+      full,
+      scopes,
+      calculateScopes: calculate ? payrollScopes(database, calculate) : null,
+    };
   }
 
   function editable(cycle: CycleView) {
@@ -313,21 +355,33 @@ export function createCycleService(
       throw new HrError('PAYROLL_CYCLE_LOCKED', 409);
   }
 
-  /** The employees a cycle pays, with their files and structures for the month. */
-  async function participants(cycle: CycleView) {
+  /**
+   * The employees a cycle pays, with their files and structures for the
+   * month; with scopes, only the employees and files the action's grant reaches.
+   */
+  async function participants(cycle: CycleView, scopes?: PayrollScopes) {
     const tree = await ctx.tree();
     const scope = cycle.scope.departmentIds.length
       ? new Set(
           cycle.scope.departmentIds.flatMap((id) => [...subtreeOf(id, tree)]),
         )
       : null;
-    const onBooks = (await loadEmployees(database.query())).filter(
-      (e) =>
+    const onBooks = [];
+    for (const e of await loadEmployees(database.query()))
+      if (
         e.employmentType !== 'dispatched' &&
         employedIn(e, cycle.month) &&
-        (!scope || scope.has(e.departmentId)),
+        (!scope || scope.has(e.departmentId)) &&
+        (!scopes || (await scopes.employee(e.id)))
+      )
+        onBooks.push(e);
+    // An action that reads no salary files (import) still needs to know who is
+    // paid and by which structure; one that does reads only the files it reaches.
+    const files = await filesForMonth(
+      ctx,
+      cycle.month,
+      scopes?.grants('employeeSalaries') ? scopes : undefined,
     );
-    const files = await filesForMonth(ctx, cycle.month);
     const allStructures = new Map(
       (await structures.list()).map((s) => [s.id, s]),
     );
@@ -358,14 +412,17 @@ export function createCycleService(
       .map((i) => ({ code: i.code, title: i.title, unit: i.unit }));
   }
 
-  async function prerequisites(cycle: CycleView) {
-    const p = await participants(cycle);
-    const summaries = await database
+  async function prerequisites(cycle: CycleView, scopes?: PayrollScopes) {
+    const p = await participants(cycle, scopes);
+    const allSummaries = await database
       .query()
       .selectFrom('attendanceMonthlySummaries')
-      .select(['employeeId', 'status'])
+      .select(['id', 'employeeId', 'status'])
       .where('month', '=', cycle.month)
       .execute();
+    const summaries = scopes
+      ? await scopes.rows('attendanceMonthlySummaries', allSummaries)
+      : allSummaries;
     const locked = new Set(
       summaries
         .filter((s) => str(s.status) === 'locked')
@@ -378,17 +435,20 @@ export function createCycleService(
         list.push(employee.name);
         unlocked.set(employee.departmentId, list);
       }
-    const enrolments = await insurance.enrolments();
+    const enrolments = await insurance.enrolments(scopes);
     const year = Number(cycle.month.slice(0, 4));
-    const deductions = await database
+    const allDeductions = await database
       .query()
       .selectFrom('employeeTaxDeductions')
-      .select(['employeeId'])
+      .select(['id', 'employeeId'])
       .where('year', '=', year)
       .execute();
+    const deductions = scopes
+      ? await scopes.rows('employeeTaxDeductions', allDeductions)
+      : allDeductions;
     const withDeduction = new Set(deductions.map((d) => str(d.employeeId)));
     const slips = new Map(
-      (await payslipsOf(cycle.id)).map((s) => [s.employeeId, s]),
+      (await payslipsOf(cycle.id, scopes)).map((s) => [s.employeeId, s]),
     );
     const imports = new Map<
       string,
@@ -475,8 +535,9 @@ export function createCycleService(
       cells: Record<string, unknown>;
     }[],
     itemCodes: string[],
+    scopes: PayrollScopes,
   ): Promise<PreviewRow[]> {
-    const p = await participants(cycle);
+    const p = await participants(cycle, scopes);
     const all = new Map(
       (await loadEmployees(database.query())).map((e) => [e.employeeNo, e]),
     );
@@ -523,8 +584,8 @@ export function createCycleService(
   }
 
   /** The importable items of the cycle: calc = imported in any structure its employees use. */
-  async function importableItems(cycle: CycleView) {
-    const p = await participants(cycle);
+  async function importableItems(cycle: CycleView, scopes?: PayrollScopes) {
+    const p = await participants(cycle, scopes);
     const items = new Map<
       string,
       { code: string; title: string; unit: string | null }
@@ -584,9 +645,11 @@ export function createCycleService(
       ImportRecord,
       'id' | 'importedBy' | 'importedAt' | 'rowCount' | 'errorRows'
     >,
+    scopes: PayrollScopes,
   ) {
+    // Only the payslips the import grant reaches are cleared and written.
     const slips = new Map(
-      (await payslipsOf(cycle.id)).map((s) => [s.employeeId, s]),
+      (await payslipsOf(cycle.id, scopes)).map((s) => [s.employeeId, s]),
     );
     const employees = new Map(
       (await loadEmployees(database.query())).map((e) => [e.id, e]),
@@ -827,22 +890,32 @@ export function createCycleService(
     prerequisitesOf: prerequisites,
 
     async list(actor: ActorContext) {
-      await authorizeAction(actor.authz, PAYROLL, 'view');
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'view'),
+      );
       const full = Boolean(
         await tryAuthorizeAction(actor.authz, PAYROLL, 'calculate'),
       );
-      const rows = await database
-        .query()
-        .selectFrom('payrollCycles')
-        .selectAll()
-        .orderBy('month', 'desc')
-        .execute();
-      const cycles = rows
-        .map((row) => toCycle(row as Record<string, unknown>))
-        .filter((c) => full || visibleToApprover(c, actor.userId));
+      const rows = await scopes.rows(
+        'payrollCycles',
+        await database
+          .query()
+          .selectFrom('payrollCycles')
+          .selectAll()
+          .orderBy('month', 'desc')
+          .execute(),
+      );
+      const holders = new Map<string, string[]>();
+      const cycles = [];
+      for (const row of rows) {
+        const cycle = toCycle(row);
+        if (full || (await visibleToApprover(cycle, actor.userId, holders)))
+          cycles.push(cycle);
+      }
       const result = [];
       for (const cycle of cycles) {
-        const slips = await payslipsOf(cycle.id);
+        const slips = await payslipsOf(cycle.id, scopes);
         result.push({
           ...cycle,
           payslips: slips.filter((s) => s.lines).length,
@@ -914,8 +987,11 @@ export function createCycleService(
      * the cycle is editable. Results are recalculated by the next calculation.
      */
     async setBonusCycle(actor: ActorContext, id: string, input: unknown) {
-      await authorizeAction(actor.authz, PAYROLL, 'calculate');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'calculate'),
+      );
+      const cycle = await cycleRow(id, scopes);
       editable(cycle);
       const value =
         input && typeof input === 'object'
@@ -939,7 +1015,7 @@ export function createCycleService(
     },
 
     async detail(actor: ActorContext, id: string) {
-      const { cycle, full } = await viewable(actor, id);
+      const { cycle, full, calculateScopes } = await viewable(actor, id);
       const can = {
         import:
           full &&
@@ -968,8 +1044,12 @@ export function createCycleService(
         );
       return {
         cycle,
-        prerequisites: full ? await prerequisites(cycle) : null,
-        importableItems: full ? await importableItems(cycle) : [],
+        prerequisites: calculateScopes
+          ? await prerequisites(cycle, calculateScopes)
+          : null,
+        importableItems: calculateScopes
+          ? await importableItems(cycle, calculateScopes)
+          : [],
         can,
       };
     },
@@ -979,7 +1059,7 @@ export function createCycleService(
       id: string,
       query: Record<string, string | undefined>,
     ) {
-      const { cycle } = await viewable(actor, id);
+      const { cycle, scopes } = await viewable(actor, id);
       const tree = await ctx.tree();
       const scope = query.departmentId
         ? subtreeOf(query.departmentId, tree)
@@ -988,7 +1068,7 @@ export function createCycleService(
         (await loadEmployees(database.query())).map((e) => [e.id, e]),
       );
       const titles = new Map(tree.map((d) => [d.id, d.title]));
-      const slips = (await payslipsOf(cycle.id))
+      const slips = (await payslipsOf(cycle.id, scopes))
         .filter((s) => !scope || (s.departmentId && scope.has(s.departmentId)))
         .filter((s) => !query.issues || s.issues.length > 0)
         .sort((a, b) =>
@@ -1006,8 +1086,10 @@ export function createCycleService(
     },
 
     async payslip(actor: ActorContext, id: string, payslipId: string) {
-      const { cycle } = await viewable(actor, id);
-      const slip = (await payslipsOf(cycle.id)).find((s) => s.id === payslipId);
+      const { cycle, scopes } = await viewable(actor, id);
+      const slip = (await payslipsOf(cycle.id, scopes)).find(
+        (s) => s.id === payslipId,
+      );
       if (!slip) throw new HrError('NOT_FOUND', 404);
       const employee = (await loadEmployees(database.query())).find(
         (e) => e.id === slip.employeeId,
@@ -1025,12 +1107,12 @@ export function createCycleService(
     },
 
     async anomalies(actor: ActorContext, id: string) {
-      const { cycle } = await viewable(actor, id);
+      const { cycle, scopes } = await viewable(actor, id);
       const employees = new Map(
         (await loadEmployees(database.query())).map((e) => [e.id, e]),
       );
       const list = [];
-      for (const slip of await payslipsOf(cycle.id))
+      for (const slip of await payslipsOf(cycle.id, scopes))
         for (const issue of slip.issues)
           list.push({
             ...issue,
@@ -1047,11 +1129,16 @@ export function createCycleService(
     },
 
     async template(actor: ActorContext, id: string, code: string) {
-      await authorizeAction(actor.authz, PAYROLL, 'import');
-      const cycle = await cycleRow(id);
-      const item = (await importableItems(cycle)).find((i) => i.code === code);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'import'),
+      );
+      const cycle = await cycleRow(id, scopes);
+      const item = (await importableItems(cycle, scopes)).find(
+        (i) => i.code === code,
+      );
       if (!item) throw new HrError('IMPORT_ITEMS_UNKNOWN', 400);
-      const p = await participants(cycle);
+      const p = await participants(cycle, scopes);
       const rows: unknown[][] = [
         ['工号', '姓名', `${item.title}（${item.code}）`],
       ];
@@ -1069,12 +1156,20 @@ export function createCycleService(
     },
 
     async previewImport(actor: ActorContext, id: string, buffer: Uint8Array) {
-      await authorizeAction(actor.authz, PAYROLL, 'import');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'import'),
+      );
+      const cycle = await cycleRow(id, scopes);
       editable(cycle);
-      const items = await importableItems(cycle);
+      const items = await importableItems(cycle, scopes);
       const parsed = parseImportWorkbook(buffer, items);
-      const rows = await matchRows(cycle, parsed.rows, parsed.itemCodes);
+      const rows = await matchRows(
+        cycle,
+        parsed.rows,
+        parsed.itemCodes,
+        scopes,
+      );
       return {
         items: items.filter((i) => parsed.itemCodes.includes(i.code)),
         unknownColumns: parsed.unknownColumns,
@@ -1090,12 +1185,20 @@ export function createCycleService(
       file: { name: string; bytes: Uint8Array },
       options: { skipInvalid: boolean },
     ) {
-      await authorizeAction(actor.authz, PAYROLL, 'import');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'import'),
+      );
+      const cycle = await cycleRow(id, scopes);
       editable(cycle);
-      const items = await importableItems(cycle);
+      const items = await importableItems(cycle, scopes);
       const parsed = parseImportWorkbook(file.bytes, items);
-      const rows = await matchRows(cycle, parsed.rows, parsed.itemCodes);
+      const rows = await matchRows(
+        cycle,
+        parsed.rows,
+        parsed.itemCodes,
+        scopes,
+      );
       const bad = rows.filter((r) => r.errors.length);
       if (bad.length && !options.skipInvalid)
         throw new HrError('IMPORT_HAS_ERRORS', 400, {
@@ -1105,22 +1208,31 @@ export function createCycleService(
         name: file.name,
         bytes: file.bytes,
       });
-      return writeImport(actor, cycle, rows, {
-        itemCodes: parsed.itemCodes,
-        source: 'excel',
-        fileId,
-        employeeNos: rows.map((r) => r.employeeNo).filter(Boolean),
-      });
+      return writeImport(
+        actor,
+        cycle,
+        rows,
+        {
+          itemCodes: parsed.itemCodes,
+          source: 'excel',
+          fileId,
+          employeeNos: rows.map((r) => r.employeeNo).filter(Boolean),
+        },
+        scopes,
+      );
     },
 
     /** 接口导入: the same checks as Excel, for an API key bound to a holder of talent.payroll:import. */
     async importApi(actor: ActorContext, id: string, input: unknown) {
-      await authorizeAction(actor.authz, PAYROLL, 'import');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'import'),
+      );
+      const cycle = await cycleRow(id, scopes);
       editable(cycle);
       const parsed = apiImportSchema.safeParse(input);
       if (!parsed.success) throw new HrError('INVALID_INPUT', 400);
-      const items = await importableItems(cycle);
+      const items = await importableItems(cycle, scopes);
       const codes = [
         ...new Set(parsed.data.rows.flatMap((r) => Object.keys(r.values))),
       ];
@@ -1136,30 +1248,40 @@ export function createCycleService(
           cells: r.values,
         })),
         codes,
+        scopes,
       );
       const bad = rows.filter((r) => r.errors.length);
       if (bad.length)
         throw new HrError('IMPORT_HAS_ERRORS', 400, {
           rows: bad.map((r) => ({ row: r.row, errors: r.errors })),
         });
-      return writeImport(actor, cycle, rows, {
-        itemCodes: codes,
-        source: 'api',
-        fileId: null,
-        employeeNos: rows.map((r) => r.employeeNo),
-      });
+      return writeImport(
+        actor,
+        cycle,
+        rows,
+        {
+          itemCodes: codes,
+          source: 'api',
+          fileId: null,
+          employeeNos: rows.map((r) => r.employeeNo),
+        },
+        scopes,
+      );
     },
 
     async addManualItem(actor: ActorContext, id: string, input: unknown) {
-      await authorizeAction(actor.authz, PAYROLL, 'calculate');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'calculate'),
+      );
+      const cycle = await cycleRow(id, scopes);
       editable(cycle);
       const parsed = manualSchema.safeParse(input);
       if (!parsed.success)
         throw new HrError('INVALID_INPUT', 400, {
           fields: parsed.error.issues.map((issue) => issue.path.join('.')),
         });
-      const slip = (await payslipsOf(cycle.id)).find(
+      const slip = (await payslipsOf(cycle.id, scopes)).find(
         (s) => s.employeeId === parsed.data.employeeId,
       );
       if (!slip) throw new HrError('PAYSLIP_NOT_FOUND', 404);
@@ -1188,8 +1310,11 @@ export function createCycleService(
     },
 
     async removeManualItem(actor: ActorContext, id: string, input: unknown) {
-      await authorizeAction(actor.authz, PAYROLL, 'calculate');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'calculate'),
+      );
+      const cycle = await cycleRow(id, scopes);
       editable(cycle);
       const body = z
         .object({
@@ -1199,7 +1324,7 @@ export function createCycleService(
         .strict()
         .safeParse(input);
       if (!body.success) throw new HrError('INVALID_INPUT', 400);
-      const slip = (await payslipsOf(cycle.id)).find(
+      const slip = (await payslipsOf(cycle.id, scopes)).find(
         (s) => s.employeeId === body.data.employeeId,
       );
       if (!slip || !slip.manualItems[body.data.index])
@@ -1222,40 +1347,59 @@ export function createCycleService(
 
     /** 计算: refuses until every participant's summary is locked; may be repeated until submitted. */
     async calculate(actor: ActorContext, id: string) {
-      await authorizeAction(actor.authz, PAYROLL, 'calculate');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'calculate'),
+      );
+      const cycle = await cycleRow(id, scopes);
       editable(cycle);
-      const check = await prerequisites(cycle);
+      const check = await prerequisites(cycle, scopes);
       if (!check.attendance.ready)
         throw new HrError('PAYROLL_ATTENDANCE_NOT_LOCKED', 409, {
           departments: check.attendance.unlocked.map((d) => d.departmentTitle),
           unlocked: check.attendance.unlocked,
         });
-      const p = await participants(cycle);
+      const p = await participants(cycle, scopes);
+      // A calculation grant limited to some employees calculates those and
+      // leaves the other payslips of the cycle as they are.
+      const allSlips = await payslipsOf(cycle.id);
+      const reachable = new Set(
+        (await scopes.rows('payslips', allSlips)).map((s) => s.id),
+      );
+      const outOfScope = new Set(
+        allSlips.filter((s) => !reachable.has(s.id)).map((s) => s.employeeId),
+      );
+      p.employees = p.employees.filter((e) => !outOfScope.has(e.id));
       const query = database.query();
       const settings = await ctx.settings();
       const calendar = await readCalendar(query);
       const standardDayHours = await readStandardDayHours(query);
       const summaries = new Map(
         (
-          await query
-            .selectFrom('attendanceMonthlySummaries')
-            .selectAll()
-            .where('month', '=', cycle.month)
-            .where('status', '=', 'locked')
-            .execute()
+          await scopes.rows(
+            'attendanceMonthlySummaries',
+            await query
+              .selectFrom('attendanceMonthlySummaries')
+              .selectAll()
+              .where('month', '=', cycle.month)
+              .where('status', '=', 'locked')
+              .execute(),
+          )
         ).map((s) => [str(s.employeeId), s as Record<string, unknown>]),
       );
-      const enrolments = await insurance.enrolments();
-      const plans = await insurance.plans();
+      const enrolments = await insurance.enrolments(scopes);
+      const plans = await insurance.plans(scopes);
       const year = Number(cycle.month.slice(0, 4));
       const deductions = new Map(
         (
-          await query
-            .selectFrom('employeeTaxDeductions')
-            .selectAll()
-            .where('year', '=', year)
-            .execute()
+          await scopes.rows(
+            'employeeTaxDeductions',
+            await query
+              .selectFrom('employeeTaxDeductions')
+              .selectAll()
+              .where('year', '=', year)
+              .execute(),
+          )
         ).map((d) => [
           str(d.employeeId),
           json<
@@ -1269,7 +1413,9 @@ export function createCycleService(
         ]),
       );
       const existing = new Map(
-        (await payslipsOf(cycle.id)).map((s) => [s.employeeId, s]),
+        allSlips
+          .filter((s) => reachable.has(s.id))
+          .map((s) => [s.employeeId, s]),
       );
       // V4-12: perf.coefficient from the bonus cycle's final ratings (0 without one).
       const perf =
@@ -1517,8 +1663,11 @@ export function createCycleService(
     },
 
     async submit(actor: ActorContext, id: string) {
-      await authorizeAction(actor.authz, PAYROLL, 'submit');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'submit'),
+      );
+      const cycle = await cycleRow(id, scopes);
       if (cycle.status !== 'calculated' && cycle.status !== 'reviewing')
         throw new HrError(
           cycle.status === 'draft'
@@ -1581,10 +1730,13 @@ export function createCycleService(
     },
 
     async decide(actor: ActorContext, id: string, input: unknown) {
-      await authorizeAction(actor.authz, PAYROLL, 'approve');
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'approve'),
+      );
       const parsed = decisionSchema.safeParse(input);
       if (!parsed.success) throw new HrError('INVALID_INPUT', 400);
-      const cycle = await cycleRow(id);
+      const cycle = await cycleRow(id, scopes);
       if (cycle.status !== 'pendingApproval')
         throw new HrError('PAYROLL_NOT_PENDING', 409);
       const { steps, outcome } = await decideStep(
@@ -1632,8 +1784,11 @@ export function createCycleService(
 
     /** 发布: employees see their payslips and are told, without amounts; the export files become available. */
     async publish(actor: ActorContext, id: string) {
-      await authorizeAction(actor.authz, PAYROLL, 'publish');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'publish'),
+      );
+      const cycle = await cycleRow(id, scopes);
       if (cycle.status !== 'approved')
         throw new HrError('PAYROLL_NOT_APPROVED', 409);
       const now = new Date();
@@ -1680,8 +1835,11 @@ export function createCycleService(
     },
 
     async close(actor: ActorContext, id: string) {
-      await authorizeAction(actor.authz, PAYROLL, 'publish');
-      const cycle = await cycleRow(id);
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'publish'),
+      );
+      const cycle = await cycleRow(id, scopes);
       if (cycle.status !== 'published')
         throw new HrError('PAYROLL_NOT_PUBLISHED', 409);
       await database
@@ -1695,20 +1853,24 @@ export function createCycleService(
 
     /** 银行代发 / 个税申报明细 / 记账汇总, as CSV; only after publishing; every download is logged. */
     async exportFile(actor: ActorContext, id: string, kind: string) {
-      await authorizeAction(actor.authz, PAYROLL, 'export');
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, PAYROLL, 'export'),
+      );
       if (!(EXPORT_KINDS as readonly string[]).includes(kind))
         throw new HrError('NOT_FOUND', 404);
-      const cycle = await cycleRow(id);
+      const cycle = await cycleRow(id, scopes);
       if (cycle.status !== 'published' && cycle.status !== 'closed')
         throw new HrError('PAYROLL_NOT_PUBLISHED', 409);
       const settings = await ctx.settings();
-      const slips = (await payslipsOf(cycle.id)).filter((s) => s.lines);
+      // Only the payslips, salary files and fields the export grant reaches.
+      const slips = (await payslipsOf(cycle.id, scopes)).filter((s) => s.lines);
       const employees = new Map(
         (await loadEmployees(database.query())).map((e) => [e.id, e]),
       );
       const tree = await ctx.tree();
       const titles = new Map(tree.map((d) => [d.id, d.title]));
-      const files = await filesForMonth(ctx, cycle.month);
+      const files = await filesForMonth(ctx, cycle.month, scopes);
       const ordered = slips.sort((a, b) =>
         (employees.get(a.employeeId)?.employeeNo ?? '').localeCompare(
           employees.get(b.employeeId)?.employeeNo ?? '',
@@ -1741,12 +1903,21 @@ export function createCycleService(
           rows.push(settings.bankExport.columns.map((c) => value[c]));
         }
       } else if (kind === 'tax') {
+        const people = await scopes.of('employees');
         const idRows = await database
           .query()
           .selectFrom('employees')
           .select(['id', 'idType', 'idNumber'])
           .execute();
-        const ids = new Map(idRows.map((r) => [str(r.id), r]));
+        const ids = new Map(
+          idRows.map((r) => [
+            str(r.id),
+            {
+              idType: people.readable('idType') ? r.idType : null,
+              idNumber: people.readable('idNumber') ? r.idNumber : null,
+            },
+          ]),
+        );
         rows = [
           [
             '工号',

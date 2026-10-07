@@ -218,6 +218,25 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
     );
   }
 
+  /**
+   * Enrolling or removing someone else: the session's owner or instructor
+   * (or a manager of sessions, HR), or the head of the person's department.
+   * The `employees` scope of `enroll` alone let an instructor, whose scope is
+   * every employee, move anyone in or out of any session (readiness review
+   * 2026-10-07).
+   */
+  async function mayEnrollOther(
+    ctx: ActorContext,
+    sessionId: string,
+    employeeId: string,
+  ): Promise<boolean> {
+    if (await ownsSession(ctx, 'markAttendance', sessionId)) return true;
+    const employee = await platform.employee(employeeId);
+    if (!employee?.departmentId) return false;
+    const managed = await platform.organization.managedDepartments(ctx.userId);
+    return managed.includes(employee.departmentId);
+  }
+
   async function counts(sessionIds: readonly string[]) {
     const rows = sessionIds.length
       ? await database
@@ -586,6 +605,11 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         .withPolicy(policyOf(policies, 'employees'))
         .findOne({ filter: { id: targetId } });
       if (!allowed) throw new HrError('FORBIDDEN', 403);
+      if (
+        targetId !== own?.id &&
+        !(await mayEnrollOther(ctx, sessionId, targetId))
+      )
+        throw new HrError('FORBIDDEN', 403);
       const employee = await platform.employee(targetId);
       if (!employee || employee.status === 'leave')
         throw new HrError('EMPLOYEE_NOT_FOUND', 404);
@@ -693,6 +717,11 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         .withPolicy(policyOf(policies, 'employees'))
         .findOne({ filter: { id: targetId } });
       if (!allowed) throw new HrError('FORBIDDEN', 403);
+      if (
+        targetId !== own?.id &&
+        !(await mayEnrollOther(ctx, sessionId, targetId))
+      )
+        throw new HrError('FORBIDDEN', 403);
       const session = await sessionRow(sessionId);
       if (session.status !== 'scheduled')
         throw new HrError('SESSION_CLOSED', 409);

@@ -4,15 +4,18 @@
  * issue starts the analyst's training check; a completed task may complete a
  * training recommendation).
  */
-import { authorizeAction, policyOf } from '../authorize.js';
+import { authorizeAction, coversAllRecords, policyOf } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
-import { str } from '../shared.js';
+import { HrError, str } from '../shared.js';
 import { createAnalystWork } from './analyst.js';
 import { createAuditService } from './audit.js';
 import { createProfileReads, type ProfileDeps } from './context.js';
 import { createDecisionService } from './decisions.js';
 import { createProfileInsights } from './insights.js';
 import { createSignalService } from './signals.js';
+
+/** `hrFiles.purpose` of a stored customer audit pack. */
+export const AUDIT_PACK_PURPOSE = 'auditPack';
 
 export function createProfileServices(deps: ProfileDeps) {
   const reads = createProfileReads(deps.platform);
@@ -140,17 +143,62 @@ export function createProfileServices(deps: ProfileDeps) {
       return true;
     },
 
-    /** Keeps a generated audit pack for its download link. */
-    storeAuditPack(pack: {
-      bytes: Uint8Array;
-      fileName: string;
-    }): Promise<string> {
+    /**
+     * Keeps a generated audit pack for its download link, marked as an audit
+     * pack and, when a person built it, as theirs (`hrFiles.purpose` /
+     * `uploadedByUserId`). The id is a random UUID.
+     */
+    storeAuditPack(
+      pack: {
+        bytes: Uint8Array;
+        fileName: string;
+      },
+      ownerUserId?: string,
+    ): Promise<string> {
       return reads.storeFile(deps.drive(), {
         folder: 'audit-packs',
         name: pack.fileName,
         bytes: pack.bytes,
         mimeType: 'application/zip',
+        purpose: AUDIT_PACK_PURPOSE,
+        uploadedByUserId: ownerUserId,
       });
+    },
+
+    /**
+     * A stored audit pack for `GET /api/talent/audit/packs/:fileId`: the
+     * caller needs talent.audit exportAuditPack, and the pack must be one
+     * they built themselves — a pack holds the people of the scope its
+     * builder could read — unless their grant reaches every employee. Any
+     * other file, or a pack of someone else, is not found.
+     */
+    async auditPackFor(ctx: ActorContext, fileId: string) {
+      const policies = await authorizeAction(
+        ctx.authz,
+        'talent.audit',
+        'exportAuditPack',
+      );
+      const row = await database
+        .query()
+        .selectFrom('hrFiles')
+        .select(['id', 'filename', 'purpose', 'uploadedByUserId'])
+        .where('id', '=', fileId)
+        .executeTakeFirst();
+      // Packs from before the purpose column carry only their file name, and no builder.
+      const isPack =
+        row &&
+        (str(row.purpose) === AUDIT_PACK_PURPOSE ||
+          (!row.purpose && str(row.filename).startsWith('audit-pack')));
+      if (
+        !row ||
+        !isPack ||
+        (str(row.uploadedByUserId) !== ctx.userId &&
+          !coversAllRecords(policyOf(policies, 'employees')))
+      )
+        throw new HrError('NOT_FOUND', 404);
+      const file = await reads.readFile(deps.drive(), fileId);
+      if (!file) throw new HrError('NOT_FOUND', 404);
+      return file;
     },
 
     /** 09:00 rules: expiring undecided drafts, and completing recommendations (catch-up). */

@@ -86,6 +86,23 @@ const MP4: FileFormat = {
 
 const MB = 1024 * 1024;
 
+/** 实操拍照 (talent-review practicals): the largest photo or video a record takes. */
+export const PRACTICAL_MEDIA_MAX = 10 * MB;
+
+/**
+ * 实操拍照: what the first bytes say a practical record's attachment is — a
+ * JPEG or PNG photo or an MP4 video — with the type and extension to store,
+ * or null for anything else. The declared type and name are not trusted.
+ */
+export function practicalMedia(
+  head: Uint8Array,
+): { mimeType: string; ext: string } | null {
+  if (JPEG.sniff(head)) return { mimeType: 'image/jpeg', ext: 'jpg' };
+  if (PNG.sniff(head)) return { mimeType: 'image/png', ext: 'png' };
+  if (MP4.sniff(head)) return { mimeType: 'video/mp4', ext: 'mp4' };
+  return null;
+}
+
 export interface HrFilePurposeRule {
   /** The permission the upload needs. */
   readonly resource: string;

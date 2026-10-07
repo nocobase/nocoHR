@@ -303,6 +303,8 @@ const BILL_FIELDS = [
   'confirmedBy',
   'confirmedAt',
   'uploads',
+  // V2-06 邮件往来: the billing mailbox message the bill came from (read with the bill).
+  'sourceMailId',
   'createdAt',
   'updatedAt',
 ];
@@ -428,6 +430,13 @@ export const socialInsuranceResource = defineCompositeResource(
           .grant('employeeSocialInsurances', enrolmentsWrite)
           .grant('employeeTaxDeductions', deductionsWrite)
           .grant('payslips', payslips),
+      )
+      // The 增减员 file (personal data with bases) is an export, granted on its own like the payroll files.
+      .action('export', (a) =>
+        a
+          .title(label('payroll.authz.payroll.export'))
+          .grant('employees', employees)
+          .grant('employeeSocialInsurances', enrolments),
       ),
 );
 

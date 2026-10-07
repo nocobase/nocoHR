@@ -192,6 +192,8 @@ export const learningApiRoutes: AppApiRouteContribution<Application> =
         headers: {
           'content-type': file.mimeType || 'application/octet-stream',
           'content-disposition': contentDisposition(file.filename),
+          // The stored type is the uploader's; the browser must not guess another from the bytes.
+          'x-content-type-options': 'nosniff',
         },
       });
     });

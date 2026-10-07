@@ -5,7 +5,6 @@
 // 经飞书卡片), a second press reports it handled, a non-approver or another user changes nothing, a forged or
 // unsigned callback does nothing, a 本人提交 card creates a pending request, and 通知设置 turns the push off. Each run
 // boots the real standalone server on a throwaway SQLite database with migrations and seeds.
-import { createHmac } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -16,6 +15,7 @@ import {
   createStandaloneServer,
   type StandaloneServer,
 } from '../../server/standalone.ts';
+import { signCallback } from '../helpers/callback-signature.ts';
 
 // The database task runner imports seed files through Node itself, outside Vite. Node strips their types but does
 // not map a relative `.js` specifier to its `.ts` source the way `pnpm dev` and the compiled build do, so the seeds'
@@ -203,10 +203,11 @@ async function press(
     'content-type': 'application/json',
     origin: 'http://localhost',
   };
-  if (secret)
-    headers['x-nocohr-signature'] = createHmac('sha256', secret)
-      .update(raw)
-      .digest('hex');
+  if (secret) {
+    const ts = String(Math.floor(Date.now() / 1000));
+    headers['x-nocohr-timestamp'] = ts;
+    headers['x-nocohr-signature'] = signCallback(secret, ts, raw);
+  }
   const response = await server.fetch(
     new Request(`${base}/api/im-callback/feishu/card`, {
       method: 'POST',

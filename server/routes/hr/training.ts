@@ -263,7 +263,8 @@ export const trainingApiRoutes: AppApiRouteContribution<Application> =
         headers: {
           'content-type':
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'content-disposition': `attachment; filename="${file.filename}"`,
+          // The name carries the session title: an ASCII fallback plus the UTF-8 name, never raw.
+          'content-disposition': `attachment; filename="${file.filename.replace(/[^\x20-\x7e]/gu, '_').replace(/["\\]/gu, '_')}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
         },
       });
     });

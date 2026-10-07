@@ -673,6 +673,124 @@ describe('Mail plugin accounts behind the business mailboxes', () => {
     );
   });
 
+  it('binds a person’s own mailbox only after they allowed it as a business mailbox, and tells them', async () => {
+    const container = server.application.container;
+    const { mailServiceToken: pluginMail } =
+      await import('@nocobase/app-plugin-mail/server');
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const { notificationServiceToken } =
+      await import('@nocobase/app-plugin-notification');
+    const owner = await container
+      .resolve(databaseManagerToken)
+      .query()
+      .selectFrom('user')
+      .select(['id'])
+      .where('username', '=', 'emp_njl_1')
+      .executeTakeFirstOrThrow();
+    const ownerId = String(owner.id);
+    // emp_njl_1 connects a mailbox of their own (我的邮箱).
+    const personal = await container.resolve(pluginMail).connectAccount(
+      { actorId: ownerId },
+      {
+        provider: { type: 'local-files', name: 'local' },
+        address: 'personal-njl1@qiheng.test',
+        username: 'personal-njl1@qiheng.test',
+        password: 'local',
+        initialSyncReceivedAfter: new Date().toISOString(),
+      },
+    );
+    const listed = async () =>
+      ((await call('hr01', 'GET', '/mail/accounts')).json.data as Json[]).map(
+        (a) => a.id,
+      );
+    expect(await listed()).not.toContain(personal.id);
+    const bind = async () => {
+      const current = await call('hr01', 'GET', '/mail/settings');
+      const value = current.json.data.value as Json;
+      return call('hr01', 'PUT', '/mail/settings', {
+        revision: current.json.data.revision,
+        value: {
+          ...value,
+          mailboxes: {
+            ...value.mailboxes,
+            hr: {
+              ...value.mailboxes.hr,
+              accountId: personal.id,
+              ownerUserId: ownerId,
+            },
+          },
+        },
+      });
+    };
+    const refused = await bind();
+    expect(refused.status).toBe(400);
+    expect(refused.json.error?.code ?? refused.json.code).toBe(
+      'MAIL_ACCOUNT_NOT_OFFERED',
+    );
+    // Only the owner offers it.
+    expect(
+      (
+        await call('emp_njl_2', 'PUT', `/mail/mine/offers/${personal.id}`, {
+          offered: true,
+        })
+      ).status,
+    ).toBe(404);
+    const offered = await call(
+      'emp_njl_1',
+      'PUT',
+      `/mail/mine/offers/${personal.id}`,
+      { offered: true },
+    );
+    expect(offered.status).toBe(200);
+    expect(offered.json.data).toEqual([personal.id]);
+    expect(await listed()).toContain(personal.id);
+    const bound = await bind();
+    expect(bound.status).toBe(200);
+    const boundAt = String(bound.json.data.value.mailboxes.hr.boundAt);
+    expect(
+      await container
+        .resolve(notificationServiceToken)
+        .getByIdempotencyKey(`hr:mail:bound:hr:${personal.id}:${boundAt}`),
+    ).toBeTruthy();
+    // While it serves a purpose the offer stays.
+    expect(
+      (
+        await call('emp_njl_1', 'PUT', `/mail/mine/offers/${personal.id}`, {
+          offered: false,
+        })
+      ).status,
+    ).toBe(409);
+    // Back to the demo's own hr mailbox, which the service offered when it connected it.
+    const current = await call('hr01', 'GET', '/mail/settings');
+    const value = current.json.data.value as Json;
+    const hrAccount = (
+      (await call('hr01', 'GET', '/mail/accounts')).json.data as Json[]
+    ).find((a) => a.address === 'hr@qiheng.test');
+    expect(hrAccount).toBeTruthy();
+    const restored = await call('hr01', 'PUT', '/mail/settings', {
+      revision: current.json.data.revision,
+      value: {
+        ...value,
+        mailboxes: {
+          ...value.mailboxes,
+          hr: {
+            ...value.mailboxes.hr,
+            accountId: hrAccount!.id,
+            ownerUserId: hrAccount!.ownerUserId,
+          },
+        },
+      },
+    });
+    expect(restored.status).toBe(200);
+    expect(
+      (
+        await call('emp_njl_1', 'PUT', `/mail/mine/offers/${personal.id}`, {
+          offered: false,
+        })
+      ).json.data,
+    ).toEqual([]);
+  });
+
   it('takes only mail received after an administrator binds the account', async () => {
     const save = async (mailbox: Json) => {
       const current = await call('hr01', 'GET', '/mail/settings');

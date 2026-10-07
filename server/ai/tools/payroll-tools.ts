@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { authorizeAction, scopeForUser } from '../../providers/hr/authorize.js';
 import { HrError, str } from '../../providers/hr/shared.js';
+import { payrollScopes } from '../../providers/hr/payroll/scope.js';
 import { payrollServicesToken } from '../../providers/hr/tokens.js';
 
 /**
@@ -153,18 +154,30 @@ export const listPayrollAnomalies = defineTools({
   invoke: async (ctx, args: { cycleId: string }) => {
     try {
       const actor = await actorOf(ctx);
-      await authorizeAction(actor.authz, 'talent.payroll', 'view');
+      const scopes = payrollScopes(
+        ctx.deps.payroll.context.platform.database,
+        await authorizeAction(actor.authz, 'talent.payroll', 'view'),
+      );
+      // The cycle and the payslips the caller's view grant reaches.
+      await ctx.deps.payroll.cycles.cycleRow(args.cycleId, scopes);
+      const visible = new Set(
+        (await ctx.deps.payroll.cycles.payslipsOf(args.cycleId, scopes)).map(
+          (slip) => slip.id,
+        ),
+      );
       const report = await ctx.deps.payroll.anomalies(args.cycleId);
       return {
         status: 'success',
         content: {
           month: report.month,
-          issues: report.issues.map((i) => ({
-            key: i.issue.key,
-            type: i.issue.type,
-            employee: i.name,
-            facts: i.issue.facts,
-          })),
+          issues: report.issues
+            .filter((i) => visible.has(i.payslipId))
+            .map((i) => ({
+              key: i.issue.key,
+              type: i.issue.type,
+              employee: i.name,
+              facts: i.issue.facts,
+            })),
         },
       };
     } catch (error) {
@@ -206,12 +219,18 @@ export const savePayrollReview = defineTools({
   ) => {
     try {
       const actor = await actorOf(ctx);
-      await authorizeAction(actor.authz, 'talent.payroll', 'calculate');
+      const database = ctx.deps.payroll.context.platform.database;
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, 'talent.payroll', 'calculate'),
+      );
+      await ctx.deps.payroll.cycles.cycleRow(args.cycleId, scopes);
       const notes = new Map(args.notes.map((n) => [n.key, n.note.trim()]));
       let saved = 0;
-      const database = ctx.deps.payroll.context.platform.database;
+      // Only the payslips the caller's calculation grant reaches.
       for (const slip of await ctx.deps.payroll.cycles.payslipsOf(
         args.cycleId,
+        scopes,
       )) {
         if (!slip.issues.some((i) => notes.has(i.key))) continue;
         const issues = slip.issues.map((i) => {

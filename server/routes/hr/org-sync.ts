@@ -51,12 +51,17 @@ export const orgSyncRoutes: AppApiRouteContribution<Application> =
     const core = () => app.container.resolve(hrCoreServiceToken);
 
     const routes = new Hono<HrEnv>();
-    routes.use(
-      '*',
-      auth.required(),
-      authz.middleware(),
-      bodyLimit({ maxSize: 64 * 1024 }),
-    );
+    // Only the prefixes this router owns: it is mounted at /talent, so a
+    // `use('*')` would put its 64 KB body limit on every /api/talent/* route
+    // registered after it (practical photos, question imports).
+    for (const prefix of ['/org-sync', '/position-aliases', '/job-events'])
+      for (const path of [prefix, `${prefix}/*`])
+        routes.use(
+          path,
+          auth.required(),
+          authz.middleware(),
+          bodyLimit({ maxSize: 64 * 1024 }),
+        );
     installErrorHandler(routes);
 
     routes.get('/org-sync', async (c) =>
@@ -282,6 +287,7 @@ export const orgSyncRoutes: AppApiRouteContribution<Application> =
           c.req.param('provider'),
           raw,
           c.req.header('x-nocohr-signature'),
+          c.req.header('x-nocohr-timestamp'),
         );
         return c.json({ data: { outcome } }, 202);
       },

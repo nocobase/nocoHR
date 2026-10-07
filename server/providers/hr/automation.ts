@@ -13,7 +13,11 @@
  */
 import type { DatabaseManager } from '@nocobase/db';
 
-import { authorizeAction, scopeForUser } from './authorize.js';
+import {
+  authorizeAction,
+  scopeForUser,
+  tryAuthorizeAction,
+} from './authorize.js';
 import type { ActorContext } from './framework-service.js';
 import type { Platform } from './platform.js';
 import { json } from './platform.js';
@@ -732,6 +736,12 @@ export interface AutomationService {
     filters: { task?: string; limit?: number },
   ): Promise<AutomationRunView[]>;
   getRun(ctx: ActorContext, id: string): Promise<AutomationRunView>;
+  /**
+   * Whether the caller may make this user the automation's owner: the task
+   * runs with its owner's permissions, so the owner is the caller or a peer
+   * who may configure the automation too.
+   */
+  mayOwn(ctx: ActorContext, key: string, userId: string): Promise<boolean>;
   /** Authorizes a person starting a scheduled automation by hand. */
   assertCanRun(ctx: ActorContext, key: string): Promise<void>;
   /** Authorizes retrying a failed run; answers its task and trigger object. */
@@ -1065,6 +1075,13 @@ export function createAutomationService(
         const owner = await platform.employeeOfUser(next.ownerUserId);
         if (!owner || owner.status === 'leave')
           throw new HrError('AUTOMATION_OWNER_INVALID', 400);
+        // Nobody hands a task to someone else's wider access (mayOwn). An
+        // unchanged owner (set by a seed or a peer) stays.
+        if (
+          next.ownerUserId !== current.ownerUserId &&
+          !(await service.mayOwn(ctx, key, next.ownerUserId))
+        )
+          throw new HrError('AUTOMATION_OWNER_NOT_PERMITTED', 403);
       }
       const now = new Date();
       const values = {
@@ -1091,6 +1108,18 @@ export function createAutomationService(
           .values({ id: key, ...values, createdAt: now })
           .execute();
       return toSetting(key, await adoptionFor([key]));
+    },
+
+    async mayOwn(ctx, key, userId) {
+      const def = definition(key);
+      if (userId === ctx.userId) return true;
+      return Boolean(
+        await tryAuthorizeAction(
+          await scopeForUser(platform.authz, userId),
+          def.composite,
+          'configure',
+        ),
+      );
     },
 
     async listRuns(ctx, filters) {

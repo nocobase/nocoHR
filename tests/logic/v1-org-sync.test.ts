@@ -15,6 +15,7 @@ import {
   createStandaloneServer,
   type StandaloneServer,
 } from '../../server/standalone.ts';
+import { signCallback, signedHeaders } from '../helpers/callback-signature.ts';
 
 // The database task runner imports seed files through Node itself, outside Vite. Node strips their types but does
 // not map a relative `.js` specifier to its `.ts` source the way `pnpm dev` and the compiled build do, so the seeds'
@@ -628,27 +629,61 @@ describe('boundaries', () => {
 
   it('drops callbacks with a bad signature and accepts a signed one once', async () => {
     const body = JSON.stringify({ eventId: 'evt-1' });
-    const post = (signature: string) =>
+    const post = (headers: Record<string, string>) =>
       server.fetch(
         new Request(`${base}/api/org-sync-callback/feishu`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            'x-nocohr-signature': signature,
             origin: 'http://localhost',
+            ...headers,
           },
           body,
         }),
       );
-    expect((await post('forged')).status).toBe(403);
-    const good = createHmac('sha256', 'test-callback-secret')
-      .update(body)
-      .digest('hex');
+    const ts = String(Math.floor(Date.now() / 1000));
+    expect(
+      (await post({ 'x-nocohr-timestamp': ts, 'x-nocohr-signature': 'forged' }))
+        .status,
+    ).toBe(403);
+    // The body alone signed, as before the timestamp was required: refused.
+    expect(
+      (
+        await post({
+          'x-nocohr-signature': createHmac('sha256', 'test-callback-secret')
+            .update(body)
+            .digest('hex'),
+        })
+      ).status,
+    ).toBe(403);
+    const good = signedHeaders('test-callback-secret', body);
     const first = await post(good);
     expect(first.status).toBe(202);
     expect(((await first.json()) as Json).data.outcome).toBe('accepted');
+    // The same callback again within the window runs nothing.
     expect(((await (await post(good)).json()) as Json).data.outcome).toBe(
       'duplicate',
+    );
+  });
+
+  it('refuses a captured callback replayed after the time window', async () => {
+    const body = JSON.stringify({ eventId: 'evt-replayed' });
+    const old = Math.floor(Date.now() / 1000) - 600;
+    const response = await server.fetch(
+      new Request(`${base}/api/org-sync-callback/feishu`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: 'http://localhost',
+          'x-nocohr-timestamp': String(old),
+          'x-nocohr-signature': signCallback('test-callback-secret', old, body),
+        },
+        body,
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(((await response.json()) as Json).code).toBe(
+      'ORG_SYNC_BAD_SIGNATURE',
     );
   });
 });

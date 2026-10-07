@@ -29,6 +29,10 @@ import feishu from './feishu.js';
 import businessMail from './business-mail.js';
 // The Mail plugin (@nocobase/app-plugin-mail): user mailboxes and their providers.
 import mail from './mail.js';
+// The Content-Security-Policy of the application's pages (readiness review 2026-10-07).
+import contentSecurityPolicy from './content-security-policy.js';
+// What the public endpoints trust: proxies for client addresses, callback secrets (readiness review 2026-10-07).
+import publicEndpoints from './public-endpoints.js';
 
 const defaultConfigs: AppConfigFactory<{
   auth: ReturnType<typeof auth>;
@@ -54,6 +58,8 @@ const defaultConfigs: AppConfigFactory<{
   feishu: ReturnType<typeof feishu>;
   businessMail: ReturnType<typeof businessMail>;
   mail: ReturnType<typeof mail>;
+  contentSecurityPolicy: ReturnType<typeof contentSecurityPolicy>;
+  publicEndpoints: ReturnType<typeof publicEndpoints>;
 }> = defaultAppConfigs({
   auth,
   authorization,
@@ -78,6 +84,8 @@ const defaultConfigs: AppConfigFactory<{
   feishu,
   businessMail,
   mail,
+  contentSecurityPolicy,
+  publicEndpoints,
 });
 
 export default defaultConfigs;

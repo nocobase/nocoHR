@@ -3,6 +3,10 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import { Link } from 'react-router';
 import remarkGfm from 'remark-gfm';
 
+import {
+  isSafeImageSrc,
+  safeMarkdownUrlTransform,
+} from '@/extensions/nocobase-ai/shared/safe-markdown-urls';
 import { cn } from '@/lib/utils';
 
 /**
@@ -10,7 +14,10 @@ import { cn } from '@/lib/utils';
  * tokens. Raw HTML is not rendered, so content cannot inject markup.
  * Application paths (`/talent/...`, as in the HR assistant's report links)
  * navigate inside the app, so the deployment base path is kept; other links
- * open in a new tab.
+ * open in a new tab. Images load only from this application's origin (or
+ * inline `data:` images); any other image is shown as a link, so a document or
+ * a model's answer cannot send data to another host by itself (readiness
+ * review 2026-10-07).
  */
 const COMPONENTS: Components = {
   a: ({ href, children }) =>
@@ -21,6 +28,19 @@ const COMPONENTS: Components = {
         {children}
       </a>
     ),
+  img: ({ src, alt }) =>
+    isSafeImageSrc(src) ? (
+      <img src={src} alt={alt} className='max-w-full rounded-md' />
+    ) : src ? (
+      <span className='break-all'>
+        {alt ? `${alt}: ` : null}
+        <a href={src} target='_blank' rel='noreferrer noopener'>
+          {src}
+        </a>
+      </span>
+    ) : alt ? (
+      <span>{alt}</span>
+    ) : null,
 };
 
 export function Markdown({
@@ -42,7 +62,11 @@ export function Markdown({
         className,
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={safeMarkdownUrlTransform}
+        components={COMPONENTS}
+      >
         {children}
       </ReactMarkdown>
     </div>

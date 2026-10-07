@@ -18,6 +18,8 @@ import { toast } from '@/components/ui/toast';
 
 interface ChannelSetting {
   readonly provider: 'feishu' | 'dingtalk' | 'wecom';
+  /** False when nothing can deliver to it (no credentials in production): shown switched off. */
+  readonly configured?: boolean;
   readonly bound: boolean;
   readonly enabled: boolean;
 }
@@ -86,8 +88,13 @@ export function NotificationSettingsCard(): ReactElement {
                 key={channel.provider}
                 className='flex min-h-11 flex-wrap items-center justify-between gap-2 px-4 py-2'
               >
-                <span className='text-sm font-medium'>
+                <span className='flex items-center gap-2 text-sm font-medium'>
                   {t(`notificationSettings.channels.${channel.provider}`)}
+                  {channel.configured === false ? (
+                    <Badge variant='outline'>
+                      {t('notificationSettings.notConfigured')}
+                    </Badge>
+                  ) : null}
                 </span>
                 <Switch
                   aria-label={t('notificationSettings.toggle', {
@@ -96,7 +103,7 @@ export function NotificationSettingsCard(): ReactElement {
                     ),
                   })}
                   checked={channel.enabled}
-                  disabled={saving}
+                  disabled={saving || channel.configured === false}
                   onCheckedChange={(enabled) =>
                     void toggle(channel.provider, enabled)
                   }

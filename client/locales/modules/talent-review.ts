@@ -1061,7 +1061,9 @@ const enShared = {
     AGENT_CLIENT_REVOKED: 'This client is revoked.',
     AGENT_TOKEN_NOT_FOUND: 'This token is not available.',
     UPLOAD_FILE_REQUIRED: 'Choose a file.',
-    UPLOAD_TYPE_INVALID: 'Only photos and videos can be attached.',
+    UPLOAD_TYPE_INVALID:
+      'Only photos (JPEG or PNG) and videos (MP4) can be attached.',
+    UPLOAD_TOO_LARGE: 'The file is larger than 10 MB.',
   },
   automationTasks: {
     'talentAnalyst.prePlacement': {
@@ -1178,7 +1180,8 @@ const zhShared: typeof enShared = {
     AGENT_CLIENT_REVOKED: '该客户端已撤销。',
     AGENT_TOKEN_NOT_FOUND: '令牌不可用。',
     UPLOAD_FILE_REQUIRED: '请选择文件。',
-    UPLOAD_TYPE_INVALID: '只能上传照片或视频。',
+    UPLOAD_TYPE_INVALID: '只能上传照片（JPEG、PNG）或视频（MP4）。',
+    UPLOAD_TOO_LARGE: '文件不能超过 10 MB。',
   },
   automationTasks: {
     'talentAnalyst.prePlacement': {

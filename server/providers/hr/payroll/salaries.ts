@@ -27,6 +27,7 @@ import {
   type PayrollEmployee,
 } from './common.js';
 import type { PayrollContext } from './context.js';
+import { payrollScopes, type PayrollScopes } from './scope.js';
 import type { StructureService } from './structures.js';
 
 const SALARY = 'talent.salary';
@@ -122,10 +123,15 @@ export function toSalaryFile(row: Record<string, unknown>): SalaryFile {
   };
 }
 
-/** The file each employee uses in a month: the latest one not after it. */
+/**
+ * The file each employee uses in a month: the latest one not after it. With
+ * the scopes of the action being served, only the files (and fields) its
+ * grant reaches are used.
+ */
 export async function filesForMonth(
   ctx: PayrollContext,
   month: string,
+  scopes?: PayrollScopes,
 ): Promise<Map<string, SalaryFile>> {
   const rows = await ctx.platform.database
     .query()
@@ -135,8 +141,12 @@ export async function filesForMonth(
     .orderBy('effectiveMonth', 'asc')
     .execute();
   const result = new Map<string, SalaryFile>();
-  for (const row of rows) {
-    const file = toSalaryFile(row);
+  for (const row of scopes
+    ? await scopes.rows('employeeSalaries', rows)
+    : rows) {
+    const file = toSalaryFile(
+      scopes ? await scopes.fields('employeeSalaries', row) : row,
+    );
     result.set(file.employeeId, file);
   }
   return result;
@@ -230,7 +240,11 @@ export function createSalaryService(
   const { platform } = ctx;
   const { database } = platform;
 
-  async function history(employeeId: string): Promise<SalaryFile[]> {
+  /** An employee's salary files, newest first; with scopes, only those the action's grant reaches. */
+  async function history(
+    employeeId: string,
+    scopes?: PayrollScopes,
+  ): Promise<SalaryFile[]> {
     const rows = await database
       .query()
       .selectFrom('employeeSalaries')
@@ -238,7 +252,25 @@ export function createSalaryService(
       .where('employeeId', '=', employeeId)
       .orderBy('effectiveMonth', 'desc')
       .execute();
-    return rows.map((row) => toSalaryFile(row as Record<string, unknown>));
+    if (!scopes)
+      return rows.map((row) => toSalaryFile(row as Record<string, unknown>));
+    const files = [];
+    for (const row of await scopes.rows('employeeSalaries', rows))
+      files.push(toSalaryFile(await scopes.fields('employeeSalaries', row)));
+    return files;
+  }
+
+  /** The adjustments rows the action's grant reaches. */
+  async function scopedAdjustments(
+    scopes: PayrollScopes,
+    rows: readonly Record<string, unknown>[],
+  ) {
+    const result = [];
+    for (const row of await scopes.rows('salaryAdjustments', rows))
+      result.push(
+        presentAdjustment(await scopes.fields('salaryAdjustments', row)),
+      );
+    return result;
   }
 
   function presentAdjustment(row: Record<string, unknown>) {
@@ -262,21 +294,31 @@ export function createSalaryService(
     };
   }
 
-  async function adjustmentRow(id: string) {
+  /** An adjustment; with scopes, one outside the action's grant is not found. */
+  async function adjustmentRow(id: string, scopes?: PayrollScopes) {
     const row = await database
       .query()
       .selectFrom('salaryAdjustments')
       .selectAll()
       .where('id', '=', id)
       .executeTakeFirst();
-    if (!row) throw new HrError('ADJUSTMENT_NOT_FOUND', 404);
+    if (
+      !row ||
+      (scopes && !(await scopes.rows('salaryAdjustments', [row])).length)
+    )
+      throw new HrError('ADJUSTMENT_NOT_FOUND', 404);
     return row as Record<string, unknown>;
   }
 
-  async function employeeOrThrow(employeeId: string): Promise<PayrollEmployee> {
+  /** An employee; with scopes, one outside the action's employee scope is not found. */
+  async function employeeOrThrow(
+    employeeId: string,
+    scopes?: PayrollScopes,
+  ): Promise<PayrollEmployee> {
     const employees = await loadEmployees(database.query());
     const employee = employees.find((e) => e.id === employeeId);
-    if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+    if (!employee || (scopes && !(await scopes.employee(employee.id))))
+      throw new HrError('EMPLOYEE_NOT_FOUND', 404);
     return employee;
   }
 
@@ -335,27 +377,36 @@ export function createSalaryService(
 
     /** The list page: every employee with the current file, structure and latest adjustment, and the 待建档 list. */
     async list(actor: ActorContext, query: Record<string, string | undefined>) {
-      await authorizeAction(actor.authz, SALARY, 'view');
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, SALARY, 'view'),
+      );
       const month =
         query.month && MONTH.test(query.month)
           ? query.month
           : platform.currentDate().slice(0, 7);
-      const employees = (await loadEmployees(database.query())).filter(
-        (e) =>
-          e.status !== 'leave' ||
-          (e.leaveDate ?? '') >= `${addMonths(month, -1)}-01`,
-      );
-      const files = await filesForMonth(ctx, addMonths(month, 24));
-      const current = await filesForMonth(ctx, month);
+      const employees = [];
+      for (const e of await loadEmployees(database.query()))
+        if (
+          (e.status !== 'leave' ||
+            (e.leaveDate ?? '') >= `${addMonths(month, -1)}-01`) &&
+          (await scopes.employee(e.id))
+        )
+          employees.push(e);
+      const files = await filesForMonth(ctx, addMonths(month, 24), scopes);
+      const current = await filesForMonth(ctx, month, scopes);
       const structureTitles = new Map(
         (await structures.list()).map((s) => [s.id, s.title]),
       );
-      const adjustments = await database
-        .query()
-        .selectFrom('salaryAdjustments')
-        .selectAll()
-        .orderBy('createdAt', 'desc')
-        .execute();
+      const adjustments = await scopes.rows(
+        'salaryAdjustments',
+        await database
+          .query()
+          .selectFrom('salaryAdjustments')
+          .selectAll()
+          .orderBy('createdAt', 'desc')
+          .execute(),
+      );
       const latestAdjustment = new Map<string, Record<string, unknown>>();
       for (const row of adjustments)
         if (!latestAdjustment.has(str(row.employeeId)))
@@ -426,15 +477,21 @@ export function createSalaryService(
     },
 
     async detail(actor: ActorContext, employeeId: string) {
-      await authorizeAction(actor.authz, SALARY, 'view');
-      const employee = await employeeOrThrow(employeeId);
-      const adjustments = await database
-        .query()
-        .selectFrom('salaryAdjustments')
-        .selectAll()
-        .where('employeeId', '=', employeeId)
-        .orderBy('createdAt', 'desc')
-        .execute();
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, SALARY, 'view'),
+      );
+      const employee = await employeeOrThrow(employeeId, scopes);
+      const adjustments = await scopedAdjustments(
+        scopes,
+        await database
+          .query()
+          .selectFrom('salaryAdjustments')
+          .selectAll()
+          .where('employeeId', '=', employeeId)
+          .orderBy('createdAt', 'desc')
+          .execute(),
+      );
       return {
         employee: {
           id: employee.id,
@@ -445,24 +502,25 @@ export function createSalaryService(
           positionId: employee.positionId,
           hireDate: employee.hireDate,
         },
-        files: await history(employeeId),
-        adjustments: adjustments.map((row) =>
-          presentAdjustment(row as Record<string, unknown>),
-        ),
+        files: await history(employeeId, scopes),
+        adjustments,
         defaultStructureId: await structures.defaultFor(employeeId),
       };
     },
 
     /** 新入职建档 or 初始化导入: a new row, never an edit. */
     async createFile(actor: ActorContext, input: unknown) {
-      await authorizeAction(actor.authz, SALARY, 'manage');
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, SALARY, 'manage'),
+      );
       const parsed = fileSchema.safeParse(input);
       if (!parsed.success)
         throw new HrError('INVALID_INPUT', 400, {
           fields: parsed.error.issues.map((issue) => issue.path.join('.')),
         });
       const data = parsed.data;
-      const employee = await employeeOrThrow(data.employeeId);
+      const employee = await employeeOrThrow(data.employeeId, scopes);
       const structureId =
         data.salaryStructureId ?? (await structures.defaultFor(employee.id));
       if (!structureId) throw new HrError('SALARY_STRUCTURE_REQUIRED', 400);
@@ -526,21 +584,37 @@ export function createSalaryService(
         .selectAll()
         .orderBy('createdAt', 'desc');
       if (query.status) select = select.where('status', '=', query.status);
-      const rows = (await select.limit(500).execute()).map((row) =>
-        presentAdjustment(row as Record<string, unknown>),
+      // The rows the caller's grant reaches: the view grant's, else the approver's.
+      const rows = await scopedAdjustments(
+        payrollScopes(database, (canView ?? canApprove)!),
+        await select.limit(500).execute(),
       );
-      // An approver without the view action sees only what waits for, or was decided by, them.
-      const visible = canView
-        ? rows
-        : rows.filter(
-            (row) =>
-              row.status === 'pending' ||
-              row.approvals.some((step) => step.decidedBy === actor.userId),
-          );
+      const holders = new Map<string, string[]>();
+      const holdersOf = async (permissionSet: string) => {
+        if (!holders.has(permissionSet))
+          holders.set(permissionSet, await ctx.holdersOf(permissionSet));
+        return holders.get(permissionSet)!;
+      };
+      // An approver without the view action sees only what waits for their own
+      // step (they hold the pending step's permission set), or what they decided.
+      const visible = [];
+      for (const row of rows) {
+        if (canView) {
+          visible.push(row);
+          continue;
+        }
+        const pending = row.approvals.find((step) => step.status === 'pending');
+        if (
+          row.approvals.some((step) => step.decidedBy === actor.userId) ||
+          (row.status === 'pending' &&
+            pending &&
+            (await holdersOf(pending.permissionSet)).includes(actor.userId))
+        )
+          visible.push(row);
+      }
       const employees = new Map(
         (await loadEmployees(database.query())).map((e) => [e.id, e]),
       );
-      const holders = new Map<string, string[]>();
       // V4-12: an approver sees the linked review result as "周期名称 · 最终等级" only.
       const reviewLabels = ctx.performance
         ? await ctx
@@ -554,11 +628,7 @@ export function createSalaryService(
       const result = [];
       for (const row of visible) {
         const pending = row.approvals.find((step) => step.status === 'pending');
-        if (pending && !holders.has(pending.permissionSet))
-          holders.set(
-            pending.permissionSet,
-            await ctx.holdersOf(pending.permissionSet),
-          );
+        if (pending) await holdersOf(pending.permissionSet);
         const employee = employees.get(row.employeeId);
         result.push({
           ...row,
@@ -580,7 +650,10 @@ export function createSalaryService(
 
     /** Pre-fills an adjustment from a transfer or promotion (变动影响清单 / 通知 → 发起调薪). */
     async prefill(actor: ActorContext, actionId: string) {
-      await authorizeAction(actor.authz, SALARY, 'adjust');
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, SALARY, 'adjust'),
+      );
       const action = await database
         .query()
         .selectFrom('personnelActions')
@@ -594,10 +667,11 @@ export function createSalaryService(
         ])
         .where('id', '=', actionId)
         .executeTakeFirst();
-      if (!action?.employeeId) throw new HrError('NOT_FOUND', 404);
+      if (!action?.employeeId || !(await scopes.employee(action.employeeId)))
+        throw new HrError('NOT_FOUND', 404);
       const employeeId = str(action.employeeId);
       const effectiveDate = str(action.effectiveDate).slice(0, 10);
-      const files = await history(employeeId);
+      const files = await history(employeeId, scopes);
       const current = files[0] ?? null;
       return {
         employeeId,
@@ -610,21 +684,24 @@ export function createSalaryService(
     },
 
     async requestAdjustment(actor: ActorContext, input: unknown) {
-      await authorizeAction(actor.authz, SALARY, 'adjust');
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, SALARY, 'adjust'),
+      );
       const parsed = adjustmentSchema.safeParse(input);
       if (!parsed.success)
         throw new HrError('INVALID_INPUT', 400, {
           fields: parsed.error.issues.map((issue) => issue.path.join('.')),
         });
       const data = parsed.data;
-      const employee = await employeeOrThrow(data.employeeId);
+      const employee = await employeeOrThrow(data.employeeId, scopes);
       if (
         !employedIn(employee, data.effectiveMonth) &&
         employee.status === 'leave'
       )
         throw new HrError('EMPLOYEE_NOT_ACTIVE', 400);
       await structures.get(data.salaryStructureId);
-      const files = await history(employee.id);
+      const files = await history(employee.id, scopes);
       const current =
         files.find((f) => f.effectiveMonth <= data.effectiveMonth) ??
         files[0] ??
@@ -699,8 +776,11 @@ export function createSalaryService(
     },
 
     async submitAdjustment(actor: ActorContext, id: string) {
-      await authorizeAction(actor.authz, SALARY, 'adjust');
-      const row = presentAdjustment(await adjustmentRow(id));
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, SALARY, 'adjust'),
+      );
+      const row = presentAdjustment(await adjustmentRow(id, scopes));
       if (row.status !== 'draft')
         throw new HrError('ADJUSTMENT_STATE_CONFLICT', 409);
       const steps = await approvalSteps(ctx);
@@ -717,10 +797,13 @@ export function createSalaryService(
     },
 
     async decideAdjustment(actor: ActorContext, id: string, input: unknown) {
-      await authorizeAction(actor.authz, SALARY, 'approveAdjustment');
+      const scopes = payrollScopes(
+        database,
+        await authorizeAction(actor.authz, SALARY, 'approveAdjustment'),
+      );
       const parsed = decisionSchema.safeParse(input);
       if (!parsed.success) throw new HrError('INVALID_INPUT', 400);
-      const row = presentAdjustment(await adjustmentRow(id));
+      const row = presentAdjustment(await adjustmentRow(id, scopes));
       if (row.status !== 'pending')
         throw new HrError('PAYROLL_NOT_PENDING', 409);
       const { steps, outcome } = await decideStep(
