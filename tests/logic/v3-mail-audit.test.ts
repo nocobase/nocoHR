@@ -241,7 +241,7 @@ describe('审核邮箱 rules', () => {
     ).toBe('nordwerk.test');
     // A public mailbox says nothing about the company: a person fills it in.
     expect(
-      customerOf({ name: 'Catherine', address: 'someone@gmail.com' }, vendors),
+      customerOf({ name: 'Alex Lee', address: 'someone@gmail.com' }, vendors),
     ).toBeNull();
     expect(
       customerOf({ name: null, address: 'someone@163.com' }, vendors),
