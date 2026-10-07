@@ -110,7 +110,7 @@ Business mail (对账 / 招聘 / 审核 / 人事邮箱, `server/providers/hr/mai
 - **Keeping.** Mail bodies and attachments are cleared daily (`sweepRetention`): unlinked mail after its mailbox's days; linked mail follows its record — the handler's `retentionOf` (the 招聘邮箱 keeps a candidate's mail for the candidate's 保存期限), else as long as the record exists. Anonymizing a candidate clears their mail at once (`forgetRecords`), and a resume mail keeps no body once the resume is with the candidate (`forgetMessage`). Subjects, addresses and links stay.
 - **Receiving.** The service synchronizes the account and waits for all its runs, then stores the new inbox messages once. Threads are found by the subject's `[#threadKey]` tag, or by In-Reply-To / References. There are no plus-addressed reply addresses any more.
 - **Table name.** The plugin creates its own `mailMessages`, so ours is `businessMailMessages`. 202610160001 and 202610180001 were edited to that name with the user's approval while the app was pre-release. On an older database, 202609020001 (named to sort before the plugin's 202609030001) copies the old table into the new one; then `pnpm nocobase db repair` realigns the two checksums.
-- **Version.** The plugin is pinned to 0.1.0-beta.5, the release matching `@nocobase/app-server` 1.0.0-beta.30, and listed in `minimumReleaseAgeExclude`. 1.0.0-beta.6 and later need a newer template.
+- **Version.** The plugin is pinned to 1.0.0-beta.6, the release matching `@nocobase/app-server` 1.0.0-beta.33 (template 1.0.0-beta.54), and listed in `minimumReleaseAgeExclude`. 1.0.0-beta.7 and later need `@nocobase/app-server` 2. Its components come from `@nocobase/app-plugin-mail/client/components`.
 - **Production pages.** The plugin's own pages are development-only, so we add:
   - 我的邮箱 (`/talent/my-mailbox`, page `mail.workspace`, granted by seed 202610190102), where users connect their own mailbox;
   - 我的邮箱往来 on the candidate detail page;
@@ -353,6 +353,8 @@ A command this application owns is a file under `cli/commands/` whose path is it
 ## Plugins
 
 Plugins are registered in `client/plugins.ts`, `server/plugins.ts`, and `cli/plugins.ts`. Presence in the array enables a plugin and array order is contribution order. A plugin appears in the roots matching what it ships, so a plugin with only commands is listed in `cli/plugins.ts` alone. Bulk Skills synchronization and plugin updates discover plugins from these composition roots.
+
+Since template 1.0.0-beta.54 the plugins and `@nocobase/app-cli` are pinned to exact versions in `package.json`, each the last release whose peers accept `@nocobase/app-server` 1.0.0-beta.33. Their `^` ranges would otherwise resolve to the next releases, which already require `@nocobase/app-server` 2 and fail peer resolution here. Raise them together with the framework when the application moves to a template built on app-server 2, and run `pnpm peers check` afterwards; the third-party peer warnings that remain (tiptap, stagehand, d3-dsv) predate the pins.
 
 Let `pnpm nocobase plugin register` and `pnpm nocobase plugin unregister` add and remove entries. Edit these files by hand only to reorder entries or to pass a plugin its options.
 
