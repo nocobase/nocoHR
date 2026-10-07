@@ -498,6 +498,75 @@ describe('offline training', () => {
         .status,
     ).toBe(403);
   });
+
+  it('lets an instructor enroll or remove others only in a session they own or teach', async () => {
+    // A session hr01 organizes and teaches: trainer01 has nothing to do with it.
+    const created = await call('hr01', 'POST', '/sessions', {
+      courseId: 'course-first-article-practical',
+      startAt: minutesFromNow(3 * 24 * 60),
+      endAt: minutesFromNow(3 * 24 * 60 + 120),
+      location: '苏州基地更衣培训室',
+      capacity: 12,
+    });
+    expect(created.status).toBe(201);
+    const other = String(created.json.data.id);
+    // Enrolling is a reschedule within the course: only people in no other session of it.
+    const busy = new Set<string>();
+    for (const id of [
+      'session-gowning-1',
+      'session-gowning-2',
+      shared.soon,
+      shared.late,
+    ])
+      for (const e of (await call('hr01', 'GET', `/sessions/${id}`)).json.data
+        .enrollments as Json[])
+        busy.add(String(e.employeeId));
+    const team = (await call('mgr_njl', 'GET', '/employees')).json.data
+      .items as Json[];
+    const [first, second] = team.filter(
+      (e) => e.status !== 'leave' && !busy.has(String(e.id)),
+    );
+    expect(first && second).toBeTruthy();
+    expect(
+      (
+        await call('trainer01', 'POST', `/sessions/${other}/enroll`, {
+          employeeId: first!.id,
+        })
+      ).status,
+    ).toBe(403);
+    // HR may; once enrolled, the unrelated instructor still cannot take them out.
+    expect(
+      (
+        await call('hr01', 'POST', `/sessions/${other}/enroll`, {
+          employeeId: first!.id,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await call('trainer01', 'POST', `/sessions/${other}/unenroll`, {
+          employeeId: first!.id,
+        })
+      ).status,
+    ).toBe(403);
+    // A department head still enrolls a member of their team.
+    expect(
+      (
+        await call('mgr_njl', 'POST', `/sessions/${other}/enroll`, {
+          employeeId: second!.id,
+        })
+      ).status,
+    ).toBe(200);
+    // HR removes people from it.
+    for (const person of [first!, second!])
+      expect(
+        (
+          await call('hr01', 'POST', `/sessions/${other}/unenroll`, {
+            employeeId: person.id,
+          })
+        ).status,
+      ).toBe(200);
+  });
 });
 
 describe('the daily run: learning coach and practice coach', () => {

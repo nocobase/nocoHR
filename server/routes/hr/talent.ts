@@ -9,6 +9,7 @@ import {
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
+import { authorizeAction } from '../../providers/hr/authorize.js';
 import { DEPARTMENTS_SETTINGS } from '../../providers/hr/index.js';
 import { HrError, isRecord, requireString } from '../../providers/hr/shared.js';
 import {
@@ -40,12 +41,30 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
     const users = app.container.resolve(userAdministrationServiceToken);
 
     const routes = new Hono<HrEnv>();
-    routes.use(
-      '*',
-      auth.required(),
-      bodyLimit({ maxSize: 12 * 1024 * 1024 }),
-      authz.middleware(),
-    );
+    // Only the prefixes this router owns: it is mounted at /talent, so a
+    // `use('*')` would also run (with its body limit) for every /api/talent/*
+    // route registered after it.
+    for (const prefix of [
+      '/lookups',
+      '/employees',
+      '/actions',
+      '/contracts',
+      '/competencies',
+      '/framework',
+      '/hr-reports',
+      '/me',
+      '/org-chart',
+      '/positions',
+      '/profile-changes',
+      '/users',
+    ])
+      for (const path of [prefix, `${prefix}/*`])
+        routes.use(
+          path,
+          auth.required(),
+          bodyLimit({ maxSize: 12 * 1024 * 1024 }),
+          authz.middleware(),
+        );
     installErrorHandler(routes);
 
     // ---------- Lookups shared by the pages ----------
@@ -138,7 +157,9 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
         201,
       ),
     );
-    routes.get('/employees/import-template', async () => {
+    routes.get('/employees/import-template', async (c) => {
+      // The template is part of importing: the same action as the preview and commit.
+      await authorizeAction(actor(c).authz, 'talent.employee', 'import');
       const buffer = await talent.importTemplate();
       return new Response(new Uint8Array(buffer), {
         headers: {

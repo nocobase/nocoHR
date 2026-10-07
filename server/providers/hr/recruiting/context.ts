@@ -48,6 +48,8 @@ export interface RecruitingDeps {
   readonly publicUrl: (path: string) => string;
   /** The employer's name for offer letters (config.talent.companyName). */
   readonly companyName: () => string;
+  /** Signs the careers page's application tickets (from auth.secret); random per process when absent. */
+  readonly formSecret?: string;
 }
 
 export function createRecruitingContext(deps: RecruitingDeps) {

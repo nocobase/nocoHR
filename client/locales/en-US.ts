@@ -3452,6 +3452,8 @@ const enUS = {
       AUTOMATION_PARAM_INVALID: 'Enter a valid number.',
       AUTOMATION_OWNER_INVALID:
         'The owner must be an employee with an account who has not left.',
+      AUTOMATION_OWNER_NOT_PERMITTED:
+        'The task runs with its owner’s permissions: choose yourself or someone who may also configure this automation.',
       AUTOMATION_RUN_NOT_FOUND: 'Run not found.',
       AUTOMATION_EVENT_ONLY:
         'This automation runs only when its event happens.',
@@ -3591,6 +3593,8 @@ const enUS = {
         'This account holds permissions you do not have. An administrator manages it on the Users page.',
       ACCOUNT_PRIVILEGED_ROOT:
         'This is a system administrator account. It cannot be linked or reset here.',
+      ACCOUNT_PRIVILEGED_PAYROLL:
+        'This account can see pay data. An administrator manages it on the Users page.',
       EMPLOYEE_NOT_LINKED: 'Your account is not linked to an employee record.',
       EMPLOYEE_NO_TAKEN: 'This employee number is already used.',
       EMPLOYEE_POSITION_NOT_FOUND:
@@ -4839,6 +4843,7 @@ const enUS = {
     toggle: 'Receive in {{name}}',
     saved: 'Notification settings saved',
     noneBound: 'Your account is not linked to an office app.',
+    notConfigured: 'Not configured',
   },
   knowledgeService: {
     clearFilters: 'Clear filters',

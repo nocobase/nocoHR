@@ -23,6 +23,11 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
 import { authorizeAction } from '../../providers/hr/authorize.js';
+import {
+  PRACTICAL_MEDIA_MAX,
+  practicalMedia,
+  SNIFF_BYTES,
+} from '../../providers/hr/hr-files.js';
 import { HrError, newId } from '../../providers/hr/shared.js';
 import type { ContentType } from '../../providers/hr/talent-review/translations.js';
 import { talentReviewServicesToken } from '../../providers/hr/tokens.js';
@@ -225,12 +230,22 @@ export const talentReviewRoutes: AppApiRouteContribution<Application> =
       const body = await c.req.parseBody();
       const file = body.file;
       if (!(file instanceof File)) throw new HrError('UPLOAD_FILE_REQUIRED', 400);
-      if (!/^(image|video)\//u.test(file.type)) throw new HrError('UPLOAD_TYPE_INVALID', 400);
-      const fileId = newId();
-      const safe = file.name.replace(/[^\w.\-一-龥]/gu, '_').slice(-120) || 'photo';
-      const ext = /\.([A-Za-z0-9]{1,8})$/u.exec(safe)?.[1] ?? 'bin';
-      const key = `hr-files/practicals/${id}/${fileId}.${ext}`;
+      // A size cap before reading, and the content's own first bytes decide the type: JPEG, PNG or MP4.
+      if (file.size > PRACTICAL_MEDIA_MAX)
+        throw new HrError('UPLOAD_TOO_LARGE', 400);
       const bytes = new Uint8Array(await file.arrayBuffer());
+      if (bytes.byteLength > PRACTICAL_MEDIA_MAX)
+        throw new HrError('UPLOAD_TOO_LARGE', 400);
+      const media = practicalMedia(bytes.subarray(0, SNIFF_BYTES));
+      if (!media) throw new HrError('UPLOAD_TYPE_INVALID', 400);
+      const fileId = newId();
+      const stem =
+        file.name
+          .replace(/\.[^.]*$/u, '')
+          .replace(/[^\w\-一-龥]/gu, '_')
+          .slice(-100) || 'photo';
+      const safe = `${stem}.${media.ext}`;
+      const key = `hr-files/practicals/${id}/${fileId}.${media.ext}`;
       await app.container.resolve(driveManagerToken).use('local').put(key, bytes);
       const now = new Date();
       await services()
@@ -241,8 +256,8 @@ export const talentReviewRoutes: AppApiRouteContribution<Application> =
           disk: 'local',
           key,
           filename: safe,
-          ext: safe.includes('.') ? safe.split('.').pop()!.slice(0, 32) : '',
-          mimeType: file.type,
+          ext: media.ext,
+          mimeType: media.mimeType,
           size: bytes.byteLength,
           createdAt: now,
           updatedAt: now,

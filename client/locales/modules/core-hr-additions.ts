@@ -57,6 +57,11 @@ const en = {
       cancel: 'Cancel',
       business:
         'This is the {{purpose}}, a business mailbox kept in your name. An HR administrator unbinds it on Settings / Mail before it can be removed.',
+      offer: 'Allow as a business mailbox',
+      offerHint:
+        'An HR administrator may then bind it to a business mailbox, such as the recruiting mailbox, and its mail is read and sent there in your name. You are told when it is bound.',
+      offered: 'Allowed as a business mailbox.',
+      withdrawn: 'No longer offered as a business mailbox.',
       correspondence: 'My correspondence',
       noCorrespondence: 'No mail with this person in your own mailboxes.',
       read: 'Read',
@@ -355,7 +360,7 @@ const en = {
       account: 'Mailbox account',
       noAccount: 'No account bound',
       accountHint:
-        'The mailbox connected through the Mail plugin that serves this purpose. Its owner reads and sends as it; connect one on My mailbox first.',
+        'The mailbox connected through the Mail plugin that serves this purpose. Its owner reads and sends as it. Only mailboxes their owners allowed as business mailboxes on My mailbox are listed.',
       vendors: 'Staffing agencies',
       customers: 'Customers',
       customersHint:
@@ -700,6 +705,10 @@ const en = {
     MAIL_ACCOUNT_INVALID:
       'Choose a connected mailbox account; it is bound with its owner.',
     MAIL_ACCOUNT_IN_USE: 'A mailbox account can serve only one purpose.',
+    MAIL_ACCOUNT_NOT_OFFERED:
+      'Its owner has not allowed this mailbox as a business mailbox. They do so on My mailbox.',
+    MAIL_ACCOUNT_BOUND:
+      'This mailbox serves a business mailbox. An HR administrator unbinds it on Settings / Mail first.',
     MAIL_LINK_TARGET_INVALID: 'That record cannot be linked here.',
     MAIL_RECEIPT_DELETE_LINK_REQUIRED:
       'The receipt must tell the candidate how to have their information deleted: keep the deletion-link placeholder in the text.',
@@ -727,6 +736,8 @@ const en = {
       'A code was just sent. Wait a minute before asking again.',
     AUDIT_CODE_INVALID: 'The code is wrong or has expired.',
     AUDIT_CODE_LOCKED: 'Too many wrong codes. Ask for a new one.',
+    AUDIT_CODE_SENDS_EXCEEDED:
+      'This link has sent all its codes. Ask the sender for a new link.',
     AUDIT_CODE_UNAVAILABLE: 'The code could not be sent. Contact the sender.',
     // V1-02 V2 增补: a departed employee's documents.
     DOCUMENT_LINK_INVALID:
@@ -736,6 +747,8 @@ const en = {
       'A code was just sent. Wait a minute before asking again.',
     DOCUMENT_CODE_INVALID: 'The code is wrong or has expired.',
     DOCUMENT_CODE_LOCKED: 'Too many wrong codes. Ask for a new one.',
+    DOCUMENT_CODE_SENDS_EXCEEDED:
+      'This link has sent all its codes. Ask the sender for a new link.',
     DOCUMENT_CODE_UNAVAILABLE:
       'The code could not be sent. Contact the HR department.',
     DOCUMENT_PAYROLL_ONLY:
@@ -827,6 +840,11 @@ const zh: Shape = {
       cancel: '取消',
       business:
         '这是{{purpose}}（业务邮箱），挂在你名下。需由 HR 管理员先在“设置 / 邮件”里解绑，才能移除。',
+      offer: '允许作为业务邮箱',
+      offerHint:
+        '打开后，HR 管理员可以把它绑定为业务邮箱（如招聘邮箱），以你的名义在系统里收发其中的邮件；绑定时会通知你。',
+      offered: '已允许作为业务邮箱。',
+      withdrawn: '已不再允许作为业务邮箱。',
       correspondence: '我的邮箱往来',
       noCorrespondence: '你的邮箱里还没有和这位的往来邮件。',
       read: '查看',
@@ -1108,7 +1126,7 @@ const zh: Shape = {
       account: '邮箱账户',
       noAccount: '未绑定账户',
       accountHint:
-        '通过 Mail 插件关联、承担这个用途的邮箱；收信和发信以账户主人的身份进行。请先在“我的邮箱”里关联。',
+        '通过 Mail 插件关联、承担这个用途的邮箱；收信和发信以账户主人的身份进行。这里只列出主人在“我的邮箱”里允许作为业务邮箱的账户。',
       vendors: '派遣公司',
       customers: '客户',
       customersHint:
@@ -1432,6 +1450,10 @@ const zh: Shape = {
     MAIL_ACCOUNT_INVALID:
       '请选择一个已关联的邮箱账户，它会连同账户主人一起绑定。',
     MAIL_ACCOUNT_IN_USE: '一个邮箱账户只能承担一种用途。',
+    MAIL_ACCOUNT_NOT_OFFERED:
+      '账户主人还没有允许这个邮箱作为业务邮箱，需由本人在“我的邮箱”里打开。',
+    MAIL_ACCOUNT_BOUND:
+      '这个邮箱正承担业务邮箱，需由 HR 管理员先在“设置 / 邮件”里解绑。',
     MAIL_LINK_TARGET_INVALID: '不能挂到这张单据。',
     MAIL_RECEIPT_DELETE_LINK_REQUIRED:
       '回执须告诉候选人如何申请删除，请在正文中保留“删除申请链接”占位符。',
@@ -1453,12 +1475,16 @@ const zh: Shape = {
     AUDIT_CODE_TOO_SOON: '验证码刚刚发出，请 1 分钟后再试。',
     AUDIT_CODE_INVALID: '验证码不正确或已过期。',
     AUDIT_CODE_LOCKED: '验证码错误次数过多，请重新获取。',
+    AUDIT_CODE_SENDS_EXCEEDED:
+      '这个链接的验证码已发完，请联系发件方重新发送链接。',
     AUDIT_CODE_UNAVAILABLE: '验证码没有发出，请联系发件方。',
     DOCUMENT_LINK_INVALID: '链接无效：已过期、已撤销或地址不正确。',
     DOCUMENT_LINK_LIMITED: '尝试次数过多，请稍后再试。',
     DOCUMENT_CODE_TOO_SOON: '验证码刚刚发出，请 1 分钟后再试。',
     DOCUMENT_CODE_INVALID: '验证码不正确或已过期。',
     DOCUMENT_CODE_LOCKED: '验证码错误次数过多，请重新获取。',
+    DOCUMENT_CODE_SENDS_EXCEEDED:
+      '这个链接的验证码已发完，请联系发件方重新发送链接。',
     DOCUMENT_CODE_UNAVAILABLE: '验证码没有发出，请联系人事部。',
     DOCUMENT_PAYROLL_ONLY: '含薪资的证明只能由薪酬专员确认金额后发送。',
     DOCUMENT_HR_ONLY: '这份证明只能由 HR 管理员发送。',

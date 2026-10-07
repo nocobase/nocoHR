@@ -43,8 +43,9 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
     /*
      * 界面追加字段 on departments (migration 202610210001). The values live in
      * `departments.customFields`; the organisation service stays unaware of
-     * them, so these routes read and write them beside it. Readers of this
-     * settings item are organisation administrators and see every field.
+     * them, so these routes read and write them beside it. Sensitive fields
+     * are shown, as on employees, only to HR administrators (talent.hr
+     * administer); other readers of this settings item get the rest.
      */
     const customFields = () => app.container.resolve(customFieldServiceToken);
     const database = () => app.container.resolve(databaseManagerToken);
@@ -61,14 +62,20 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         out.set(String(row.id), readValues(row.customFields));
       return out;
     };
-    const projectCustom = async (ids: readonly string[]) => {
+    const readsSensitive = (c: Context<HrEnv>) =>
+      c.get('authz').can({
+        resource: { type: 'settings', id: 'talent.hr' },
+        action: 'administer',
+      });
+    const projectCustom = async (c: Context<HrEnv>, ids: readonly string[]) => {
       const definitions = await customFields().list('departments');
       const stored = await storedCustom(ids);
+      const sensitive = await readsSensitive(c);
       return new Map(
         ids.map((id) => [
           id,
           customFields().project(definitions, stored.get(id), {
-            sensitive: true,
+            sensitive,
             includeInactive: true,
           }),
         ]),
@@ -76,13 +83,18 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
     };
     /** Checks submitted values before the department is written; undefined when none were sent. */
     const prepareCustom = async (
+      c: Context<HrEnv>,
       input: unknown,
       id: string | null,
     ): Promise<Record<string, unknown> | undefined> => {
       if (input === undefined) return undefined;
       const existing = id ? ((await storedCustom([id])).get(id) ?? {}) : {};
+      // Sensitive fields are written, like they are read, by HR administrators only; others keep them as stored.
+      const sensitive = await readsSensitive(c);
       return customFields().prepare(
-        await customFields().list('departments'),
+        (await customFields().list('departments')).filter(
+          (d) => sensitive || !d.sensitive,
+        ),
         input,
         existing,
         { enforceRequired: true },
@@ -135,7 +147,10 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         ? await users.list({ userIds: managerIds, pageSize: 100 })
         : { items: [] };
       const names = new Map(page.items.map((u) => [u.id, u.name]));
-      const custom = await projectCustom(tree.map((d) => d.id));
+      const custom = await projectCustom(
+        c,
+        tree.map((d) => d.id),
+      );
       return c.json({
         data: tree.map((d) => ({
           ...d,
@@ -154,7 +169,7 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         max: 64,
       });
       await checkUser(managerId);
-      const custom = await prepareCustom(body.customFields, null);
+      const custom = await prepareCustom(c, body.customFields, null);
       const department = await organization.createDepartment({
         title: requireString(body.title, 'DEPARTMENT_TITLE_REQUIRED', {
           max: 200,
@@ -176,7 +191,7 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         {
           data: {
             ...department,
-            customFields: (await projectCustom([department.id])).get(
+            customFields: (await projectCustom(c, [department.id])).get(
               department.id,
             ),
           },
@@ -212,7 +227,11 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
         await checkUser(input.managerId);
       }
       if (typeof body.sortOrder === 'number') input.sortOrder = body.sortOrder;
-      const custom = await prepareCustom(body.customFields, c.req.param('id'));
+      const custom = await prepareCustom(
+        c,
+        body.customFields,
+        c.req.param('id'),
+      );
       const { department, changed } = await organization.updateDepartment(
         c.req.param('id'),
         input,
@@ -222,7 +241,7 @@ export const organizationApiRoutes: AppApiRouteContribution<Application> =
       return c.json({
         data: {
           ...department,
-          customFields: (await projectCustom([department.id])).get(
+          customFields: (await projectCustom(c, [department.id])).get(
             department.id,
           ),
         },

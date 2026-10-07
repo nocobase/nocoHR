@@ -433,7 +433,7 @@ describe('招聘邮箱 (V2-07)', () => {
     expect(detail.json.data.candidate.hasResume).toBe(true);
   });
 
-  it('does not take the same resume twice or send a second receipt', async () => {
+  it('takes a second resume from the same address as a separate candidate, without a second receipt', async () => {
     const again = await call(
       'recruit01',
       'POST',
@@ -442,6 +442,9 @@ describe('招聘邮箱 (V2-07)', () => {
     expect(again.json.data.recruiting).toBe(0);
     drop('03-zoupeng-again.eml', zouPengMail('邹鹏 再次应聘 CNC 操作工'));
     await call('recruit01', 'POST', '/mail/poll?mailbox=recruiting');
+    // A From address is easy to forge: the second mail never merges into
+    // 邹鹏's record (resume, consent, retention); it becomes a candidate of
+    // its own that the recruiter sees as a possible duplicate.
     const rows = await (
       await db()
     )
@@ -449,8 +452,30 @@ describe('招聘邮箱 (V2-07)', () => {
       .selectFrom('candidates')
       .select(['id'])
       .where('email', '=', 'zoupeng@mail.test')
+      .orderBy('createdAt', 'asc')
       .execute();
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(2);
+    expect(String(rows[0]!.id)).not.toBe(String(rows[1]!.id));
+    const second = await (
+      await db()
+    )
+      .query()
+      .selectFrom('applications')
+      .select(['id'])
+      .where('candidateId', '=', rows[1]!.id)
+      .executeTakeFirstOrThrow();
+    expect(String(second.id)).not.toBe(applicationId);
+    const detail = await call(
+      'recruit01',
+      'GET',
+      `/recruiting/candidates/${String(second.id)}`,
+    );
+    expect(detail.json.data.possibleDuplicates).toEqual([
+      expect.objectContaining({
+        id: String(rows[0]!.id),
+        matchedBy: expect.arrayContaining(['email']),
+      }),
+    ]);
     expect(await sentTo('zoupeng@mail.test')).toHaveLength(1);
   });
 

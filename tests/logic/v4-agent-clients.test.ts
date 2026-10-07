@@ -62,9 +62,15 @@ describe('13C 开放给外部 AI Agent', () => {
     expect(String(row!.tokenHash)).not.toContain(wang.secret);
     // Nothing else accepts the token.
     const other = await h.server.fetch(
-      new Request(`${h.base}/api/talent/workbench`, { headers: { authorization: `Bearer ${wang.secret}` } }),
+      new Request(`${h.base}/api/talent/work-items`, { headers: { authorization: `Bearer ${wang.secret}` } }),
     );
     expect(other.status).toBe(401);
+    // An unknown application API path is a JSON 404, not the client's index.html.
+    const unknown = await h.server.fetch(
+      new Request(`${h.base}/api/talent/no-such-route`, { headers: { authorization: `Bearer ${wang.secret}` } }),
+    );
+    expect(unknown.status).toBe(404);
+    expect((await unknown.json()).code).toBe('NOT_FOUND');
     expect((await h.call('emp_njl_1', 'GET', '/agent-clients/clients')).status).toBe(403);
   });
 
@@ -111,6 +117,27 @@ describe('13C 开放给外部 AI Agent', () => {
       d.setUTCDate(d.getUTCDate() + ((5 - d.getUTCDay() + 7) % 7) + 7);
       return d.toISOString().slice(0, 10);
     })();
+    // Arguments the tool's own schema refuses never reach it: nothing is drafted.
+    const leaves = async () =>
+      (
+        await (await h.db())
+          .query()
+          .selectFrom('leaveRequests')
+          .select(['id'])
+          .where('employeeId', '=', 'emp-wanglei')
+          .execute()
+      ).length;
+    const before = await leaves();
+    const invalid = await tool(wang.secret, 'draftMyLeaveRequest', {
+      leaveType: 'annual',
+      startAt: 20261009,
+    });
+    expect(invalid.isError).toBe(true);
+    expect(invalid.content.code).toBe('INVALID_ARGUMENTS');
+    expect(await leaves()).toBe(before);
+    expect(
+      (await tool(wang.secret, 'getMySchedule', { from: 'next friday', to: today() })).content.code,
+    ).toBe('INVALID_ARGUMENTS');
     const drafted = await tool(wang.secret, 'draftMyLeaveRequest', {
       leaveType: 'annual',
       startAt: `${friday}T00:00:00+08:00`,
@@ -146,5 +173,38 @@ describe('13C 开放给外部 AI Agent', () => {
     expect((await tool(fresh.secret, 'getMyLeaveBalance')).status).toBe(429);
     const limited = await h.call('hr01', 'GET', `/agent-clients/logs?clientId=${CLIENT}`);
     expect(limited.json.data.some((l: { status: string }) => l.status === 'rateLimited')).toBe(true);
+    // Parallel requests cannot all slip under the limit, and every request counts, not only tools/call.
+    const parallel = await issue('emp_njl_1');
+    const statuses = (
+      await Promise.all(Array.from({ length: 8 }, () => mcp(parallel.secret, 'tools/list')))
+    ).map((r) => r.status);
+    expect(statuses.filter((s) => s === 200)).toHaveLength(3);
+    expect(statuses.filter((s) => s === 429)).toHaveLength(5);
+  });
+
+  it('writes refusals of unknown tokens to the audit log at most ten a minute per address', async () => {
+    const anonymous = async () =>
+      (
+        await (await h.db())
+          .query()
+          .selectFrom('agentCallLogs')
+          .select(['id'])
+          .where('tokenId', 'is', null)
+          .execute()
+      ).length;
+    const before = await anonymous();
+    const peer = { incoming: { socket: { remoteAddress: '192.0.2.44' } } };
+    for (let i = 0; i < 25; i += 1) {
+      const response = await h.server.fetch(
+        new Request(`${h.base}/api/talent/agent/mcp`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer nhr_forged_${i}` },
+          body: JSON.stringify({ jsonrpc: '2.0', id: i, method: 'tools/list' }),
+        }),
+        peer,
+      );
+      expect(response.status).toBe(401);
+    }
+    expect((await anonymous()) - before).toBe(10);
   });
 });

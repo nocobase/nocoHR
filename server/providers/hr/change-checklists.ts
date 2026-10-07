@@ -810,6 +810,35 @@ export function createChecklistService(deps: ChecklistServiceDeps) {
     return addDays(effectiveDate, 3);
   }
 
+  /** Whether the caller decides the action's pending approval level. */
+  async function isPendingApprover(
+    ctx: ActorContext,
+    actionId: string,
+  ): Promise<boolean> {
+    const row = await database
+      .query()
+      .selectFrom('personnelActions')
+      .select(['approvals', 'status'])
+      .where('id', '=', actionId)
+      .executeTakeFirst();
+    // The level being decided, from the chain snapshot (older rows carry only approverUserId).
+    const step = parseJson<
+      {
+        status: string;
+        approverUserId?: string | null;
+        approverUserIds?: string[];
+      }[]
+    >(row?.approvals, []).find((s) => s.status === 'pending');
+    const approvers = step
+      ? step.approverUserIds?.length
+        ? step.approverUserIds
+        : step.approverUserId
+          ? [step.approverUserId]
+          : []
+      : [];
+    return row?.status === 'pending' && approvers.includes(ctx.userId);
+  }
+
   const service = {
     register(provider: ChecklistProvider): () => void {
       providers.push(provider);
@@ -939,32 +968,36 @@ export function createChecklistService(deps: ChecklistServiceDeps) {
       if (!checklist) throw new HrError('NOT_FOUND', 404);
       if (await deps.isHrAdmin(ctx)) return checklist;
       if (checklist.ownerUserId === ctx.userId) return checklist;
-      if (checklist.actionId) {
-        const row = await database
-          .query()
-          .selectFrom('personnelActions')
-          .select(['approvals', 'status'])
-          .where('id', '=', checklist.actionId)
-          .executeTakeFirst();
-        // The level being decided, from the chain snapshot (older rows carry only approverUserId).
-        const step = parseJson<
-          {
-            status: string;
-            approverUserId?: string | null;
-            approverUserIds?: string[];
-          }[]
-        >(row?.approvals, []).find((s) => s.status === 'pending');
-        const approvers = step
-          ? step.approverUserIds?.length
-            ? step.approverUserIds
-            : step.approverUserId
-              ? [step.approverUserId]
-              : []
-          : [];
-        if (row?.status === 'pending' && approvers.includes(ctx.userId))
-          return checklist;
-      }
+      if (
+        checklist.actionId &&
+        (await isPendingApprover(ctx, checklist.actionId))
+      )
+        return checklist;
       throw new HrError('NOT_FOUND', 404);
+    },
+
+    /**
+     * 按单据打开清单: brings the action's checklist up to date (an action
+     * written by a seed or before this feature has none yet), then answers it
+     * as `forAction` does. Only someone who could read a checklist of the
+     * action — an HR administrator, the checklist's owner, or the action's
+     * current approver — causes the write; anyone else gets nothing and
+     * changes nothing.
+     */
+    async openForAction(
+      ctx: ActorContext,
+      actionId: string,
+      settings: { change: boolean; onboard: boolean; offboard: boolean },
+    ): Promise<Checklist | null> {
+      const existing = await findBy('actionId', actionId);
+      const allowed =
+        (await deps.isHrAdmin(ctx)) ||
+        (Boolean(existing?.ownerUserId) &&
+          existing?.ownerUserId === ctx.userId) ||
+        (await isPendingApprover(ctx, actionId));
+      if (!allowed) return null;
+      await service.syncAction(actionId, settings);
+      return service.forAction(ctx, actionId);
     },
 
     async forAction(

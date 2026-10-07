@@ -23,6 +23,7 @@ import {
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
+import { clientIpResolver } from '../../http/client-ip.js';
 import { authorizeAction } from '../../providers/hr/authorize.js';
 import { COMPOSITE } from '../../providers/hr/recruiting/resources.js';
 import { HrError, str } from '../../providers/hr/shared.js';
@@ -60,14 +61,6 @@ async function form(c: Context) {
     }
   }
   return { files, fields };
-}
-
-function clientIp(c: Context): string {
-  return (
-    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-    c.req.header('x-real-ip') ||
-    'unknown'
-  );
 }
 
 export const recruitingRoutes: AppApiRouteContribution<Application> =
@@ -395,6 +388,13 @@ export const recruitingRoutes: AppApiRouteContribution<Application> =
     installErrorHandler(open as never);
     open.get('/jobs', async (c) => c.json({ data: await s().publicPages.jobs() }));
     open.get('/jobs/:slug', async (c) => c.json({ data: await s().publicPages.job(c.req.param('slug')) }));
+    // The application's human check (readiness review 2026-10-07): a signed, single-use ticket with a proof of
+    // work, see server/providers/hr/recruiting/apply-check.ts. The address is the socket's unless a trusted proxy
+    // forwards it (server/http/client-ip.ts), so a client can no longer pick a fresh one per request.
+    const clientIp = clientIpResolver(app.config);
+    open.post('/jobs/:slug/ticket', async (c) =>
+      c.json({ data: await s().publicPages.applyTicket(c.req.param('slug'), clientIp(c)) }),
+    );
     open.post('/jobs/:slug/apply', async (c) => {
       const { files, fields } = await form(c);
       let answers: Record<string, string>;
@@ -416,8 +416,10 @@ export const recruitingRoutes: AppApiRouteContribution<Application> =
             answers,
             customFields,
             file: files[0] ?? null,
-            challengeId: fields.challengeId,
-            challengeAnswer: fields.challengeAnswer,
+            ticket: fields.ticket,
+            proof: fields.proof,
+            // The honeypot: a field people never see or fill.
+            website: fields.website,
           }),
         },
         201,

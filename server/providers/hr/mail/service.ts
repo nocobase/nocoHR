@@ -176,6 +176,8 @@ export function createMailService(deps: MailServiceDeps) {
   const { database } = deps;
   const handlers = new Map<MailPurpose, MailHandler>();
   const localTried = new Set<MailPurpose>();
+  // A mailbox left unbound is reported once per process, not on every poll (four lines every five minutes).
+  const unboundReported = new Set<MailPurpose>();
 
   function mailboxConfig(purpose: MailPurpose): MailboxConfig {
     return deps.config()[purpose];
@@ -221,6 +223,35 @@ export function createMailService(deps: MailServiceDeps) {
     return mailboxConfig(purpose).address;
   }
 
+  /**
+   * Accounts their owners offered for business use (我的邮箱 · 允许作为业务邮箱).
+   * Only these may newly be bound to a purpose on 设置 / 邮件 (readiness
+   * review 2026-10-07: HR could bind anyone's own mailbox and read it).
+   */
+  async function offeredAccounts(): Promise<Map<string, string>> {
+    const rows = await database
+      .query()
+      .selectFrom('businessMailOffers')
+      .select(['accountId', 'userId'])
+      .execute();
+    return new Map(rows.map((r) => [str(r.accountId), str(r.userId)]));
+  }
+
+  async function recordOffer(accountId: string, userId: string) {
+    const existing = await database
+      .query()
+      .selectFrom('businessMailOffers')
+      .select(['accountId'])
+      .where('accountId', '=', accountId)
+      .executeTakeFirst();
+    if (existing) return;
+    await database
+      .query()
+      .insertInto('businessMailOffers')
+      .values({ accountId, userId, offeredAt: new Date() })
+      .execute();
+  }
+
   /** Development, tests and the demo: each purpose gets a 本地文件邮箱 account of its own, once. */
   async function ensureLocalAccounts(): Promise<void> {
     if (!deps.localProvider || deps.production) return;
@@ -260,6 +291,8 @@ export function createMailService(deps: MailServiceDeps) {
         accountId: account.id,
         ownerUserId: owner,
       };
+      // Connected for this purpose: offered for business use from the start.
+      await recordOffer(account.id, owner);
       changed = true;
     }
     if (changed)
@@ -657,9 +690,12 @@ export function createMailService(deps: MailServiceDeps) {
           continue;
         const bound = await binding(purpose);
         if (!bound) {
-          deps.log({ purpose }, 'Mailbox has no Mail account bound');
+          if (!unboundReported.has(purpose))
+            deps.log({ purpose }, 'Mailbox has no Mail account bound');
+          unboundReported.add(purpose);
           continue;
         }
+        unboundReported.delete(purpose);
         let items: IncomingMail[];
         try {
           await synchronize(bound.ctx, bound.accountId);
@@ -1422,38 +1458,148 @@ export function createMailService(deps: MailServiceDeps) {
       return state;
     },
 
-    /** 设置 / 邮件: every Mail plugin account, to bind one to a purpose (HR administrators; checked by the route). */
+    /**
+     * 设置 / 邮件: the Mail plugin accounts that may serve a purpose (HR
+     * administrators; checked by the route) — those their owners offered for
+     * business use, and those already bound.
+     */
     async accounts() {
-      const accounts = await deps
-        .mail()
-        .listManagedAccounts({ actorId: 'system' });
-      return accounts.map((a) => ({
-        id: a.id,
-        address: a.address,
-        ownerUserId: a.userId,
-        ownerName: a.ownerName ?? null,
-        provider: a.provider.type,
-        status: a.status,
-      }));
+      const [accounts, offers, settings] = await Promise.all([
+        deps.mail().listManagedAccounts({ actorId: 'system' }),
+        offeredAccounts(),
+        deps.settings.read(),
+      ]);
+      const bound = new Set(
+        MAIL_PURPOSES.map((p) => settings.value.mailboxes[p].accountId).filter(
+          Boolean,
+        ),
+      );
+      return accounts
+        .filter((a) => offers.get(a.id) === a.userId || bound.has(a.id))
+        .map((a) => ({
+          id: a.id,
+          address: a.address,
+          ownerUserId: a.userId,
+          ownerName: a.ownerName ?? null,
+          provider: a.provider.type,
+          status: a.status,
+        }));
     },
 
-    /** A binding names an existing account and its real owner, or nothing. */
+    /**
+     * A binding names an existing account and its real owner, or nothing; a
+     * newly bound account must have been offered by that owner. Returns the
+     * bindings that are new, whose owners are told (`notifyBound`).
+     */
     async checkBindings(
       mailboxes: Record<string, { accountId?: string; ownerUserId?: string }>,
     ) {
-      const accounts = await service.accounts();
+      const accounts = await deps
+        .mail()
+        .listManagedAccounts({ actorId: 'system' });
+      const offers = await offeredAccounts();
+      const current = (await deps.settings.read()).value.mailboxes as Record<
+        string,
+        { accountId?: string; ownerUserId?: string } | undefined
+      >;
       // One account serves one purpose: two purposes reading one inbox would each take every message.
       const bound = Object.values(mailboxes)
         .map((m) => m.accountId)
         .filter((id): id is string => Boolean(id));
       if (new Set(bound).size !== bound.length)
         throw new HrError('MAIL_ACCOUNT_IN_USE', 400);
-      for (const mailbox of Object.values(mailboxes)) {
+      const added: {
+        purpose: string;
+        accountId: string;
+        ownerUserId: string;
+        address: string;
+      }[] = [];
+      for (const [purpose, mailbox] of Object.entries(mailboxes)) {
         if (!mailbox.accountId && !mailbox.ownerUserId) continue;
         const account = accounts.find((a) => a.id === mailbox.accountId);
-        if (!account || account.ownerUserId !== mailbox.ownerUserId)
+        if (!account || account.userId !== mailbox.ownerUserId)
           throw new HrError('MAIL_ACCOUNT_INVALID', 400);
+        const before = current[purpose];
+        if (
+          before?.accountId === account.id &&
+          before.ownerUserId === account.userId
+        )
+          continue;
+        if (offers.get(account.id) !== account.userId)
+          throw new HrError('MAIL_ACCOUNT_NOT_OFFERED', 400);
+        added.push({
+          purpose,
+          accountId: account.id,
+          ownerUserId: account.userId,
+          address: account.address,
+        });
       }
+      return added;
+    },
+
+    /** Tells each owner that their account now serves a business mailbox. */
+    async notifyBound(
+      added: readonly {
+        purpose: string;
+        accountId: string;
+        ownerUserId: string;
+        address: string;
+      }[],
+    ) {
+      if (!added.length) return;
+      const mailboxes = (await deps.settings.read()).value.mailboxes as Record<
+        string,
+        { boundAt?: string } | undefined
+      >;
+      for (const binding of added)
+        await deps.notify({
+          // Once per binding: a later unbinding and binding again tells the owner again.
+          key: `mail:bound:${binding.purpose}:${binding.accountId}:${mailboxes[binding.purpose]?.boundAt ?? ''}`,
+          userIds: [binding.ownerUserId],
+          message: 'businessMailboxBound',
+          params: { purpose: binding.purpose, address: binding.address },
+          path: '/talent/my-mailbox',
+        });
+    },
+
+    /** 我的邮箱: which of the user's own accounts they offered for business use. */
+    async myOffers(ctx: ActorContext) {
+      const rows = await database
+        .query()
+        .selectFrom('businessMailOffers')
+        .select(['accountId'])
+        .where('userId', '=', ctx.userId)
+        .execute();
+      return rows.map((r) => str(r.accountId));
+    },
+
+    /**
+     * 我的邮箱 · 允许作为业务邮箱: the owner offers one of their own accounts,
+     * or withdraws the offer while it serves no purpose.
+     */
+    async setOffer(ctx: ActorContext, accountId: string, offered: boolean) {
+      const own = await deps
+        .mail()
+        .listAccounts({ actorId: ctx.userId })
+        .catch(() => []);
+      if (!own.some((a) => a.id === accountId))
+        throw new HrError('MAIL_ACCOUNT_INVALID', 404);
+      if (offered) await recordOffer(accountId, ctx.userId);
+      else {
+        const settings = (await deps.settings.read()).value;
+        if (
+          MAIL_PURPOSES.some(
+            (p) => settings.mailboxes[p].accountId === accountId,
+          )
+        )
+          throw new HrError('MAIL_ACCOUNT_BOUND', 409);
+        await database
+          .query()
+          .deleteFrom('businessMailOffers')
+          .where('accountId', '=', accountId)
+          .execute();
+      }
+      return service.myOffers(ctx);
     },
 
     /** The business mailboxes bound to the user's own accounts (我的邮箱 marks them and keeps them from removal). */

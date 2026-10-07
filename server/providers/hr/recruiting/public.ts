@@ -8,19 +8,27 @@
  *   application; the resume is checked for type and size;
  * - the conversation is a fixed flow (knockout questions, then the form) —
  *   no model is called here;
- * - one address may apply ipLimitPerHour times an hour; beyond that a
- *   verification question must be answered;
+ * - every application passes the human check of apply-check.ts (a signed,
+ *   single-use ticket with a proof of work, a minimum fill time and a hidden
+ *   field); one address may apply ipLimitPerHour times an hour at the light
+ *   proof of work, beyond that each application costs seconds of work;
  * - an application to a self-booking posting gets a booking link for its own
  *   interview, which it may reschedule or cancel once;
  * - an offer link shows that offer's letter and takes the answer before its
  *   deadline; after acceptance it serves 待入职跟进 until the onboarding
  *   takes effect.
  */
-import { createHash, randomInt } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
-import { HrError, newId, str } from '../shared.js';
+import { ExpiringSet, WindowThrottle } from '../../../http/throttle.js';
+import { HrError, str } from '../shared.js';
+import {
+  BASE_DIFFICULTY,
+  createApplyCheck,
+  HARD_DIFFICULTY,
+} from './apply-check.js';
 import type { CandidateService, UploadedFile } from './candidates.js';
-import { fill, localDateTime, sha256 } from './common.js';
+import { candidateLinkExpired, fill, localDateTime, sha256 } from './common.js';
 import type { RecruitingContext } from './context.js';
 import type { InterviewService } from './interviews.js';
 import type { OfferService } from './offers.js';
@@ -42,8 +50,12 @@ export function createPublicService(
   },
 ) {
   const { database, platform } = ctx;
-  const attempts = new Map<string, number[]>();
-  const challenges = new Map<string, { answer: string; expires: number }>();
+  // Applications per address in the last hour (bounded), and the tickets already used.
+  const attempts = new WindowThrottle({ limit: 1_000, windowMs: HOUR });
+  const usedTickets = new ExpiringSet();
+  const check = createApplyCheck(ctx.formSecret);
+  const addressKey = (ip: string) =>
+    createHash('sha256').update(ip).digest('hex').slice(0, 32);
 
   async function enabled() {
     const settings = await ctx.settings();
@@ -80,41 +92,34 @@ export function createPublicService(
       }));
   }
 
-  /** 同一 IP 每小时最多投递 N 次: beyond it the caller must answer a question. */
-  function throttle(
+  /** The proof of work an application from this address needs now: heavier beyond ipLimitPerHour. */
+  function difficultyFor(ip: string, limit: number) {
+    return attempts.count(addressKey(ip)) >= limit
+      ? HARD_DIFFICULTY
+      : BASE_DIFFICULTY;
+  }
+
+  /** 同一 IP 每小时最多投递 N 次 at the light check; any failure answers a fresh ticket to solve. */
+  function humanCheck(
+    slug: string,
     ip: string,
     limit: number,
-    challenge?: { id?: string; answer?: string },
+    input: { ticket?: string; proof?: string; website?: string },
   ) {
-    const key = createHash('sha256').update(ip).digest('hex').slice(0, 32);
     const now = Date.now();
-    const recent = (attempts.get(key) ?? []).filter((t) => now - t < HOUR);
-    if (recent.length >= limit) {
-      const solved =
-        challenge?.id &&
-        challenges.get(challenge.id) &&
-        challenges.get(challenge.id)!.expires > now &&
-        challenges.get(challenge.id)!.answer ===
-          String(challenge.answer ?? '').trim();
-      if (!solved) {
-        const a = randomInt(1, 10);
-        const b = randomInt(1, 10);
-        const id = newId();
-        challenges.set(id, {
-          answer: String(a + b),
-          expires: now + 10 * 60_000,
-        });
-        for (const [k, v] of challenges)
-          if (v.expires < now) challenges.delete(k);
-        throw new HrError('PUBLIC_VERIFY_REQUIRED', 409, {
-          challengeId: id,
-          question: `${a} + ${b} = ?`,
-        });
-      }
-      challenges.delete(challenge.id!);
-    }
-    recent.push(now);
-    attempts.set(key, recent);
+    const required = difficultyFor(ip, limit);
+    const result = check.verify(input, slug, required, now);
+    const accepted =
+      result.ok &&
+      !input.website?.trim() &&
+      usedTickets.add(result.nonce, result.expiresAt);
+    if (!accepted)
+      throw new HrError(
+        'PUBLIC_VERIFY_REQUIRED',
+        409,
+        check.issue(slug, required, now),
+      );
+    attempts.hit(addressKey(ip), limit);
   }
 
   async function deletionCandidate(token: string) {
@@ -137,10 +142,12 @@ export function createPublicService(
     const row = await database
       .query()
       .selectFrom('applications')
-      .select(['id'])
+      .select(['id', 'bookingTokenIssuedAt'])
       .where('bookingTokenHash', '=', sha256(token))
       .executeTakeFirst();
-    if (!row) throw new HrError('BOOKING_LINK_INVALID', 404);
+    // 30 days from issue (the day-before reminder issues a fresh link), and only while the posting is open.
+    if (!row || candidateLinkExpired(row.bookingTokenIssuedAt))
+      throw new HrError('BOOKING_LINK_INVALID', 404);
     const application = await deps.candidates.applicationRow(str(row.id));
     const posting = await deps.postings.get(application.postingId);
     if (!posting.selfBookingEnabled || posting.status !== 'published')
@@ -264,6 +271,17 @@ export function createPublicService(
       };
     },
 
+    /** A ticket for the application's human check; asked for when the conversation starts. */
+    async applyTicket(slug: string, ip: string) {
+      const settings = await enabled();
+      await publishedBySlug(slug);
+      return check.issue(
+        slug,
+        difficultyFor(ip, settings.publicPage.ipLimitPerHour),
+        Date.now(),
+      );
+    },
+
     async apply(
       slug: string,
       input: {
@@ -275,8 +293,9 @@ export function createPublicService(
         answers: Record<string, string>;
         customFields: Record<string, unknown>;
         file: UploadedFile | null;
-        challengeId?: string;
-        challengeAnswer?: string;
+        ticket?: string;
+        proof?: string;
+        website?: string;
       },
     ) {
       const settings = await enabled();
@@ -287,10 +306,7 @@ export function createPublicService(
       for (const q of posting.knockoutQuestions)
         if (!input.answers[q.key]?.trim())
           throw new HrError('KNOCKOUT_ANSWER_REQUIRED', 400, { key: q.key });
-      throttle(input.ip, settings.publicPage.ipLimitPerHour, {
-        id: input.challengeId,
-        answer: input.challengeAnswer,
-      });
+      humanCheck(slug, input.ip, settings.publicPage.ipLimitPerHour, input);
       const mimeType = await deps.candidates.validateResume(input.file, true);
       const definitions = ctx
         .customFields()

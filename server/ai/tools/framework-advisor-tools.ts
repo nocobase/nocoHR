@@ -85,6 +85,30 @@ export const getPositionContext = defineTools({
   },
 });
 
+const CATEGORIES = ['skill', 'quality', 'qualification'] as const;
+
+/**
+ * The counts a drafting tool returns. The advisor once summed its own list wrongly in chat (“6 项专业技能＋4 项
+ * 通用素质…更正：8 项”); it is told to quote these instead of counting.
+ */
+export function categoryCounts(categories: readonly (string | undefined)[]): {
+  total: number;
+  skill: number;
+  quality: number;
+  qualification: number;
+} {
+  const counts = {
+    total: categories.length,
+    skill: 0,
+    quality: 0,
+    qualification: 0,
+  };
+  for (const category of categories)
+    if (category && (CATEGORIES as readonly string[]).includes(category))
+      counts[category as (typeof CATEGORIES)[number]]++;
+  return counts;
+}
+
 /** Finds existing competencies so the advisor reuses them instead of duplicating. */
 export const searchCompetencies = defineTools({
   scope: 'SPECIFIED',
@@ -154,7 +178,7 @@ export const createCompetencyDrafts = defineTools({
   definition: {
     name: 'createCompetencyDrafts',
     description:
-      'Create new competencies as drafts (source=ai, reviewStatus=draft) together with their level descriptions. A code that already exists is reported as an error for that item; reuse the existing competency instead.',
+      'Create new competencies as drafts (source=ai, reviewStatus=draft) together with their level descriptions. A code that already exists is reported as an error for that item; reuse the existing competency instead. Returns counts (created by category, failed); quote them when stating how many were created.',
     schema: z.object({
       competencies: z
         .array(
@@ -198,7 +222,12 @@ export const createCompetencyDrafts = defineTools({
     });
     if (allowed.effect === 'deny' || manage.effect === 'deny')
       return { status: 'error', content: { code: 'FORBIDDEN' } };
-    const created: { id: string; code: string; title: string }[] = [];
+    const created: {
+      id: string;
+      code: string;
+      title: string;
+      category: string;
+    }[] = [];
     const errors: { code: string; error: string }[] = [];
     for (const item of args.competencies) {
       try {
@@ -206,7 +235,12 @@ export const createCompetencyDrafts = defineTools({
           source: 'ai',
           draft: true,
         });
-        created.push({ id: saved.id, code: saved.code, title: saved.title });
+        created.push({
+          id: saved.id,
+          code: saved.code,
+          title: saved.title,
+          category: item.category,
+        });
       } catch (error) {
         if (error instanceof HrError)
           errors.push({ code: item.code, error: error.code });
@@ -215,7 +249,15 @@ export const createCompetencyDrafts = defineTools({
     }
     return {
       status: errors.length && !created.length ? 'error' : 'success',
-      content: { created, errors },
+      content: {
+        created,
+        errors,
+        // Quote these in chat rather than counting the list.
+        counts: {
+          created: categoryCounts(created.map((c) => c.category)),
+          failed: errors.length,
+        },
+      },
     };
   },
 });
@@ -233,7 +275,7 @@ export const createRequirementDrafts = defineTools({
   definition: {
     name: 'createRequirementDrafts',
     description:
-      'Create draft competency requirements for one position. A competency the position already requires is skipped, never overwritten; the skipped list is returned. Give each requirement the clauses it comes from (sourceClauses: the numbers getPositionContext lists, such as J3, with a short quote); an unknown number is dropped.',
+      'Create draft competency requirements for one position. A competency the position already requires is skipped, never overwritten; the skipped list is returned. Give each requirement the clauses it comes from (sourceClauses: the numbers getPositionContext lists, such as J3, with a short quote); an unknown number is dropped. Returns counts (created by category, mandatory, skipped); quote them when stating how many were created.',
     schema: z.object({
       positionId: z.string(),
       requirements: z
@@ -264,7 +306,11 @@ export const createRequirementDrafts = defineTools({
         .max(30),
     }),
   },
-  dependencies: { talent: talentServiceToken, authz: authorizationToken },
+  dependencies: {
+    talent: talentServiceToken,
+    authz: authorizationToken,
+    database: databaseManagerToken,
+  },
   invoke: async (
     ctx,
     args: {
@@ -288,7 +334,8 @@ export const createRequirementDrafts = defineTools({
     });
     if (allowed.effect === 'deny' || manage.effect === 'deny')
       return { status: 'error', content: { code: 'FORBIDDEN' } };
-    const created: { id: string; competencyId: string }[] = [];
+    const created: { id: string; competencyId: string; mandatory: boolean }[] =
+      [];
     const skipped: { competencyId: string; reason: string }[] = [];
     let clauses: ReturnType<typeof positionClauses>;
     try {
@@ -316,14 +363,48 @@ export const createRequirementDrafts = defineTools({
             sourceClauses: resolveSourceClauses(sourceClauses, clauses),
           },
         );
-        created.push({ id: saved.id, competencyId: saved.competencyId });
+        created.push({
+          id: saved.id,
+          competencyId: saved.competencyId,
+          mandatory: item.mandatory,
+        });
       } catch (error) {
         if (error instanceof HrError)
           skipped.push({ competencyId: item.competencyId, reason: error.code });
         else throw error;
       }
     }
-    return { status: 'success', content: { created, skipped } };
+    const categoryOf = new Map(
+      created.length
+        ? (
+            await ctx.deps.database
+              .query()
+              .selectFrom('competencies')
+              .select(['id', 'category'])
+              .where(
+                'id',
+                'in',
+                created.map((r) => r.competencyId),
+              )
+              .execute()
+          ).map((c) => [String(c.id), String(c.category)])
+        : [],
+    );
+    return {
+      status: 'success',
+      content: {
+        created,
+        skipped,
+        // Quote these in chat rather than counting the list.
+        counts: {
+          created: categoryCounts(
+            created.map((r) => categoryOf.get(String(r.competencyId))),
+          ),
+          mandatory: created.filter((r) => r.mandatory).length,
+          skipped: skipped.length,
+        },
+      },
+    };
   },
 });
 

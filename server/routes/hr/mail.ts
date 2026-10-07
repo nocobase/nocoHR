@@ -61,16 +61,37 @@ export const mailRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
           };
         } | null
       )?.value?.mailboxes;
+      // A newly bound account must have been offered by its owner, who is told (readiness review 2026-10-07).
+      let added: Awaited<ReturnType<ReturnType<typeof mail>['checkBindings']>> =
+        [];
       if (mailboxes) {
         await settings().get(actor(c));
-        await mail().checkBindings(mailboxes);
+        added = await mail().checkBindings(mailboxes);
       }
-      return c.json({ data: await settings().update(actor(c), body) });
+      const updated = await settings().update(actor(c), body);
+      await mail().notifyBound(added);
+      return c.json({ data: updated });
     });
     routes.get('/accounts', async (c) => {
       // HR administrators only, like the settings themselves.
       await settings().get(actor(c));
       return c.json({ data: await mail().accounts() });
+    });
+    // 我的邮箱 · 允许作为业务邮箱: the owner offers their own account; the service checks the ownership.
+    routes.get('/mine/offers', async (c) =>
+      c.json({ data: await mail().myOffers(actor(c)) }),
+    );
+    routes.put('/mine/offers/:accountId', async (c) => {
+      const body = (await readJson(c)) as { offered?: unknown } | null;
+      if (typeof body?.offered !== 'boolean')
+        throw new HrError('INVALID_INPUT', 400);
+      return c.json({
+        data: await mail().setOffer(
+          actor(c),
+          c.req.param('accountId'),
+          body.offered,
+        ),
+      });
     });
     routes.get('/mine/bindings', async (c) =>
       c.json({ data: await mail().myBindings(actor(c)) }),

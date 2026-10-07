@@ -838,20 +838,26 @@ describe('V2-06 HR assistant: anomaly check', () => {
     expect(zhao?.note).toContain('成都生产一线薪资结构');
     expect(zhao?.note).toContain('HR-POL-0002');
     expect(zhao?.note).toContain('赵阳');
+    expect(zhao?.note).not.toContain('nightRate');
     expect(of('王磊', 'paramMismatch')).toBeUndefined();
     expect(
       await notification(`payrollCheck:${cycleId}:${calculationId}`),
     ).toBeTruthy();
-    // The run record keeps employee ids and issue types, never an amount.
-    const run = await (
-      await db()
-    )
-      .query()
-      .selectFrom('aiTaskRuns')
-      .selectAll()
-      .where('task', '=', 'hrAssistant.payrollCheck')
-      .where('dedupeKey', '=', `${cycleId}:${calculationId}`)
-      .executeTakeFirst();
+    // The run record keeps employee ids and issue types, never an amount. The review is saved before the
+    // run record is closed, so wait for the run to finish rather than read it mid-flight.
+    const readRun = async () =>
+      (await db())
+        .query()
+        .selectFrom('aiTaskRuns')
+        .selectAll()
+        .where('task', '=', 'hrAssistant.payrollCheck')
+        .where('dedupeKey', '=', `${cycleId}:${calculationId}`)
+        .executeTakeFirst();
+    let run = await readRun();
+    for (let i = 0; i < 50 && run?.status === 'running'; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      run = await readRun();
+    }
     expect(run?.status).toBe('succeeded');
     const references = decode(run?.references) as Json;
     for (const item of references.issues)

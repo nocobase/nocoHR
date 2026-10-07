@@ -6,7 +6,11 @@
  * removes it again. The plugin keeps the credentials and checks the
  * ownership; this page only composes its public components. A Gmail or
  * Microsoft 365 authorization returns here with `?mailAuthorization=`.
+ *
+ * 允许作为业务邮箱 (readiness review 2026-10-07): an HR administrator can bind
+ * only an account its owner allowed here; the owner is told when it is bound.
  */
+import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import {
   MailAccountCard,
@@ -23,6 +27,7 @@ import { useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
+import { errorMessage } from '@/components/talent/errors';
 import { BlockSkeleton, EmptyState } from '@/components/talent/states';
 import { useRemote } from '@/components/talent/use-remote';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -38,6 +43,13 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/toast';
 
 /** The history a new mailbox brings along: the last three months. */
@@ -58,6 +70,33 @@ export default function MyMailboxPage(): ReactElement {
   const bindings = useRemote<{ purpose: string; accountId: string }[]>(
     'talent/mail/mine/bindings',
   );
+  // The accounts the user allowed as business mailboxes.
+  const offers = useRemote<string[]>('talent/mail/mine/offers');
+  const api = useApiClient();
+  const [savingOffer, setSavingOffer] = useState<string>();
+  const setOffer = (accountId: string, offered: boolean) => {
+    setSavingOffer(accountId);
+    void api
+      .request({
+        path: `talent/mail/mine/offers/${encodeURIComponent(accountId)}`,
+        method: 'PUT',
+        json: { offered },
+      })
+      .then(() => {
+        toast.add({
+          type: 'success',
+          title: offered ? t('myMailbox.offered') : t('myMailbox.withdrawn'),
+        });
+        offers.reload();
+      })
+      .catch((cause: unknown) =>
+        toast.add({
+          type: 'error',
+          title: errorMessage(cause, t),
+        }),
+      )
+      .finally(() => setSavingOffer(undefined));
+  };
 
   const refresh = useCallback(() => {
     void Promise.all([mail.listProviders(), mail.listAccounts()])
@@ -206,6 +245,28 @@ export default function MyMailboxPage(): ReactElement {
                   defaultValue: account.status,
                 })}
               />
+              <Field orientation='horizontal'>
+                <Switch
+                  id={`mail-offer-${account.id}`}
+                  checked={Boolean(offers.data?.includes(account.id))}
+                  disabled={
+                    !offers.data ||
+                    savingOffer === account.id ||
+                    Boolean(
+                      bindings.data?.some((b) => b.accountId === account.id),
+                    )
+                  }
+                  onCheckedChange={(checked) => setOffer(account.id, checked)}
+                />
+                <FieldContent>
+                  <FieldLabel htmlFor={`mail-offer-${account.id}`}>
+                    {t('myMailbox.offer')}
+                  </FieldLabel>
+                  <FieldDescription>
+                    {t('myMailbox.offerHint')}
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
               {(() => {
                 const bound = bindings.data?.find(
                   (b) => b.accountId === account.id,

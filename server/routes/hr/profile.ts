@@ -486,17 +486,12 @@ export const profileApiRoutes: AppApiRouteContribution<Application> =
       const pack = await profile().audit.pack(actor(c), await scopeOf(c));
       return download(c, pack.bytes, pack.fileName, 'application/zip');
     });
+    // Only the caller's own pack, unless their grant reaches every employee (profile/index.ts auditPackFor).
     audit.get('/packs/:fileId', async (c) => {
-      const ctx = actor(c);
-      await authorizeAction(ctx.authz, 'talent.audit', 'exportAuditPack');
-      const services = profile();
-      const { driveManagerToken } = await import('@nocobase/app-server/drive');
-      const file = await services.reads.readFile(
-        app.container.resolve(driveManagerToken),
+      const file = await profile().auditPackFor(
+        actor(c),
         c.req.param('fileId'),
       );
-      if (!file || !file.filename.startsWith('audit-pack'))
-        throw new HrError('NOT_FOUND', 404);
       return download(c, file.bytes, file.filename, 'application/zip');
     });
     router.route('/talent/audit', audit);

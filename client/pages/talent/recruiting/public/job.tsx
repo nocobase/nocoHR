@@ -4,10 +4,15 @@
  * the resume and consent (with what it is used for, how long it is kept and
  * how to delete it), added fields marked for the careers page, and — for a
  * self-booking posting — the interview time. Usable at 375px.
+ *
+ * The human check (server: recruiting/apply-check.ts) needs nothing from the
+ * person: a ticket is fetched when the conversation starts and its proof of
+ * work is found while they answer; a hidden field stays empty. When the
+ * server asks for a new check it is solved and the form sent again.
  */
 import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { useState, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 import { useParams } from 'react-router';
 
 import { errorCode, errorDetails } from '@/components/talent/errors';
@@ -22,6 +27,21 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+
+import { solveProof } from './apply-proof';
+
+interface Ticket {
+  readonly ticket: string;
+  readonly difficulty: number;
+  readonly minSeconds: number;
+}
+
+interface PreparedTicket {
+  readonly ticket: string;
+  /** When the ticket may be used (the server's minimum fill time, by this browser's clock). */
+  readonly readyAt: number;
+  readonly proof: Promise<string>;
+}
 
 export default function PublicJobPage(): ReactElement {
   const { t } = useTranslation();
@@ -38,11 +58,9 @@ export default function PublicJobPage(): ReactElement {
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [file, setFile] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);
-  const [challenge, setChallenge] = useState<{
-    id: string;
-    question: string;
-  } | null>(null);
-  const [challengeAnswer, setChallengeAnswer] = useState('');
+  const [honeypot, setHoneypot] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const preparedRef = useRef<PreparedTicket | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ApplyResult | null>(null);
@@ -62,12 +80,36 @@ export default function PublicJobPage(): ReactElement {
     );
   const questions = data.questions;
   const current = questions.find((q) => answers[q.key] === undefined);
+  const prepare = (issued: Ticket) => {
+    preparedRef.current = {
+      ticket: issued.ticket,
+      readyAt: Date.now() + issued.minSeconds * 1000,
+      proof: solveProof(issued.ticket, issued.difficulty),
+    };
+    // Found again on submit if it failed here.
+    preparedRef.current.proof.catch(() => undefined);
+  };
+  const fetchTicket = async () => {
+    const { data: issued } = await api.request<{ data: Ticket }>({
+      path: `public/recruiting/jobs/${encodeURIComponent(slug)}/ticket`,
+      method: 'POST',
+    });
+    prepare(issued);
+  };
+  const start = () => {
+    setStarted(true);
+    void fetchTicket().catch(() => undefined);
+  };
   const answer = (key: string, value: string) => {
     setAnswers((a) => ({ ...a, [key]: value }));
     setDraftAnswer('');
   };
-  async function submit() {
-    if (!file) return;
+  async function send(ticket: PreparedTicket) {
+    if (!file) return null;
+    setVerifying(true);
+    const proof = await ticket.proof.finally(() => setVerifying(false));
+    const wait = ticket.readyAt - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
     const body = new FormData();
     body.set('name', form.name);
     body.set('phone', form.phone);
@@ -75,31 +117,43 @@ export default function PublicJobPage(): ReactElement {
     body.set('consent', String(consent));
     body.set('answers', JSON.stringify(answers));
     body.set('customFields', JSON.stringify(custom));
-    if (challenge) {
-      body.set('challengeId', challenge.id);
-      body.set('challengeAnswer', challengeAnswer);
-    }
+    body.set('ticket', ticket.ticket);
+    body.set('proof', proof);
+    body.set('website', honeypot);
     body.set('file', file);
+    const { data: done } = await api.request<{ data: ApplyResult }>({
+      path: `public/recruiting/jobs/${encodeURIComponent(slug)}/apply`,
+      method: 'POST',
+      body,
+    });
+    return done;
+  }
+  async function submit() {
+    if (!file) return;
     setBusy(true);
     setError(null);
     try {
-      const { data: done } = await api.request<{ data: ApplyResult }>({
-        path: `public/recruiting/jobs/${encodeURIComponent(slug)}/apply`,
-        method: 'POST',
-        body,
-      });
-      setResult(done);
-      setChallenge(null);
+      if (!preparedRef.current) await fetchTicket();
+      let done: ApplyResult | null = null;
+      // A ticket is used once: a second attempt (a new check the server asked for) gets its own.
+      for (let attempt = 0; attempt < 2 && !done; attempt++) {
+        const ticket = preparedRef.current!;
+        preparedRef.current = null;
+        try {
+          done = await send(ticket);
+        } catch (cause) {
+          if (errorCode(cause) !== 'PUBLIC_VERIFY_REQUIRED' || attempt > 0)
+            throw cause;
+          prepare(errorDetails(cause) as Ticket);
+        }
+      }
+      if (done) setResult(done);
     } catch (cause) {
-      if (errorCode(cause) === 'PUBLIC_VERIFY_REQUIRED') {
-        const details = errorDetails(cause) as {
-          challengeId: string;
-          question: string;
-        };
-        setChallenge({ id: details.challengeId, question: details.question });
-      } else setError(failure(cause));
+      setError(failure(cause));
+      void fetchTicket().catch(() => undefined);
     } finally {
       setBusy(false);
+      setVerifying(false);
     }
   }
   async function book(start: string) {
@@ -145,7 +199,7 @@ export default function PublicJobPage(): ReactElement {
               ))}
             </ul>
           </div>
-          <Button className='w-full' onClick={() => setStarted(true)}>
+          <Button className='w-full' onClick={start}>
             {t('recruiting.public.start')}
           </Button>
         </section>
@@ -343,20 +397,28 @@ export default function PublicJobPage(): ReactElement {
                 />
                 {t('recruiting.public.consent')}
               </label>
-              {challenge ? (
-                <Field>
-                  <FieldLabel htmlFor='ap-challenge'>
-                    {t('recruiting.public.verify', {
-                      question: challenge.question,
-                    })}
-                  </FieldLabel>
-                  <Input
-                    id='ap-challenge'
-                    inputMode='numeric'
-                    value={challengeAnswer}
-                    onChange={(e) => setChallengeAnswer(e.target.value)}
-                  />
-                </Field>
+              {/* The honeypot: hidden from people and assistive technology, filled only by scripts. */}
+              <div
+                aria-hidden='true'
+                className='absolute -left-[9999px] h-px w-px overflow-hidden'
+              >
+                <label htmlFor='ap-website'>
+                  {t('recruiting.public.honeypot')}
+                </label>
+                <input
+                  id='ap-website'
+                  name='website'
+                  type='text'
+                  tabIndex={-1}
+                  autoComplete='off'
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                />
+              </div>
+              {verifying ? (
+                <p className='text-sm text-muted-foreground' role='status'>
+                  {t('recruiting.public.verify')}
+                </p>
               ) : null}
               {error ? (
                 <p className='text-sm text-destructive'>{error}</p>

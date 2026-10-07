@@ -24,11 +24,15 @@ import { actor, installErrorHandler, readJson, type HrEnv } from './shared.js';
 export const changeChecklistRoutes: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
     const routes = new Hono<HrEnv>();
-    routes.use(
-      '*',
-      app.container.resolve(authenticationToken).required(),
-      app.container.resolve(authorizationToken).middleware(),
-    );
+    // Only the prefixes this router owns: it is mounted at /talent, so a
+    // `use('*')` would also run for every /api/talent/* route registered after it.
+    for (const prefix of ['/checklists', '/compliance', '/settings-drafts'])
+      for (const path of [prefix, `${prefix}/*`])
+        routes.use(
+          path,
+          app.container.resolve(authenticationToken).required(),
+          app.container.resolve(authorizationToken).middleware(),
+        );
     installErrorHandler(routes);
     const checklists = () => app.container.resolve(checklistServiceToken);
     const compliance = () => app.container.resolve(complianceServiceToken);
@@ -40,12 +44,14 @@ export const changeChecklistRoutes: AppApiRouteContribution<Application> =
     routes.get('/checklists/by-action/:actionId', async (c) => {
       const ctx = actor(c);
       const actionId = c.req.param('actionId');
-      // Brought up to date first: an action written by a seed or before this feature has none yet.
+      // Brought up to date first (an action written by a seed or before this feature has none yet),
+      // but only for a caller who may read the action's checklist: the check comes before the write.
       const settings = (
         await app.container.resolve(personnelSettingsToken).read('checklists')
       ).value;
-      await checklists().syncAction(actionId, settings);
-      return c.json({ data: await checklists().forAction(ctx, actionId) });
+      return c.json({
+        data: await checklists().openForAction(ctx, actionId, settings),
+      });
     });
     routes.get('/checklists/:id', async (c) =>
       c.json({ data: await checklists().read(actor(c), c.req.param('id')) }),

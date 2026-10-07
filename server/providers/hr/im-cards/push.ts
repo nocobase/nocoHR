@@ -77,6 +77,11 @@ export function createImPush(deps: {
   readonly warn: (detail: Record<string, unknown>, message: string) => void;
 }) {
   const { database } = deps;
+  /**
+   * Whether anything can deliver to the office suite: the configured Feishu app, or the development mock. In
+   * production without FEISHU_APP_ID / FEISHU_APP_SECRET the transport is `none`, and the list said “enabled”.
+   */
+  const configured = deps.transport.name !== 'none';
   const rowId = (userId: string) => `imPush:${userId}`.slice(0, 64);
   const routes: PushCardRoute[] = [];
 
@@ -114,15 +119,20 @@ export function createImPush(deps: {
       .execute();
   }
 
-  /** The channels a user may switch: only those they are bound to. The inbox is always on. */
+  /**
+   * The channels a user may switch: only those they are bound to. The inbox is always on. A channel nothing can
+   * deliver to (no credentials) is `configured: false` and never `enabled`.
+   */
   async function settingsFor(userId: string) {
     const prefs = await preferences(userId);
     const channels = [];
     for (const provider of PUSH_PROVIDERS)
       channels.push({
         provider,
+        configured,
         bound: Boolean(await deps.bindings.externalOf(provider, userId)),
-        enabled: prefs[provider as keyof PushPreferences] !== false,
+        enabled:
+          configured && prefs[provider as keyof PushPreferences] !== false,
       });
     return { inbox: true as const, channels };
   }
@@ -196,7 +206,8 @@ export function createImPush(deps: {
             provider,
             userId,
           );
-          if (!externalUserId) continue;
+          // Nothing can deliver it: the inbox has it, and no failure is recorded against the to-do.
+          if (!externalUserId || !configured) continue;
           if (
             (await preferences(userId))[provider as keyof PushPreferences] ===
             false

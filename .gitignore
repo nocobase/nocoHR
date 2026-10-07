@@ -23,3 +23,6 @@ coverage/
 /.agent-annotations/
 /.nocobase/
 *.log
+
+# Internal documents stay local; they are not published with the code.
+/docs/

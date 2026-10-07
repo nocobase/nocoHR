@@ -614,6 +614,10 @@ const enUS = {
       body: '{{diffPeople}} people differ, {{diffHours}} hours in total.',
     },
     // V2-06 business mail (server/providers/hr/mail/)
+    businessMailboxBound: {
+      title: 'Your mailbox {{address}} now serves a business mailbox',
+      body: 'Its mail is read and sent in the system in your name; My mailbox shows which purpose it serves.',
+    },
     mailUnmatched: {
       title: 'A business mailbox message waits to be sorted',
       body: '{{from}}: {{subject}}',

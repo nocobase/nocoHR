@@ -142,6 +142,8 @@ async function pub(
   method: string,
   url: string,
   body?: unknown,
+  /** The socket peer (server/http/client-ip.ts); none shares the `unknown` bucket. */
+  peer?: string,
 ): Promise<{ status: number; json: Json; type: string }> {
   const response = await server.fetch(
     new Request(`${base}/api/public/hr-document${url}`, {
@@ -152,6 +154,7 @@ async function pub(
           : { 'content-type': 'application/json', origin: 'http://localhost' },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
+    peer ? { incoming: { socket: { remoteAddress: peer } } } : undefined,
   );
   const type = response.headers.get('content-type') ?? '';
   const text = type.includes('json') ? await response.text() : '';
@@ -317,6 +320,47 @@ describe('离职员工的邮件往来 (V1-02 V2 增补)', () => {
       .execute();
     expect((await pub('GET', `/${token}`)).status).toBe(404);
     expect((await pub('POST', `/${token}/code`, {})).status).toBe(404);
+  });
+
+  it('locks a code after five wrong tries even when they arrive together, and sends at most five codes', async () => {
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const shares = () =>
+      server.application.container
+        .resolve(databaseManagerToken)
+        .query()
+        .updateTable('documentShares')
+        .where('employeeId', '=', 'emp-dengkai');
+    // The link again, as if it were still within its 7 days, and past the resend pause.
+    await shares()
+      .set({ expiresAt: new Date(Date.now() + 86_400_000), codeSentAt: null })
+      .execute();
+    const peer = '198.51.100.7';
+    expect((await pub('POST', `/${token}/code`, {}, peer)).status).toBe(200);
+    const mails = await sentTo(PERSONAL, 3);
+    const code = /验证码：(\d{6})/u.exec(
+      mails.filter((m) => /验证码：\d{6}/u.test(m)).at(-1)!,
+    )![1]!;
+    const wrong = code === '111111' ? '222222' : '111111';
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        pub('POST', `/${token}/download`, { code: wrong }, peer),
+      ),
+    );
+    expect(results.filter((r) => r.status === 400)).toHaveLength(5);
+    expect(
+      results.filter((r) => r.json.code === 'DOCUMENT_CODE_LOCKED'),
+    ).toHaveLength(7);
+    // Locked: the right code no longer opens it.
+    expect(
+      (await pub('POST', `/${token}/download`, { code }, peer)).json.code,
+    ).toBe('DOCUMENT_CODE_LOCKED');
+    // A new code may be asked for, but no more than five per link.
+    await shares().set({ codeSends: 4, codeSentAt: null }).execute();
+    expect((await pub('POST', `/${token}/code`, {}, peer)).status).toBe(200);
+    await shares().set({ codeSentAt: null }).execute();
+    expect((await pub('POST', `/${token}/code`, {}, peer)).json.code).toBe(
+      'DOCUMENT_CODE_SENDS_EXCEEDED',
+    );
   });
 
   it('drafts 邓凯’s income certificate for payroll01, keeping the amounts from hr01', async () => {

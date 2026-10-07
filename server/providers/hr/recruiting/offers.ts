@@ -40,6 +40,9 @@ import type { RequisitionService } from './requisitions.js';
 import { COMPOSITE } from './resources.js';
 import type { Templates } from './templates.js';
 
+/** How long after the start date an accepted offer's link still opens when the onboarding never took effect. */
+const OFFER_LINK_DAYS_AFTER_START = 30;
+
 const salarySchema = z
   .object({
     baseSalary: z.number().finite().min(0).max(10_000_000),
@@ -1120,10 +1123,16 @@ export function createOfferService(
         .executeTakeFirst();
       if (!found) throw new HrError('OFFER_LINK_INVALID', 404);
       const offer = presentOffer(found);
-      // 入职生效后失效; a declined, withdrawn or expired offer answers nothing.
+      // 入职生效后失效; a declined, withdrawn or expired offer answers nothing. An accepted offer's link serves
+      // 待入职跟进 until OFFER_LINK_DAYS_AFTER_START days after the start date, should the onboarding never take
+      // effect (readiness review 2026-10-07); a sent one closes at respondBy (respondTrusted, the daily expiry).
       if (
         offer.preboarding.onboardedAt ||
-        ['withdrawn', 'declined', 'expired'].includes(offer.status)
+        ['withdrawn', 'declined', 'expired'].includes(offer.status) ||
+        (offer.status === 'accepted' &&
+          offer.startDate &&
+          addDays(offer.startDate, OFFER_LINK_DAYS_AFTER_START) <
+            platform.currentDate())
       )
         throw new HrError('OFFER_LINK_INVALID', 404);
       return offer;

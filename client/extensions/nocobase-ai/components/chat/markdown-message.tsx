@@ -2,6 +2,10 @@ import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import {
+  isSafeImageSrc,
+  safeMarkdownUrlTransform,
+} from '../../shared/safe-markdown-urls.js';
 import { cn } from '../../shared/utils.js';
 
 type MarkdownMessageProps = {
@@ -141,6 +145,32 @@ function createMarkdownComponents(
         rel='noreferrer'
       />
     ),
+    // Application addition (readiness review 2026-10-07): an image from
+    // another origin would load by itself and could carry chat data away, so
+    // it is shown as a link instead; see shared/safe-markdown-urls.ts.
+    img: ({ className, src, alt, node: _node, ...props }) =>
+      isSafeImageSrc(src) ? (
+        <img
+          {...props}
+          src={src}
+          alt={alt}
+          className={cn('my-3 max-w-full rounded-md', className)}
+        />
+      ) : src ? (
+        <span className='break-all'>
+          {alt ? `${alt}: ` : null}
+          <a
+            href={src}
+            className='underline underline-offset-4'
+            target='_blank'
+            rel='noreferrer noopener'
+          >
+            {src}
+          </a>
+        </span>
+      ) : alt ? (
+        <span>{alt}</span>
+      ) : null,
     pre: ({ className, ...props }) => (
       <pre
         {...props}
@@ -182,6 +212,7 @@ export function MarkdownMessage({
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
+      urlTransform={safeMarkdownUrlTransform}
       components={variant === 'document' ? documentComponents : chatComponents}
     >
       {children}

@@ -1,3 +1,4 @@
+import { ApiClientError } from '@nocobase/app-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -70,6 +71,10 @@ describe('PublicJobPage', () => {
         calls.push(input);
         if (input.path === 'public/recruiting/jobs/cnc')
           return Promise.resolve({ data: JOB });
+        if (input.path === 'public/recruiting/jobs/cnc/ticket')
+          return Promise.resolve({
+            data: { ticket: 'ticket-1', difficulty: 4, minSeconds: 0 },
+          });
         if (input.path === 'public/recruiting/jobs/cnc/apply')
           return Promise.resolve({
             data: {
@@ -140,6 +145,15 @@ describe('PublicJobPage', () => {
       q2: 'yes',
     });
     expect(sent.get('consent')).toBe('true');
+    // The human check: the ticket fetched when the conversation started, its proof, the hidden field empty.
+    expect(sent.get('ticket')).toBe('ticket-1');
+    expect(String(sent.get('proof'))).toMatch(/^\d+$/u);
+    expect(sent.get('website')).toBe('');
+    expect(
+      calls.findIndex((c) => c.path === 'public/recruiting/jobs/cnc/ticket'),
+    ).toBeLessThan(
+      calls.findIndex((c) => c.path === 'public/recruiting/jobs/cnc/apply'),
+    );
     fireEvent.click(slot);
     await waitFor(() =>
       expect(
@@ -148,5 +162,68 @@ describe('PublicJobPage', () => {
         ),
       ).toBeTruthy(),
     );
+  });
+  it('solves a new check the server asks for and sends the application again, with nothing for the person to answer', async () => {
+    const applied: FormData[] = [];
+    state.request.mockImplementation(
+      (input?: { path: string; body?: FormData }) => {
+        if (!input) return Promise.resolve({ data: null });
+        if (input.path === 'public/recruiting/jobs/cnc')
+          return Promise.resolve({
+            data: { ...JOB, questions: [], selfBooking: false },
+          });
+        if (input.path === 'public/recruiting/jobs/cnc/ticket')
+          return Promise.resolve({
+            data: { ticket: 'light', difficulty: 2, minSeconds: 0 },
+          });
+        if (input.path === 'public/recruiting/jobs/cnc/apply') {
+          applied.push(input.body!);
+          if (applied.length === 1)
+            return Promise.reject(
+              new ApiClientError('verify', {
+                status: 409,
+                method: 'POST',
+                url: input.path,
+                payload: {
+                  code: 'PUBLIC_VERIFY_REQUIRED',
+                  details: { ticket: 'heavier', difficulty: 6, minSeconds: 0 },
+                },
+              }),
+            );
+          return Promise.resolve({
+            data: { received: true, bookingToken: null, slots: [] },
+          });
+        }
+        return Promise.reject(new Error(`unexpected ${input.path}`));
+      },
+    );
+    render(
+      <MemoryRouter initialEntries={['/jobs/cnc']}>
+        <Routes>
+          <Route path='/jobs/:slug' element={<PublicJobPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByText(en.recruiting.public.start));
+    fireEvent.change(await screen.findByLabelText(en.recruiting.public.name), {
+      target: { value: '周迪' },
+    });
+    fireEvent.change(screen.getByLabelText(en.recruiting.public.phone), {
+      target: { value: '13900007100' },
+    });
+    fireEvent.change(
+      screen.getByLabelText(
+        en.recruiting.public.resume.replace('{{mb}}', '10'),
+      ),
+      { target: { files: [new File(['%PDF'], 'r.pdf')] } },
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(
+      screen.getByRole('button', { name: en.recruiting.public.apply }),
+    );
+    await screen.findByText(en.recruiting.public.submitted);
+    expect(applied.map((f) => f.get('ticket'))).toEqual(['light', 'heavier']);
+    // No question appears: the old arithmetic field is gone.
+    expect(screen.queryByRole('textbox', { name: /answer/iu })).toBeNull();
   });
 });

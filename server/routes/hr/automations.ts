@@ -48,10 +48,15 @@ export const automationApiRoutes: AppApiRouteContribution<Application> =
     routes.get('/automations', async (c) =>
       c.json({ data: await automation.list(actor(c)) }),
     );
-    // People who can own an automation: employees with an account, not left.
+    // People who can own an automation: employees with an account, not left;
+    // with `?key=`, only those the caller may make its owner (themselves, or a
+    // peer who may configure it too) and its current owner.
     routes.get('/automations/owners', async (c) => {
       const ctx = actor(c);
-      await automation.list(ctx);
+      const settings = await automation.list(ctx);
+      const key = c.req.query('key');
+      const setting = key ? settings.find((s) => s.key === key) : undefined;
+      if (key && !setting) throw new HrError('AUTOMATION_NOT_FOUND', 404);
       const platform = app.container.resolve(platformToken);
       const rows = await platform.database
         .query()
@@ -61,8 +66,16 @@ export const automationApiRoutes: AppApiRouteContribution<Application> =
         .where('status', '!=', 'leave')
         .orderBy('employeeNo', 'asc')
         .execute();
+      const eligible = [];
+      for (const r of rows)
+        if (
+          !setting ||
+          String(r.userId) === setting.ownerUserId ||
+          (await automation.mayOwn(ctx, setting.key, String(r.userId)))
+        )
+          eligible.push(r);
       return c.json({
-        data: rows.map((r) => ({
+        data: eligible.map((r) => ({
           userId: String(r.userId),
           name: String(r.name),
           employeeNo: String(r.employeeNo),

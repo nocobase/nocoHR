@@ -461,6 +461,9 @@ export function createProfileReads(platform: Platform) {
         name: string;
         bytes: Uint8Array;
         mimeType: string;
+        /** What the file is for, and who it was made for (202610250001_hr_file_purpose). */
+        purpose?: string;
+        uploadedByUserId?: string;
       },
     ): Promise<string> {
       const id = newId();
@@ -487,6 +490,10 @@ export function createProfileReads(platform: Platform) {
           ext: safe.includes('.') ? safe.split('.').pop()!.slice(0, 32) : '',
           mimeType: file.mimeType,
           size: file.bytes.byteLength,
+          ...(file.purpose ? { purpose: file.purpose } : {}),
+          ...(file.uploadedByUserId
+            ? { uploadedByUserId: file.uploadedByUserId }
+            : {}),
           createdAt: now,
           updatedAt: now,
         })

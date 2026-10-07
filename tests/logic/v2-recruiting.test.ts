@@ -98,6 +98,42 @@ async function call(
   return { status: response.status, json };
 }
 
+/**
+ * The socket peer a public request comes from: the Node adapter's `c.env.incoming`. The public limits count by it
+ * and ignore a client's own X-Forwarded-For (server/http/client-ip.ts), so the tests choose it here.
+ */
+const fromPeer = (address: string) => ({
+  incoming: { socket: { remoteAddress: address } },
+});
+
+/** A ticket for the careers page's human check, solved as the page solves it (recruiting/apply-check.ts). */
+async function applyTicket(url: string, peer?: string) {
+  const { solveTicket } =
+    await import('../../server/providers/hr/recruiting/apply-check.ts');
+  const response = await server.fetch(
+    new Request(`${base}${url.replace(/\/apply$/u, '/ticket')}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost' },
+    }),
+    peer ? fromPeer(peer) : undefined,
+  );
+  const issued = ((await response.json()) as Json).data as {
+    ticket: string;
+    difficulty: number;
+    minSeconds: number;
+  };
+  return {
+    ticket: issued.ticket,
+    proof: solveTicket(issued.ticket, issued.difficulty),
+    readyAt: Date.now() + issued.minSeconds * 1000,
+  };
+}
+
+const waitUntil = async (at: number) => {
+  const ms = at - Date.now();
+  if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
+};
+
 async function multipart(
   username: string | null,
   url: string,
@@ -105,6 +141,18 @@ async function multipart(
   files: { field: string; name: string; bytes: Uint8Array; type?: string }[],
   extra: Record<string, string> = {},
 ) {
+  // `x-forwarded-for` here names the request's socket peer (see fromPeer); a public application gets its
+  // ticket first unless the test brings its own (or `ticket: ''` to send none).
+  const { 'x-forwarded-for': peer, ...headerExtra } = extra;
+  if (
+    url.startsWith('/api/public/') &&
+    url.endsWith('/apply') &&
+    !('ticket' in fields)
+  ) {
+    const t = await applyTicket(url, peer);
+    await waitUntil(t.readyAt);
+    fields = { ...fields, ticket: t.ticket, proof: t.proof };
+  }
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.set(key, value);
   for (const f of files)
@@ -116,11 +164,12 @@ async function multipart(
     );
   const headers: Record<string, string> = {
     origin: 'http://localhost',
-    ...extra,
+    ...headerExtra,
   };
   if (username) headers.cookie = await signIn(username);
   const response = await server.fetch(
     new Request(`${base}${url}`, { method: 'POST', headers, body: form }),
+    peer ? fromPeer(peer) : undefined,
   );
   const text = await response.text();
   return {
@@ -803,6 +852,30 @@ describe('V2-07 公开页投递与初筛', () => {
       );
   });
 
+  it('a self-booking link stops opening 30 days after it was issued', async () => {
+    const database = await db();
+    const age = (days: number) =>
+      database
+        .query()
+        .updateTable('applications')
+        .set({ bookingTokenIssuedAt: new Date(Date.now() - days * 86_400_000) })
+        .where('id', '=', state.zhouApplication)
+        .execute();
+    const open = () =>
+      call(
+        null,
+        'GET',
+        `/api/public/recruiting/booking/${state.zhouBookingToken}`,
+      );
+    await age(31);
+    const stale = await open();
+    expect(stale.status).toBe(404);
+    expect(stale.json.code).toBe('BOOKING_LINK_INVALID');
+    await age(29);
+    expect((await open()).status).toBe(200);
+    await age(0);
+  });
+
   it('an application typed with someone else’s mobile changes nothing of theirs and does not reveal them', async () => {
     const { resumeDocx, ZHOU_DI_RESUME, DEMO_RESUMES } = state.demo;
     const database = await db();
@@ -903,46 +976,144 @@ describe('V2-07 公开页投递与初筛', () => {
 
   it('the page is rate-limited per address and asks for verification on the 11th application', async () => {
     const { resumeDocx, DEMO_RESUMES } = state.demo;
+    const url = `/api/public/recruiting/jobs/${state.slug}/apply`;
+    const fieldsFor = (i: number) => ({
+      name: `测试${i}`,
+      phone: `1380000${String(1000 + i)}`,
+      email: `rate${i}@qiheng.test`,
+      consent: 'true',
+      answers: JSON.stringify(answers('yes')),
+    });
+    const resume = [
+      { field: 'file', name: 'r.docx', bytes: resumeDocx(DEMO_RESUMES[16]) },
+    ];
+    // Twelve light tickets fetched together (each must age MIN_FILL_SECONDS), then the applications one by one.
+    const tickets = await Promise.all(
+      Array.from({ length: 12 }, () => applyTicket(url, '10.9.9.9')),
+    );
+    await waitUntil(Math.max(...tickets.map((t) => t.readyAt)));
     let last = { status: 0, json: {} as Json };
     for (let i = 0; i < 11; i++)
       last = await multipart(
         null,
-        `/api/public/recruiting/jobs/${state.slug}/apply`,
+        url,
         {
-          name: `测试${i}`,
-          phone: `1380000${String(1000 + i)}`,
-          email: `rate${i}@qiheng.test`,
-          consent: 'true',
-          answers: JSON.stringify(answers('yes')),
+          ...fieldsFor(i),
+          ticket: tickets[i]!.ticket,
+          proof: tickets[i]!.proof,
         },
-        [
-          {
-            field: 'file',
-            name: 'r.docx',
-            bytes: resumeDocx(DEMO_RESUMES[16]),
-          },
-        ],
+        resume,
         { 'x-forwarded-for': '10.9.9.9' },
       );
     expect(last.json.code).toBe('PUBLIC_VERIFY_REQUIRED');
-    const { challengeId, question } = last.json.details;
-    const [a, b] = String(question).match(/\d+/gu)!.map(Number);
+    // Beyond the hour's limit the fresh ticket asks for far more work (apply-check.ts HARD_DIFFICULTY).
+    expect(last.json.details.difficulty).toBe(18);
+    // A client naming another address in X-Forwarded-For is still the same peer: its light ticket is refused alike.
+    const spoofed = tickets[11]!;
+    const form = new FormData();
+    for (const [key, value] of Object.entries({
+      ...fieldsFor(11),
+      ticket: spoofed.ticket,
+      proof: spoofed.proof,
+    }))
+      form.set(key, value);
+    form.append('file', new File([resume[0]!.bytes], 'r.docx'));
+    const spoofedResponse = await server.fetch(
+      new Request(`${base}${url}`, {
+        method: 'POST',
+        headers: {
+          origin: 'http://localhost',
+          'x-forwarded-for': '203.0.113.77',
+        },
+        body: form,
+      }),
+      fromPeer('10.9.9.9'),
+    );
+    expect(spoofedResponse.status).toBe(409);
+    expect(((await spoofedResponse.json()) as Json).code).toBe(
+      'PUBLIC_VERIFY_REQUIRED',
+    );
+    // The page solves the harder ticket it was given and sends again.
+    const { solveTicket } =
+      await import('../../server/providers/hr/recruiting/apply-check.ts');
+    const hard = last.json.details as {
+      ticket: string;
+      difficulty: number;
+      minSeconds: number;
+    };
+    const proof = solveTicket(hard.ticket, hard.difficulty);
+    await new Promise((resolve) => setTimeout(resolve, hard.minSeconds * 1000));
     const solved = await multipart(
       null,
-      `/api/public/recruiting/jobs/${state.slug}/apply`,
-      {
-        name: '测试10',
-        phone: '13800001010',
-        email: 'rate10@qiheng.test',
-        consent: 'true',
-        answers: JSON.stringify(answers('yes')),
-        challengeId,
-        challengeAnswer: String(a + b),
-      },
-      [{ field: 'file', name: 'r.docx', bytes: resumeDocx(DEMO_RESUMES[16]) }],
+      url,
+      { ...fieldsFor(10), ticket: hard.ticket, proof },
+      resume,
       { 'x-forwarded-for': '10.9.9.9' },
     );
     expect(solved.status).toBe(201);
+  });
+
+  it('turns away a scripted application that skips the human check', async () => {
+    const { resumeDocx, DEMO_RESUMES } = state.demo;
+    const url = `/api/public/recruiting/jobs/${state.slug}/apply`;
+    const fields = {
+      name: '脚本',
+      phone: '13800002001',
+      email: 'bot@qiheng.test',
+      consent: 'true',
+      answers: JSON.stringify(answers('yes')),
+    };
+    const resume = [
+      { field: 'file', name: 'r.docx', bytes: resumeDocx(DEMO_RESUMES[16]) },
+    ];
+    const send = (extra: Record<string, string>) =>
+      multipart(null, url, { ...fields, ...extra }, resume, {
+        'x-forwarded-for': '10.8.8.8',
+      });
+    // No ticket at all (the old form's fields only).
+    const none = await send({ ticket: '' });
+    expect(none.json.code).toBe('PUBLIC_VERIFY_REQUIRED');
+    expect(none.json.details.ticket).toBeTruthy();
+    // The old arithmetic answer means nothing now.
+    expect(
+      (await send({ ticket: '', challengeId: 'x', challengeAnswer: '7' })).json
+        .code,
+    ).toBe('PUBLIC_VERIFY_REQUIRED');
+    // A ticket sent at once, before anyone could have filled the form.
+    const early = await applyTicket(url, '10.8.8.8');
+    expect(
+      (await send({ ticket: early.ticket, proof: early.proof })).json.code,
+    ).toBe('PUBLIC_VERIFY_REQUIRED');
+    // A forged ticket, a wrong proof, and the hidden field filled in.
+    const t = await applyTicket(url, '10.8.8.8');
+    const u = await applyTicket(url, '10.8.8.8');
+    await waitUntil(Math.max(t.readyAt, u.readyAt));
+    const [payload] = t.ticket.split('.');
+    expect(
+      (await send({ ticket: `${payload}.forged`, proof: t.proof })).json.code,
+    ).toBe('PUBLIC_VERIFY_REQUIRED');
+    expect(
+      (
+        await send({
+          ticket: t.ticket,
+          proof: String(Number(t.proof) + 1),
+        })
+      ).json.code,
+    ).toBe('PUBLIC_VERIFY_REQUIRED');
+    expect(
+      (await send({ ticket: u.ticket, proof: u.proof, website: 'http://x' }))
+        .json.code,
+    ).toBe('PUBLIC_VERIFY_REQUIRED');
+    // The real page's flow: a ticket, its proof, the hidden field empty — once.
+    const accepted = await send({ ticket: t.ticket, proof: t.proof });
+    expect(accepted.status).toBe(201);
+    const reused = await send({
+      ticket: t.ticket,
+      proof: t.proof,
+      email: 'bot2@qiheng.test',
+      phone: '13800002002',
+    });
+    expect(reused.json.code).toBe('PUBLIC_VERIFY_REQUIRED');
   });
 
   it('imports 29 resumes: the shared mobile merges, every application is screened against the requirements only', async () => {
@@ -1333,6 +1504,40 @@ describe('V2-07 录用与入职', () => {
       'POST',
       `/api/public/recruiting/offer/${state.offerToken}/arrival`,
     );
+    // An accepted offer's link lasts until 30 days after the start date, should the onboarding never happen.
+    {
+      const database = await db();
+      const offers = () =>
+        database.query().updateTable('offers').where('id', '=', state.offerId);
+      const { startDate } = await database
+        .query()
+        .selectFrom('offers')
+        .select(['startDate'])
+        .where('id', '=', state.offerId)
+        .executeTakeFirstOrThrow();
+      await offers()
+        .set({ startDate: addDays(today(), -31) })
+        .execute();
+      expect(
+        (
+          await call(
+            null,
+            'GET',
+            `/api/public/recruiting/offer/${state.offerToken}`,
+          )
+        ).status,
+      ).toBe(404);
+      await offers().set({ startDate }).execute();
+      expect(
+        (
+          await call(
+            null,
+            'GET',
+            `/api/public/recruiting/offer/${state.offerToken}`,
+          )
+        ).status,
+      ).toBe(200);
+    }
     const { docx } =
       await import('../../database/seed-data/demo-recruiting.ts');
     const upload = await multipart(
@@ -1784,6 +1989,50 @@ describe('V2-07 可定制、隐私与权限', () => {
     state.liApplication = row.id;
   });
 
+  it('only a recruiter of one of the candidate’s applications may anonymize them', async () => {
+    const database = await db();
+    const app = await (
+      await services()
+    ).candidates.applicationRow(state.liApplication);
+    const before = await database
+      .query()
+      .selectFrom('jobRequisitions')
+      .select(['recruiterUserId'])
+      .where('id', '=', state.requisitionId)
+      .executeTakeFirst();
+    expect(String(before?.recruiterUserId)).toBe(await userIdOf('recruit01'));
+    // The requisition is handed to another recruiter for a moment: recruit01
+    // still holds the anonymize action but no longer recruits for the candidate.
+    await database
+      .query()
+      .updateTable('jobRequisitions')
+      .set({ recruiterUserId: await userIdOf('hr01') })
+      .where('id', '=', state.requisitionId)
+      .execute();
+    try {
+      const refused = await call(
+        'recruit01',
+        'POST',
+        `/candidates/${app.candidateId}/anonymize`,
+      );
+      expect(refused.status).toBe(404);
+    } finally {
+      await database
+        .query()
+        .updateTable('jobRequisitions')
+        .set({ recruiterUserId: before?.recruiterUserId })
+        .where('id', '=', state.requisitionId)
+        .execute();
+    }
+    const candidate = await database
+      .query()
+      .selectFrom('candidates')
+      .select(['anonymizedAt'])
+      .where('id', '=', app.candidateId)
+      .executeTakeFirst();
+    expect(candidate?.anonymizedAt ?? null).toBeNull();
+  });
+
   it('the stage reminder follows the setting (5 → 3 days)', async () => {
     const settings = (await call('hr01', 'GET', '/settings')).json.data.value;
     await call('hr01', 'PUT', '/settings', {
@@ -1888,7 +2137,10 @@ describe('V2-07 可选 AI 初面', () => {
     await database
       .query()
       .updateTable('applications')
-      .set({ aiInterviewTokenHash: token.hash })
+      .set({
+        aiInterviewTokenHash: token.hash,
+        aiInterviewTokenIssuedAt: new Date(),
+      })
       .where('id', '=', state.liApplication)
       .execute();
     expect(
@@ -1943,7 +2195,10 @@ describe('V2-07 可选 AI 初面', () => {
     await database
       .query()
       .updateTable('applications')
-      .set({ aiInterviewTokenHash: other.hash })
+      .set({
+        aiInterviewTokenHash: other.hash,
+        aiInterviewTokenIssuedAt: new Date(),
+      })
       .where('id', '=', state.imported[0])
       .execute();
     const declined = await call(
@@ -1953,5 +2208,19 @@ describe('V2-07 可选 AI 初面', () => {
       { accept: false },
     );
     expect(declined.json.data.declined).toBe(true);
+    // An invitation link lasts 30 days.
+    await database
+      .query()
+      .updateTable('applications')
+      .set({ aiInterviewTokenIssuedAt: new Date(Date.now() - 31 * 86_400_000) })
+      .where('id', '=', state.imported[0])
+      .execute();
+    const stale = await call(
+      null,
+      'GET',
+      `/api/public/recruiting/ai-interview/${other.token}`,
+    );
+    expect(stale.status).toBe(404);
+    expect(stale.json.code).toBe('AI_INTERVIEW_LINK_INVALID');
   });
 });

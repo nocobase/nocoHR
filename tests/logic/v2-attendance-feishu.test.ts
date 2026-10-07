@@ -17,7 +17,6 @@
 //
 // Each run boots the real standalone server on a throwaway SQLite database with migrations and seeds. No model is
 // configured, so the bot's HR assistant answers the inquiry replies by its rules.
-import { createHmac } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -28,6 +27,7 @@ import {
   createStandaloneServer,
   type StandaloneServer,
 } from '../../server/standalone.ts';
+import { signedHeaders } from '../helpers/callback-signature.ts';
 
 // See tests/logic/v1-feishu-cards.test.ts: map a seed's relative `.js` import to its `.ts` source after a miss.
 registerHooks({
@@ -285,9 +285,7 @@ async function signedPost(url: string, body: Json) {
       headers: {
         'content-type': 'application/json',
         origin: 'http://localhost',
-        'x-nocohr-signature': createHmac('sha256', SECRET)
-          .update(raw)
-          .digest('hex'),
+        ...signedHeaders(SECRET, raw),
       },
       body: raw,
     }),

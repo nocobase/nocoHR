@@ -5,6 +5,7 @@
  * adjustment suggestions. Rates are percentages; the seeded ones are examples.
  */
 import { useApiClient } from '@nocobase/app-client';
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { DownloadIcon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
@@ -348,6 +349,11 @@ function ChangesTab({ initialMonth }: { initialMonth: string }): ReactElement {
   const money = useMoney();
   const failure = usePayrollError();
   const [month, setMonth] = useState(initialMonth);
+  // The 增减员 file is an export: it needs the export action, not view.
+  const exportable = useCan({
+    resource: { type: 'composite', id: 'talent.socialInsurance' },
+    action: 'export',
+  });
   const data = useRemote<{
     pending: Enrolment[];
     started: Enrolment[];
@@ -421,22 +427,24 @@ function ChangesTab({ initialMonth }: { initialMonth: string }): ReactElement {
             onChange={(e) => setMonth(e.target.value)}
           />
         </Field>
-        <Button
-          variant='outline'
-          onClick={() =>
-            void downloadFile(
-              api,
-              'talent/social-insurance/changes/export',
-              `${month}-social-insurance-changes.csv`,
-              { month },
-            ).catch((cause: unknown) =>
-              toast.add({ type: 'error', title: failure(cause) }),
-            )
-          }
-        >
-          <DownloadIcon data-icon='inline-start' />
-          {t('payroll.insurance.exportChanges')}
-        </Button>
+        {exportable.can ? (
+          <Button
+            variant='outline'
+            onClick={() =>
+              void downloadFile(
+                api,
+                'talent/social-insurance/changes/export',
+                `${month}-social-insurance-changes.csv`,
+                { month },
+              ).catch((cause: unknown) =>
+                toast.add({ type: 'error', title: failure(cause) }),
+              )
+            }
+          >
+            <DownloadIcon data-icon='inline-start' />
+            {t('payroll.insurance.exportChanges')}
+          </Button>
+        ) : null}
       </div>
       {data.error ? (
         <LoadError error={data.error} onRetry={data.reload} />

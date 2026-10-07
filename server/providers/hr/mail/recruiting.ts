@@ -349,6 +349,8 @@ export function createRecruitingMailHandler(deps: {
     applicationId: string;
     candidateName: string;
     created: boolean;
+    /** A candidate with the same mobile or email already exists (never merged into). */
+    possibleDuplicate?: boolean;
     email: string | null;
   }>;
   application: (id: string) => Promise<{
@@ -560,9 +562,11 @@ export function createRecruitingMailHandler(deps: {
             refType: 'application',
             refId: outcome.applicationId,
             intent: 'resume',
-            summary: outcome.created
-              ? `${outcome.candidateName}的简历（${resume.name}），已投递到「${posting.title}」并开始初筛。`
-              : `${outcome.candidateName}再次发来简历（${resume.name}），已并入「${posting.title}」的原投递。`,
+            summary: !outcome.created
+              ? `${outcome.candidateName}再次发来简历（${resume.name}），已并入「${posting.title}」的原投递。`
+              : outcome.possibleDuplicate
+                ? `${outcome.candidateName}的简历（${resume.name}），已投递到「${posting.title}」并开始初筛；手机或邮箱与已有候选人相同，请在候选人页核对是否同一人。`
+                : `${outcome.candidateName}的简历（${resume.name}），已投递到「${posting.title}」并开始初筛。`,
           });
           // 邮件正文不留存: the resume now lives with the candidate (and their 保存期限); the mail keeps its subject and summary.
           await mail.forgetMessage(message.id);

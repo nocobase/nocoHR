@@ -156,6 +156,8 @@ async function pub(
   method: string,
   url: string,
   body?: unknown,
+  /** The socket peer (server/http/client-ip.ts); none shares the `unknown` bucket. */
+  peer?: string,
 ): Promise<{ status: number; json: Json; type: string }> {
   const response = await server.fetch(
     new Request(`${base}/api/public/audit-pack${url}`, {
@@ -166,6 +168,7 @@ async function pub(
           : { 'content-type': 'application/json', origin: 'http://localhost' },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
+    peer ? { incoming: { socket: { remoteAddress: peer } } } : undefined,
   );
   const type = response.headers.get('content-type') ?? '';
   const text = type.includes('json') ? await response.text() : '';
@@ -456,6 +459,42 @@ describe('审核邮箱 (V3-11)', () => {
     expect(
       (log.json.data as Json[]).some((l) => l.kind === 'auditPackShare'),
     ).toBe(true);
+  });
+
+  it('locks a code after five wrong tries even when they arrive together, and sends at most five codes', async () => {
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const requests = () =>
+      server.application.container
+        .resolve(databaseManagerToken)
+        .query()
+        .updateTable('auditRequests')
+        .where('id', '=', requestId);
+    await requests().set({ shareCodeSentAt: null }).execute();
+    const peer = '198.51.100.8';
+    expect((await pub('POST', `/${token}/code`, {}, peer)).status).toBe(200);
+    const mails = await sentTo(REQUESTER, 3);
+    const code = /验证码：(\d{6})/u.exec(
+      mails.filter((m) => /验证码：\d{6}/u.test(m)).at(-1)!,
+    )![1]!;
+    const wrong = code === '111111' ? '222222' : '111111';
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        pub('POST', `/${token}/download`, { code: wrong }, peer),
+      ),
+    );
+    expect(results.filter((r) => r.status === 400)).toHaveLength(5);
+    expect(
+      results.filter((r) => r.json.code === 'AUDIT_CODE_LOCKED'),
+    ).toHaveLength(3);
+    expect(
+      (await pub('POST', `/${token}/download`, { code }, peer)).json.code,
+    ).toBe('AUDIT_CODE_LOCKED');
+    await requests()
+      .set({ shareCodeSends: 5, shareCodeSentAt: null })
+      .execute();
+    expect((await pub('POST', `/${token}/code`, {}, peer)).json.code).toBe(
+      'AUDIT_CODE_SENDS_EXCEEDED',
+    );
   });
 
   it('opens nothing once the link is revoked', async () => {

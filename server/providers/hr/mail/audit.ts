@@ -52,6 +52,8 @@ const RESOURCE = 'talent.auditRequest';
 export const SHARE_DAYS = 7;
 export const CODE_MINUTES = 10;
 export const CODE_ATTEMPTS = 5;
+/** Codes one share link may send: each new code allows CODE_ATTEMPTS more guesses. */
+export const CODE_SENDS = 5;
 const CODE_RESEND_SECONDS = 60;
 /** Where the reply's share link goes; replaced only when a person sends it. */
 export const SHARE_LINK_PLACEHOLDER = '【分享链接在发送时生成】';
@@ -973,6 +975,33 @@ export function createAuditMail(deps: {
     return row as Record<string, unknown>;
   }
 
+  /**
+   * Counts one attempt at the current code before it is compared, atomically:
+   * the count is raised only from the value read and only below the limit
+   * (readiness review 2026-10-07: parallel guesses all read the same count).
+   */
+  async function takeAttempt(id: string): Promise<boolean> {
+    for (let tries = 0; tries < 20; tries++) {
+      const row = await database
+        .query()
+        .selectFrom('auditRequests')
+        .select(['shareCodeAttempts'])
+        .where('id', '=', id)
+        .executeTakeFirst();
+      const attempts = Number(row?.shareCodeAttempts ?? CODE_ATTEMPTS);
+      if (attempts >= CODE_ATTEMPTS) return false;
+      const result = await database
+        .query()
+        .updateTable('auditRequests')
+        .set({ shareCodeAttempts: attempts + 1, updatedAt: deps.now() })
+        .where('id', '=', id)
+        .where('shareCodeAttempts', '=', attempts)
+        .execute();
+      if (result.updatedCount) return true;
+    }
+    return false;
+  }
+
   const share = {
     async view(token: string) {
       const row = await byToken(token);
@@ -995,6 +1024,22 @@ export function createAuditMail(deps: {
       )
         throw new HrError('AUDIT_CODE_TOO_SOON', 409);
       const id = str(row.id);
+      // Reserved before sending (compare-and-set on the count): parallel requests send one code.
+      const sends = Number(row.shareCodeSends ?? 0);
+      if (sends >= CODE_SENDS)
+        throw new HrError('AUDIT_CODE_SENDS_EXCEEDED', 409);
+      const reserved = await database
+        .query()
+        .updateTable('auditRequests')
+        .set({
+          shareCodeSends: sends + 1,
+          shareCodeSentAt: now,
+          updatedAt: now,
+        })
+        .where('id', '=', id)
+        .where('shareCodeSends', '=', sends)
+        .execute();
+      if (!reserved.updatedCount) throw new HrError('AUDIT_CODE_TOO_SOON', 409);
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
       const subject = `${deps.companyName()}客户审核包验证码`;
       const state = await mail.sendDirect({
@@ -1021,9 +1066,7 @@ export function createAuditMail(deps: {
     async download(token: string, code: unknown, ip: string) {
       const row = await byToken(token);
       const id = str(row.id);
-      const attempts = Number(row.shareCodeAttempts ?? 0);
-      if (attempts >= CODE_ATTEMPTS)
-        throw new HrError('AUDIT_CODE_LOCKED', 409);
+      if (!(await takeAttempt(id))) throw new HrError('AUDIT_CODE_LOCKED', 409);
       const now = deps.now();
       const valid =
         typeof code === 'string' &&
@@ -1035,10 +1078,7 @@ export function createAuditMail(deps: {
           Buffer.from(hash(`${id}:${code}`)),
           Buffer.from(str(row.shareCodeHash)),
         );
-      if (!valid) {
-        await update(id, { shareCodeAttempts: attempts + 1 });
-        throw new HrError('AUDIT_CODE_INVALID', 400);
-      }
+      if (!valid) throw new HrError('AUDIT_CODE_INVALID', 400);
       const file = await deps.readPack(str(row.packFileId));
       if (!file) throw new HrError('AUDIT_LINK_INVALID', 404);
       const downloads = [
@@ -1145,6 +1185,8 @@ export function createAuditMail(deps: {
             shareCodeHash: null,
             shareCodeExpiresAt: null,
             shareCodeAttempts: 0,
+            shareCodeSends: 0,
+            shareCodeSentAt: null,
             status: 'replied',
           });
         },

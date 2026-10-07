@@ -7,8 +7,12 @@
  *
  * Every tool call is the AI employees' existing backend tool, invoked as the
  * token's user, so the same authorization and record scopes apply. The
- * client's allowed tools and each tool's audience are checked first; each
- * call, refusal and rate-limited attempt is written to the audit log.
+ * client's allowed tools and each tool's audience are checked first, and
+ * the arguments are validated with the tool's own schema before it runs;
+ * each call, refusal and rate-limited attempt is written to the audit log —
+ * refusals before authentication at most FAILURE_LOGS_PER_MINUTE per client
+ * address, so anonymous callers cannot flood the log (readiness review
+ * 2026-10-07).
  */
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import type { Application } from '@nocobase/app-server/application';
@@ -20,6 +24,8 @@ import type { ServiceToken } from '@nocobase/service-provider';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
+import { clientIpResolver } from '../../http/client-ip.js';
+import { WindowThrottle } from '../../http/throttle.js';
 import { profileServicesToken, talentReviewServicesToken } from '../../providers/hr/tokens.js';
 import { scopeForUser } from '../../providers/hr/authorize.js';
 import { draftLeaveRequest, getMyLeaveBalance, getMySchedule } from '../../ai/tools/attendance-tools.js';
@@ -30,11 +36,20 @@ import { getEmployeeLearningProfile } from '../../ai/tools/training-tools.js';
 import type { AgentToolName } from '../../providers/hr/talent-review/agents.js';
 
 interface ToolLike {
+  definition?: { schema?: unknown };
   dependencies?: Record<string, ServiceToken<unknown>>;
   invoke: (ctx: never, args: never, runtime: never) => Promise<unknown>;
 }
 
+interface ArgumentSchema {
+  safeParse(input: unknown): { success: true; data: unknown } | { success: false; error: { issues: { path: PropertyKey[] }[] } };
+}
+
+const isSchema = (value: unknown): value is ArgumentSchema =>
+  Boolean(value) && typeof (value as { safeParse?: unknown }).safeParse === 'function';
+
 const PROTOCOL = '2025-06-18';
+const FAILURE_LOGS_PER_MINUTE = 10;
 
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: 'object',
@@ -103,7 +118,23 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
     const container = app.container;
     const services = () => container.resolve(talentReviewServicesToken);
 
-    async function runTool(tool: ToolLike, userId: string, args: Record<string, unknown>) {
+    async function runTool(tool: ToolLike, userId: string, input: Record<string, unknown>) {
+      // The external assistant's arguments meet the tool's own schema first, as the AI employee runtime's do;
+      // a tool never sees arguments its schema refuses.
+      const schema = tool.definition?.schema;
+      let args: unknown = input;
+      if (isSchema(schema)) {
+        const parsed = schema.safeParse(input);
+        if (!parsed.success)
+          return {
+            status: 'error',
+            content: {
+              code: 'INVALID_ARGUMENTS',
+              fields: [...new Set(parsed.error.issues.map((i) => i.path.map(String).join('.') || '(root)'))].slice(0, 10),
+            },
+          };
+        args = parsed.data;
+      }
       const deps = Object.fromEntries(
         Object.entries(tool.dependencies ?? {}).map(([name, token]) => [
           name,
@@ -167,6 +198,9 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
       return { status: 'error', content: { code: 'TOOL_NOT_ALLOWED' } };
     };
 
+    const clientIp = clientIpResolver(app.config);
+    const failureLogs = new WindowThrottle({ limit: FAILURE_LOGS_PER_MINUTE, windowMs: 60_000 });
+
     const r = new Hono();
     r.use('/talent/agent/mcp', bodyLimit({ maxSize: 262_144 }));
     r.post('/talent/agent/mcp', async (c) => {
@@ -174,14 +208,15 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
       const secret = /^Bearer\s+(\S+)$/iu.exec(header)?.[1];
       const auth = await services().agents.authenticate(secret);
       if ('error' in auth && auth.error) {
-        await services().agents.log({
-          clientId: auth.token?.clientId ?? null,
-          tokenId: auth.token?.id ?? null,
-          userId: auth.token?.userId ?? null,
-          tool: 'mcp',
-          status: auth.error,
-          summary: auth.error === 'rateLimited' ? '超过每分钟调用上限' : '令牌无效、过期或已撤销',
-        });
+        if (failureLogs.hit(clientIp(c)))
+          await services().agents.log({
+            clientId: auth.token?.clientId ?? null,
+            tokenId: auth.token?.id ?? null,
+            userId: auth.token?.userId ?? null,
+            tool: 'mcp',
+            status: auth.error,
+            summary: auth.error === 'rateLimited' ? '超过每分钟调用上限' : '令牌无效、过期或已撤销',
+          });
         return c.json(
           { jsonrpc: '2.0', id: null, error: { code: auth.error === 'rateLimited' ? -32029 : -32001, message: auth.error } },
           auth.error === 'rateLimited' ? 429 : 401,

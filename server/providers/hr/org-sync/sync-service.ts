@@ -18,12 +18,13 @@
  * - One run at a time: a trigger during a run waits for it.
  * - A sync never touches permission set assignments or login credentials.
  */
-import { createHash, timingSafeEqual, createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 import type { DatabaseConnection, DatabaseManager } from '@nocobase/db';
 import { encodeAuthorizationTitle } from '@nocobase/authorization/core';
 import { z } from 'zod';
 
+import { callbackSignatureValid } from '../../../http/signed-callback.js';
 import { authorizeAction } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
 import {
@@ -152,6 +153,8 @@ export interface OrgSyncServiceDeps {
     ((run: { id: string; mode: 'full' | 'incremental' }) => void) | undefined;
   /** The HMAC secret the directory signs callbacks with; unset rejects every callback. */
   readonly callbackSecret: () => string | undefined;
+  /** How far a callback's timestamp may be from now (publicEndpoints.callbackToleranceSeconds). */
+  readonly callbackToleranceSeconds?: () => number;
   readonly currentDate: () => string;
 }
 
@@ -1925,21 +1928,24 @@ export function createOrgSyncService(deps: OrgSyncServiceDeps) {
       return { employeeId, syncLocked: locked };
     },
 
-    /** A directory callback: verified, deduplicated, then an incremental sync. */
+    /**
+     * A directory callback: verified (a recent timestamp and the signature over it, server/http/signed-callback.ts),
+     * deduplicated by event id, then an incremental sync.
+     */
     async handleCallback(
       provider: string,
       raw: string,
       signature: string | undefined,
+      timestamp?: string,
     ): Promise<'accepted' | 'duplicate'> {
-      const secret = deps.callbackSecret();
-      const expected = secret
-        ? createHmac('sha256', secret).update(raw).digest('hex')
-        : null;
       if (
-        !expected ||
-        !signature ||
-        signature.length !== expected.length ||
-        !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+        !callbackSignatureValid({
+          secret: deps.callbackSecret(),
+          raw,
+          signature,
+          timestamp,
+          toleranceSeconds: deps.callbackToleranceSeconds?.() ?? 300,
+        })
       )
         throw new HrError('ORG_SYNC_BAD_SIGNATURE', 403);
       let eventId: unknown;

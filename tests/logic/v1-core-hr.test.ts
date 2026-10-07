@@ -1069,18 +1069,18 @@ describe('账号接管防护', () => {
     return row.userId == null ? null : String(row.userId);
   }
 
-  it('refuses to reset an account holding a set the HR administrator lacks, and a caller holding it may', async () => {
+  it('refuses to reset a payroll account, even for a caller who holds payroll too', async () => {
     const refused = await call(
       'hr01',
       'POST',
       '/employees/emp-payroll01/reset-password',
     );
     expect(refused.status).toBe(403);
-    expect(refused.json.code).toBe('ACCOUNT_PRIVILEGED');
+    expect(refused.json.code).toBe('ACCOUNT_PRIVILEGED_PAYROLL');
     const missing = refused.json.details.permissionSets as string[];
     expect(missing).toContain('hr.payroll');
     expect(refused.json.data).toBeUndefined();
-    // hr01 given exactly those sets holds everything payroll01 holds.
+    // Pay data is never reached through an HR reset, whatever the caller holds.
     const hr01 = await userIdOf('hr01');
     const granted: string[] = [];
     for (const permissionSet of missing) {
@@ -1093,16 +1093,64 @@ describe('账号接管防护', () => {
       granted.push(String((assignment as { id: string }).id));
     }
     try {
-      const allowed = await call(
+      const still = await call(
         'hr01',
         'POST',
         '/employees/emp-payroll01/reset-password',
       );
-      expect(allowed.status).toBe(200);
-      expect(allowed.json.data.login).toBe('payroll01');
+      expect(still.status).toBe(403);
+      expect(still.json.code).toBe('ACCOUNT_PRIVILEGED_PAYROLL');
     } finally {
       for (const id of granted) await (await authz()).permissionSets.revoke(id);
     }
+  });
+
+  it('lets HR manage department heads, recruiters, trainers and employees; not payroll, settings administrators or root', async () => {
+    // The picker applies the same rule as linking and resetting, without revoking anyone's session here.
+    const linkable = async (search: string) => {
+      const picker = await call(
+        'hr01',
+        'GET',
+        `/users?search=${encodeURIComponent(search)}&for=link`,
+      );
+      expect(picker.status).toBe(200);
+      return (picker.json.data as Json[]).find((u) => u.username === search);
+    };
+    // mgr_njl's sets come with heading a department; they no longer block HR.
+    expect(await linkable('mgr_njl')).toMatchObject({ linkable: true });
+    expect(await linkable('emp_njl_1')).toMatchObject({ linkable: true });
+    expect(await linkable('recruit01')).toMatchObject({ linkable: true });
+    expect(await linkable('trainer01')).toMatchObject({ linkable: true });
+    expect(await linkable('payroll01')).toMatchObject({
+      linkable: false,
+      reason: 'ACCOUNT_PRIVILEGED_PAYROLL',
+    });
+    // A set granting a settings action hr01 cannot perform still blocks.
+    const { authorizationToken } =
+      await import('@nocobase/app-plugin-authorization/server');
+    const authorization =
+      server.application.container.resolve(authorizationToken);
+    await authorization.permissionSets.create({
+      key: 'test-settings-administrator',
+      title: 'Test settings administrator',
+      grants: [
+        {
+          resource: { type: 'settings', id: 'test.unheldSettings' },
+          actions: [{ action: 'administer' }],
+        },
+      ],
+    });
+    const admin = await plainUser('takeover-settings', [
+      'test-settings-administrator',
+    ]);
+    const picker = await call(
+      'hr01',
+      'GET',
+      '/users?search=takeover-settings&for=link',
+    );
+    expect(
+      (picker.json.data as Json[]).find((u) => u.id === admin),
+    ).toMatchObject({ linkable: false, reason: 'ACCOUNT_PRIVILEGED' });
   });
 
   it('refuses to link a root account, marks it in the picker, and still links an ordinary user', async () => {

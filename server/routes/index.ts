@@ -40,6 +40,7 @@ import { talentReviewRoutes } from './hr/talent-review.js';
 import { agentMcpRoutes } from './hr/agent-mcp.js';
 // V4-14
 import { licensedRoutes } from './hr/licensed.js';
+import { apiNotFoundRoutes } from './hr/not-found.js';
 
 const routes: readonly AppRouteContribution<Application>[] = [
   // V4-13: the MCP endpoint authenticates its own bearer tokens, so it comes before routers guarding /talent/*.
@@ -83,6 +84,8 @@ const routes: readonly AppRouteContribution<Application>[] = [
   ...leaveProofRoutes,
   // V3-10
   ...certificateScanRoutes,
+  // Last: an unknown /api/talent, /api/public or /api/demo path is a JSON 404, not the client's index.html.
+  apiNotFoundRoutes,
 ];
 
 export default routes;

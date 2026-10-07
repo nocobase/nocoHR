@@ -26,10 +26,12 @@ import {
   MONTH,
   num,
   toCsv,
+  type PayrollEmployee,
 } from './common.js';
 import type { PayrollContext } from './context.js';
 import { storeUpload } from './context.js';
 import { numberCell, readSheet, textCell } from './excel.js';
+import { payrollScopes, type PayrollScopes } from './scope.js';
 
 const BILL = 'talent.vendorBill';
 
@@ -134,10 +136,22 @@ export function createVendorBillService(ctx: PayrollContext) {
     return { lines, errors };
   }
 
-  async function reconcile(month: string, lines: readonly BillLine[]) {
-    const employees = new Map(
-      (await loadEmployees(database.query())).map((e) => [e.employeeNo, e]),
-    );
+  /** The employees by number; with scopes, only those the action's grant reaches. */
+  async function employeesByNo(scopes?: PayrollScopes) {
+    const employees = new Map<string, PayrollEmployee>();
+    for (const e of await loadEmployees(database.query()))
+      if (!scopes || (await scopes.employee(e.id)))
+        employees.set(e.employeeNo, e);
+    return employees;
+  }
+
+  /** Reconciles a bill; with scopes, an employee outside the grant reads as not matched. */
+  async function reconcile(
+    month: string,
+    lines: readonly BillLine[],
+    scopes?: PayrollScopes,
+  ) {
+    const employees = await employeesByNo(scopes);
     const { from, to } = monthRange(month);
     const matchedIds = lines
       .map((l) => employees.get(l.employeeNo)?.id)
@@ -219,49 +233,62 @@ export function createVendorBillService(ctx: PayrollContext) {
     });
   }
 
-  async function row(id: string) {
+  /** A bill; with scopes, one outside the action's grant is not found, and unlisted fields are left out. */
+  async function row(id: string, scopes?: PayrollScopes) {
     const found = await database
       .query()
       .selectFrom('laborVendorBills')
       .selectAll()
       .where('id', '=', id)
       .executeTakeFirst();
-    if (!found) throw new HrError('BILL_NOT_FOUND', 404);
-    return found as Record<string, unknown>;
+    if (
+      !found ||
+      (scopes && !(await scopes.rows('laborVendorBills', [found])).length)
+    )
+      throw new HrError('BILL_NOT_FOUND', 404);
+    return (
+      scopes ? await scopes.fields('laborVendorBills', found) : found
+    ) as Record<string, unknown>;
   }
+
+  const scopesOf = async (actor: ActorContext, action: string) =>
+    payrollScopes(database, await authorizeAction(actor.authz, BILL, action));
 
   const service = {
     reconcile,
     totalsOf,
 
     async list(actor: ActorContext) {
-      await authorizeAction(actor.authz, BILL, 'view');
-      const rows = await database
-        .query()
-        .selectFrom('laborVendorBills')
-        .selectAll()
-        .orderBy('month', 'desc')
-        .execute();
-      return rows.map((r) => {
-        const bill = toBill(r, true);
-        return { ...bill, totals: totalsOf(bill.reconciliation) };
-      });
+      const scopes = await scopesOf(actor, 'view');
+      const rows = await scopes.rows(
+        'laborVendorBills',
+        await database
+          .query()
+          .selectFrom('laborVendorBills')
+          .selectAll()
+          .orderBy('month', 'desc')
+          .execute(),
+      );
+      const result = [];
+      for (const r of rows) {
+        const bill = toBill(await scopes.fields('laborVendorBills', r), true);
+        result.push({ ...bill, totals: totalsOf(bill.reconciliation) });
+      }
+      return result;
     },
 
     async get(actor: ActorContext, id: string) {
-      await authorizeAction(actor.authz, BILL, 'view');
-      const bill = toBill(await row(id), true);
+      const scopes = await scopesOf(actor, 'view');
+      const bill = toBill(await row(id, scopes), true);
       return { ...bill, totals: totalsOf(bill.reconciliation) };
     },
 
     async preview(actor: ActorContext, input: unknown, buffer: Uint8Array) {
-      await authorizeAction(actor.authz, BILL, 'upload');
+      const scopes = await scopesOf(actor, 'upload');
       const meta = uploadSchema.safeParse(input);
       if (!meta.success) throw new HrError('INVALID_INPUT', 400);
       const parsed = parse(buffer);
-      const employees = new Map(
-        (await loadEmployees(database.query())).map((e) => [e.employeeNo, e]),
-      );
+      const employees = await employeesByNo(scopes);
       return {
         vendorName: meta.data.vendorName,
         month: meta.data.month,
@@ -287,7 +314,7 @@ export function createVendorBillService(ctx: PayrollContext) {
       input: unknown,
       file: { name: string; bytes: Uint8Array },
     ) {
-      await authorizeAction(actor.authz, BILL, 'upload');
+      const scopes = await scopesOf(actor, 'upload');
       const meta = uploadSchema.safeParse(input);
       if (!meta.success) throw new HrError('INVALID_INPUT', 400);
       const parsed = parse(file.bytes);
@@ -296,8 +323,11 @@ export function createVendorBillService(ctx: PayrollContext) {
         throw new HrError('IMPORT_HAS_ERRORS', 400, {
           rows: parsed.errors.map((e) => e.row),
         });
-      const reconciliation = await reconcile(meta.data.month, parsed.lines);
-      const fileId = await storeUpload(ctx, actor, file);
+      const reconciliation = await reconcile(
+        meta.data.month,
+        parsed.lines,
+        scopes,
+      );
       const existing = await database
         .query()
         .selectFrom('laborVendorBills')
@@ -305,6 +335,13 @@ export function createVendorBillService(ctx: PayrollContext) {
         .where('vendorName', '=', meta.data.vendorName)
         .where('month', '=', meta.data.month)
         .executeTakeFirst();
+      // Replacing a bill the grant does not reach is refused like a missing one.
+      if (
+        existing &&
+        !(await scopes.rows('laborVendorBills', [existing])).length
+      )
+        throw new HrError('BILL_NOT_FOUND', 404);
+      const fileId = await storeUpload(ctx, actor, file);
       const now = new Date();
       const upload = {
         fileId,
@@ -360,14 +397,13 @@ export function createVendorBillService(ctx: PayrollContext) {
         by: actor.userId,
       });
       ctx.onBillUploaded(id);
-      const bill = toBill(await row(id), true);
+      const bill = toBill(await row(id, scopes), true);
       return { ...bill, totals: totalsOf(bill.reconciliation) };
     },
 
     /** getVendorBillReconciliation: hours only, never amounts. */
     async reconciliationFor(actor: ActorContext, id: string) {
-      await authorizeAction(actor.authz, BILL, 'view');
-      const bill = toBill(await row(id), false);
+      const bill = toBill(await row(id, await scopesOf(actor, 'view')), false);
       return {
         id: bill.id,
         vendorName: bill.vendorName,
@@ -380,10 +416,10 @@ export function createVendorBillService(ctx: PayrollContext) {
 
     /** saveVendorBillNotes: only the notes; lines and reconciliation stay. */
     async saveNotes(actor: ActorContext, id: string, notes: unknown) {
-      await authorizeAction(actor.authz, BILL, 'upload');
+      const scopes = await scopesOf(actor, 'upload');
       if (typeof notes !== 'string' || !notes.trim())
         throw new HrError('INVALID_INPUT', 400);
-      const bill = toBill(await row(id), false);
+      const bill = toBill(await row(id, scopes), false);
       if (bill.status === 'confirmed') throw new HrError('BILL_CONFIRMED', 409);
       await database
         .query()
@@ -406,8 +442,8 @@ export function createVendorBillService(ctx: PayrollContext) {
       id: string,
       decision: 'confirmed' | 'disputed',
     ) {
-      await authorizeAction(actor.authz, BILL, 'confirm');
-      await row(id);
+      const scopes = await scopesOf(actor, 'confirm');
+      await row(id, scopes);
       const now = new Date();
       await database
         .query()
@@ -420,13 +456,15 @@ export function createVendorBillService(ctx: PayrollContext) {
         })
         .where('id', '=', id)
         .execute();
-      const bill = toBill(await row(id), true);
+      const bill = toBill(await row(id, scopes), true);
       return { ...bill, totals: totalsOf(bill.reconciliation) };
     },
 
     async exportCsv(actor: ActorContext, id: string) {
-      await authorizeAction(actor.authz, BILL, 'export');
-      const bill = toBill(await row(id), false);
+      const bill = toBill(
+        await row(id, await scopesOf(actor, 'export')),
+        false,
+      );
       const reasons: Record<string, string> = {
         notMatched: '工号不存在',
         diff: '工时不一致',
