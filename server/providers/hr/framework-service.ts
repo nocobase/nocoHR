@@ -4,6 +4,7 @@ import type { DatabaseConnection, DatabaseManager } from '@nocobase/db';
 import { authorizeAction, policyOf, tryAuthorizeAction } from './authorize.js';
 import { readValues, type CustomFieldService } from './custom-fields.js';
 import { recordDraftOutcome } from './draft-snapshots.js';
+import { readSourceClauses, type SourceClause } from './jd-clauses.js';
 import {
   HrError,
   isRecord,
@@ -82,6 +83,8 @@ export interface PositionRequirement {
   mandatory: boolean;
   source: (typeof SOURCES)[number];
   reviewStatus: (typeof REVIEW_STATUSES)[number];
+  /** V3-08: the 岗位说明书 / 职责说明 clauses a drafted requirement comes from; null when entered by hand. */
+  sourceClauses: SourceClause[] | null;
 }
 
 export interface LevelInput {
@@ -124,7 +127,12 @@ export interface FrameworkService {
     ctx: ActorContext,
     positionId: string,
     input: unknown,
-    options?: { source?: 'manual' | 'ai'; draft?: boolean },
+    options?: {
+      source?: 'manual' | 'ai';
+      draft?: boolean;
+      /** V3-08: the clauses a drafted requirement comes from, already checked against the position. */
+      sourceClauses?: readonly SourceClause[];
+    },
   ): Promise<PositionRequirement>;
   removeRequirement(ctx: ActorContext, id: string): Promise<void>;
   confirmRequirements(
@@ -274,6 +282,7 @@ export function toRequirement(
     reviewStatus: String(
       row.reviewStatus,
     ) as PositionRequirement['reviewStatus'],
+    sourceClauses: readSourceClauses(row.sourceClauses),
   };
 }
 
@@ -693,6 +702,9 @@ export function createFrameworkService(
             mandatory,
             source: options.source ?? 'manual',
             reviewStatus: draft ? 'draft' : 'confirmed',
+            sourceClauses: options.sourceClauses?.length
+              ? [...options.sourceClauses]
+              : null,
             createdAt: now,
             updatedAt: now,
           },

@@ -284,6 +284,8 @@ const REQUIREMENT_FIELDS = [
   'mandatory',
   'source',
   'reviewStatus',
+  // V3-08: the job-description clauses a drafted requirement comes from (migration 202610240001).
+  'sourceClauses',
   'createdAt',
   'updatedAt',
 ] as const;

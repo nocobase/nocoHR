@@ -88,7 +88,7 @@ function Launcher({ position, onClosed }: AdvisorLauncherProps): ReactElement {
               message: {
                 system: `The user is working on position "${position.title}" (code ${position.code}, positionId ${position.id}). Call getPositionContext with this positionId first.${
                   position.jdStatus === 'ready'
-                    ? ` The position has an uploaded job description ("${position.jdFilename ?? ''}"); getPositionContext returns its text as jdText. Use it as the primary source and cite the clause each competency comes from.`
+                    ? ` The position has an uploaded job description ("${position.jdFilename ?? ''}"); getPositionContext returns its text as jdText. Use it as the primary source and cite, by the clause numbers getPositionContext lists, the clause each competency comes from.`
                     : ''
                 }`,
                 user: t('talent.advisor.prompt', { title: position.title }),

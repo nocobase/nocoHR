@@ -9,6 +9,7 @@
 // note, publication, the requirements on a date). There is no model: every AI job takes its rule-based fallback.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { mentionsInternals } from '../../server/providers/hr/ai-text-guard.ts';
 import {
   decode,
   publishAnnualCycle,
@@ -343,6 +344,62 @@ describe('13A 关键岗位与继任', () => {
         await database.query().selectFrom('hrReminderLog').select(['id']).where('reminderKey', 'like', `succession:risk:${planId}:noReadySuccessor:%`).execute()
       ).length,
     ).toBe(after);
+  });
+
+  it('the notes name no fields or status codes (车间主任)', async () => {
+    const detail = await h.call('hr01', 'GET', `/succession/${planId}`);
+    expect(detail.json.data.requirementsSet).toBe(true);
+    for (const c of detail.json.data.candidates as { note: string }[]) expect(mentionsInternals(c.note)).toBe(false);
+  });
+
+  let salesPlanId = '';
+  it('a position without requirements: nobody “meets” them and the notes say so', async () => {
+    const marked = await h.call('hr01', 'PUT', '/succession/positions/pos-sales-director/key', { isKey: true });
+    expect(marked.status).toBe(200);
+    const plan = await until(
+      async () => {
+        const row = await (await h.db())
+          .query()
+          .selectFrom('successionPlans')
+          .selectAll()
+          .where('positionId', '=', 'pos-sales-director')
+          .executeTakeFirst();
+        return row ? { ...row, candidates: decode(row.candidates) } : undefined;
+      },
+      (row) => Boolean(row && row.candidates.length),
+    );
+    salesPlanId = String(plan!.id);
+    for (const c of plan!.candidates as { note: string }[]) {
+      expect(c.note).toContain('该岗位尚未设置要求，无法比较差距');
+      expect(c.note).not.toContain('已达到');
+      expect(mentionsInternals(c.note)).toBe(false);
+    }
+    const detail = await h.call('hr01', 'GET', `/succession/${salesPlanId}`);
+    expect(detail.json.data.requirementsSet).toBe(false);
+    expect(detail.json.data.requirements).toEqual([]);
+    const matches = await (await h.services()).succession.match(plan!.positionId as string, plan!.departmentId as string);
+    expect(matches.every((m) => !m.requirementsSet)).toBe(true);
+  });
+
+  it('a stored note that names fields or status codes is shown as the rule-based note', async () => {
+    const database = await h.db();
+    const plan = await (await h.services()).succession.planRow(salesPlanId);
+    await database
+      .query()
+      .updateTable('successionPlans')
+      .set({
+        candidates: plan.candidates.map((c) => ({
+          ...c,
+          note: '差距：gaps 为空，未记录。已有发展记录：学习计划（状态 approved/已批准）、学习计划（draft）',
+        })),
+      })
+      .where('id', '=', salesPlanId)
+      .execute();
+    const detail = await h.call('hr01', 'GET', `/succession/${salesPlanId}`);
+    for (const c of detail.json.data.candidates as { note: string }[]) {
+      expect(c.note).toContain('该岗位尚未设置要求，无法比较差距');
+      expect(c.note).not.toMatch(/gaps|draft|approved/u);
+    }
   });
 });
 

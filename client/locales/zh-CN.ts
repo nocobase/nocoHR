@@ -2275,6 +2275,11 @@ const zhCN: AppResource = {
       trigger: {
         gap: '能力差距',
         request: '对话中发起',
+        jobEvent: '任职变动',
+        developmentTarget: '发展目标岗位',
+        examFailed: '考试未通过',
+        reviewResult: '绩效考核结果',
+        talentReview: '人才盘点',
       },
       itemTypes: {
         course: '课程',
@@ -3749,6 +3754,10 @@ const zhCN: AppResource = {
       selectDrafts: '全选草稿',
       selectRow: '选择 {{title}}',
       newCompetency: '新能力项',
+      sourceBasis: '依据：{{clauses}}',
+      sourceClauseJd: '说明书第 {{number}} 条{{place}}「{{quote}}」',
+      sourceClauseDuties: '职责说明第 {{number}} 条{{place}}「{{quote}}」',
+      sourceClausePlace: '（{{place}}）',
       confirmDraftsTitle: '将一并确认能力项',
       confirmDraftsDescription:
         '这些要求引用了草稿能力项：{{titles}}。确认后这些能力项将一并确认。',

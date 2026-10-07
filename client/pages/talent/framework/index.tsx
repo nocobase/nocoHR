@@ -78,6 +78,7 @@ import { CandidatesPanel } from './candidates.js';
 import { JobDescriptionCard } from './jd-card.js';
 import { EntityDialog, type EntityTarget } from './entity-dialog.js';
 import { RequirementDialog } from './requirement-dialog.js';
+import { SourceClauses } from './source-clauses.js';
 import type { Competency, FrameworkData, Requirement } from './types.js';
 
 /** 岗位体系 — job families and positions on the left; the selected position and its requirements on the right. */
@@ -679,6 +680,7 @@ export default function FrameworkPage(): ReactElement {
                                         ({t('talent.framework.newCompetency')})
                                       </span>
                                     ) : null}
+                                    <SourceClauses clauses={r.sourceClauses} />
                                   </TableCell>
                                   <TableCell>
                                     {competency ? (

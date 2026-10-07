@@ -2425,6 +2425,11 @@ const enUS = {
       trigger: {
         gap: 'Competency gap',
         request: 'Asked in chat',
+        jobEvent: 'Job change',
+        developmentTarget: 'Development target',
+        examFailed: 'Failed exam',
+        reviewResult: 'Performance review result',
+        talentReview: 'Talent review',
       },
       itemTypes: {
         course: 'Course',
@@ -4013,6 +4018,11 @@ const enUS = {
       selectDrafts: 'Select all drafts',
       selectRow: 'Select {{title}}',
       newCompetency: 'new competency',
+      // V3-08: the job-description clause a drafted requirement comes from.
+      sourceBasis: 'Source: {{clauses}}',
+      sourceClauseJd: 'job description clause {{number}}{{place}} “{{quote}}”',
+      sourceClauseDuties: 'duties clause {{number}}{{place}} “{{quote}}”',
+      sourceClausePlace: ' ({{place}})',
       confirmDraftsTitle: 'Confirm draft competencies too?',
       confirmDraftsDescription:
         'These requirements reference draft competencies: {{titles}}. Confirming them confirms those competencies as well.',

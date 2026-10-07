@@ -19,6 +19,11 @@
 import { z } from 'zod';
 
 import { AIUnavailableError, type AIRunner } from '../ai-runner.js';
+import {
+  describesFormat,
+  guardedAnswer,
+  mentionsInternals,
+} from '../ai-text-guard.js';
 import type { AutomationRunContext } from '../automation.js';
 import { addDays, HrError, str } from '../shared.js';
 import { boxOf } from './config.js';
@@ -27,7 +32,12 @@ import { json, num } from './context.js';
 import { evidenceLines, placementEvidence } from './evidence.js';
 import type { ModelVersionService } from './model-versions.js';
 import type { ReviewService } from './reviews.js';
-import type { SuccessionService } from './succession.js';
+import {
+  NO_REQUIREMENTS_NOTE,
+  successorNote,
+  type SuccessionService,
+  type SuccessorMatch,
+} from './succession.js';
 
 export const TALENT_REVIEW_AUTOMATIONS = {
   prePlacement: 'talentAnalyst.prePlacement',
@@ -56,6 +66,41 @@ const preplacementSchema = z.object({
 const noteSchema = z.object({ note: z.string().min(1).max(2000) });
 const reportSchema = z.object({ content: z.string().min(1).max(4000) });
 const riskSchema = z.object({ content: z.string().min(1).max(1500) });
+
+/** Readiness and risk reasons as people read them; the model never sees the codes. */
+const READINESS_LABELS: Record<string, string> = {
+  readyNow: '随时可接任',
+  oneToTwoYears: '1–2 年可接任',
+  threePlusYears: '3 年以上',
+};
+const RISK_REASON_LABELS: Record<string, string> = {
+  noReadySuccessor: '没有“随时可接任”或“1–2 年可接任”的候选人',
+  noCandidates: '还没有继任候选人',
+  incumbentLeft: '现任已离职',
+  candidateLeft: '一名继任候选人已离职',
+};
+const PLAIN_WORDING =
+  '用中文写给人看的句子：不要写字段名、英文代码或状态代码（如 gaps、draft、approved），不要写“为空”“null”之类的数据说法。';
+
+/** A successor's facts as one readable line for the model, never JSON field names or status codes. */
+export function successorFacts(m: SuccessorMatch): string {
+  const gaps = !m.requirementsSet
+    ? NO_REQUIREMENTS_NOTE
+    : m.gaps.length
+      ? `与岗位要求的差距：${m.gaps.map((g) => `${g.title}（当前 ${g.current} 级，要求 ${g.required} 级）`).join('、')}`
+      : '已达到岗位当前要求';
+  return [
+    `编号 ${m.employeeId}`,
+    gaps,
+    `最近考核等级：${m.latestRating ?? '暂无'}`,
+    `已有发展记录：${m.developmentRecords.join('、') || '暂无'}`,
+  ].join('；');
+}
+
+/** Whether a model's note can be shown to people as it is. */
+function readableNote(text: string): boolean {
+  return !describesFormat(text) && !mentionsInternals(text);
+}
 
 /** Words that judge a person rather than describe a fact; never kept in a suggestion. */
 const CHARACTER_WORDS = /性格|内向|外向|懒|态度差|情商|脾气|人品|自私|固执/u;
@@ -246,34 +291,41 @@ ${JSON.stringify(
     run.summarize(`继任候选推荐：计划 ${planId}，${matches.length} 人`);
     run.reference({ planId, candidates: matches.length });
     if (!matches.length) return { status: 'skipped' as const, output: { planId, reason: 'noMatch' } };
-    const answer = await structured(
-      run,
-      'talentAnalyst',
-      `继任候选推荐 ${position}`,
-      `为关键岗位“${department}${position}”的继任候选人各写一句说明（差距与已有的发展记录），只列事实，不评价性格，不判断准备度。
-候选（JSON）：${JSON.stringify(
-        matches.map((m) => ({
-          employeeId: m.employeeId,
-          gaps: m.gaps.map((g) => `${g.title} ${g.current}/${g.required}`),
-          latestRating: m.latestRating,
-          developmentRecords: m.developmentRecords,
-        })),
-      )}`,
-      z.object({
-        notes: z.array(z.object({ employeeId: z.string(), note: z.string().max(300) })),
-      }),
+    const answer = await guardedAnswer(
+      () =>
+        structured(
+          run,
+          'talentAnalyst',
+          `继任候选推荐 ${position}`,
+          `为关键岗位“${department}${position}”的继任候选人各写一句说明（差距与已有的发展记录），只列事实，不评价性格，不判断准备度。岗位尚未设置要求时，照写“${NO_REQUIREMENTS_NOTE}”，不要说已达到要求。${PLAIN_WORDING}返回时用每人的编号作 employeeId。
+候选：
+${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
+          z.object({
+            notes: z.array(
+              z.object({ employeeId: z.string(), note: z.string().max(300) }),
+            ),
+          }),
+        ),
+      // A note that names a field or a status code is asked for once more, then replaced by the rule-based one.
+      () => null,
+      {
+        accept: (value) =>
+          !value || value.notes.every((n) => readableNote(n.note)),
+        unavailable: () => false,
+        onFallback: () => run.markFallback(),
+      },
     );
-    const notes = new Map(answer?.notes.map((n) => [n.employeeId, n.note]) ?? []);
+    const notes = new Map(
+      answer?.notes
+        .filter((n) => readableNote(n.note))
+        .map((n) => [n.employeeId, n.note]) ?? [],
+    );
     const added = await succession.saveSuggestions(
       planId,
       matches.map((m) => ({
         employeeId: m.employeeId,
         gaps: m.gaps,
-        note:
-          notes.get(m.employeeId) ??
-          (m.gaps.length
-            ? `与岗位要求的差距：${m.gaps.map((g) => `${g.title}（${g.current}/${g.required}）`).join('、')}${m.developmentRecords.length ? `；已有${m.developmentRecords.join('、')}` : ''}`
-            : '已达到岗位当前要求'),
+        note: notes.get(m.employeeId) ?? successorNote(m),
       })),
     );
     if (added)
@@ -308,19 +360,28 @@ ${JSON.stringify(
     if (recent) return { status: 'skipped' as const, output: { planId, reason, cooldown: true } };
     const matches = (await succession.match(plan.positionId, plan.departmentId)).slice(0, 3);
     const active = plan.candidates.filter((c) => !c.left);
-    const answer = await structured(
-      run,
-      'talentAnalyst',
-      `继任风险提醒 ${position}`,
-      `用两三句话说明关键岗位“${department}${position}”的继任风险与可考虑的人选。原因：${reason}。不评价性格，不判断准备度，不提及离职原因。
-当前候选：${JSON.stringify(active.map((c) => ({ readiness: c.readiness, gaps: c.gaps.length })))}
-可考虑的人：${JSON.stringify(matches.map((m) => ({ name: m.name, gaps: m.gaps.length })))}`,
-      riskSchema,
+    const reasonText = RISK_REASON_LABELS[reason] ?? '继任安排有变化';
+    const answer = await guardedAnswer(
+      () =>
+        structured(
+          run,
+          'talentAnalyst',
+          `继任风险提醒 ${position}`,
+          `用两三句话说明关键岗位“${department}${position}”的继任风险与可考虑的人选。原因：${reasonText}。不评价性格，不判断准备度，不提及离职原因。${PLAIN_WORDING}
+当前候选：${active.map((c) => `准备度${c.readiness ? `“${READINESS_LABELS[c.readiness] ?? '待选择'}”` : '待选择'}，差距 ${c.gaps.length} 项`).join('；') || '暂无'}
+可考虑的人：${matches.map((m) => `${m.name}（${m.requirementsSet ? `差距 ${m.gaps.length} 项` : '岗位尚未设置要求'}）`).join('、') || '暂无'}`,
+          riskSchema,
+        ),
+      () => null,
+      {
+        accept: (value) => !value || readableNote(value.content),
+        unavailable: () => false,
+        onFallback: () => run.markFallback(),
+      },
     );
     const consider = matches.map((m) => m.name).join('、') || '暂无';
     const summary =
-      answer?.content ??
-      `${reason === 'noReadySuccessor' ? '没有“随时可接任”或“1–2 年可接任”的候选人' : reason === 'incumbentLeft' ? '现任已离职' : '一名继任候选人已离职'}；可考虑的人选：${consider}。`;
+      answer?.content ?? `${reasonText}；可考虑的人选：${consider}。`;
     const key = `succession:risk:${planId}:${reason}:${ctx.today()}:${run.runId}`;
     const sent = await platform.reminderOnce(key, async () => {
       await notifyPlan(

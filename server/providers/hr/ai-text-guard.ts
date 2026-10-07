@@ -22,8 +22,53 @@ export function describesFormat(text: string): boolean {
 }
 
 /**
- * The model's wording, asked for at most twice when a reply only describes the instructions; otherwise the
- * rule-based text. `unavailable` tells a missing model from a real failure, which is rethrown.
+ * Words from the data rather than from the language people read: field names (`gaps`, `employeeId`,
+ * `development_records`), status codes (`draft`, `approved`) and empty values. A model given JSON sometimes
+ * echoes them — “差距：gaps 为空”, “学习计划（draft）” — and a note that does is not shown to a person.
+ */
+const INTERNAL_TOKENS = [
+  /\bgaps?\b/iu,
+  /\b(?:draft|approved|pending|rejected|confirmed|expired|readyNow|oneToTwoYears|threePlusYears)\b/iu,
+  /\b(?:null|undefined|true|false|NaN)\b/u,
+  // camelCase (employeeId, latestRating) and snake_case (development_records) identifiers.
+  /\b[a-z]+(?:[A-Z][a-z0-9]*)+\b/u,
+  /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/u,
+];
+
+/** Whether the text mentions field names, status codes or empty values from the data it was written from. */
+export function mentionsInternals(text: string): boolean {
+  return INTERNAL_TOKENS.some((pattern) => pattern.test(text));
+}
+
+/**
+ * A model's answer, asked for at most twice while `accept` rejects it; otherwise the rule-based answer.
+ * `unavailable` tells a missing model from a real failure, which is rethrown.
+ */
+export async function guardedAnswer<T>(
+  compose: () => Promise<T>,
+  fallback: () => T,
+  options: {
+    readonly accept: (answer: T) => boolean;
+    readonly unavailable: (error: unknown) => boolean;
+    readonly onFallback: () => void;
+  },
+): Promise<T> {
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const answer = await compose();
+      if (options.accept(answer)) return answer;
+    }
+  } catch (error) {
+    if (!options.unavailable(error)) throw error;
+  }
+  options.onFallback();
+  return fallback();
+}
+
+/**
+ * The model's wording, asked for at most twice when a reply only describes the instructions (or, with
+ * `accept`, when the caller rejects it, e.g. through `mentionsInternals`); otherwise the rule-based text.
+ * `unavailable` tells a missing model from a real failure, which is rethrown.
  */
 export async function guardedWording(
   compose: () => Promise<string>,
@@ -31,16 +76,13 @@ export async function guardedWording(
   options: {
     readonly unavailable: (error: unknown) => boolean;
     readonly onFallback: () => void;
+    readonly accept?: (text: string) => boolean;
   },
 ): Promise<string> {
-  try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const text = await compose();
-      if (!describesFormat(text)) return text;
-    }
-  } catch (error) {
-    if (!options.unavailable(error)) throw error;
-  }
-  options.onFallback();
-  return fallback();
+  return guardedAnswer(compose, fallback, {
+    unavailable: options.unavailable,
+    onFallback: options.onFallback,
+    accept: (text) =>
+      !describesFormat(text) && (options.accept ? options.accept(text) : true),
+  });
 }

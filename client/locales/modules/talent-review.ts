@@ -169,6 +169,8 @@ const en = {
     aiCandidate: 'Recommended by the talent analyst',
     left: 'Left',
     noGap: 'Meets the requirements',
+    noRequirements:
+      'The position has no requirements yet, so gaps cannot be compared',
     add: 'Add a candidate…',
     matchOption: '{{name}} (gap {{gap}})',
     saved: 'Candidates saved',
@@ -668,6 +670,7 @@ const zh: Shape = {
     aiCandidate: '人才分析师推荐',
     left: '已离职',
     noGap: '已达到岗位要求',
+    noRequirements: '该岗位尚未设置要求，无法比较差距',
     add: '添加候选人…',
     matchOption: '{{name}}（差距 {{gap}}）',
     saved: '已保存候选人',
@@ -1216,7 +1219,7 @@ const zhShared: typeof enShared = {
     },
     'learningCoach.talentReviewPlans': {
       title: '盘点发展计划',
-      description: '落位确认后：按发展建议起草学习计划（trigger = talentReview），交主管确认。',
+      description: '落位确认后：按发展建议起草学习计划（来源记为“人才盘点”），交主管确认。',
     },
   },
 };

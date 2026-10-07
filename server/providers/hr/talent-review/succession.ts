@@ -19,6 +19,7 @@
  */
 import { z } from 'zod';
 
+import { mentionsInternals } from '../ai-text-guard.js';
 import { authorizeAction, policyOf } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
 import type { JobEvent } from '../job-events.js';
@@ -53,6 +54,37 @@ export interface SuccessorMatch {
   latestRating: string | null;
   box: number | null;
   developmentRecords: string[];
+  /** False when the position has no confirmed requirements: no gap can be measured, so nobody “meets” them. */
+  requirementsSet: boolean;
+}
+
+/** A learning plan's status as the 学习计划 page shows it; the model and the notes never see the code. */
+const PLAN_STATUS_LABELS: Record<string, string> = {
+  draft: '待确认',
+  approved: '已确认',
+  rejected: '已驳回',
+  expired: '已过期',
+};
+export const NO_REQUIREMENTS_NOTE = '该岗位尚未设置要求，无法比较差距';
+
+export function developmentRecordLabel(status: string): string {
+  return `学习计划（${PLAN_STATUS_LABELS[status] ?? '状态未知'}）`;
+}
+
+/** The rule-based note on a successor, in the words people read (also shown in place of a stored note that leaks codes). */
+export function successorNote(input: {
+  requirementsSet: boolean;
+  gaps: readonly Candidate['gaps'][number][];
+  developmentRecords: readonly string[];
+}): string {
+  const head = !input.requirementsSet
+    ? NO_REQUIREMENTS_NOTE
+    : input.gaps.length
+      ? `与岗位要求的差距：${input.gaps.map((g) => `${g.title}（${g.current}/${g.required}）`).join('、')}`
+      : '已达到岗位当前要求';
+  return input.developmentRecords.length
+    ? `${head}；已有发展记录：${input.developmentRecords.join('、')}`
+    : head;
 }
 
 const candidatesInput = z
@@ -137,7 +169,12 @@ export function createSuccessionService(
     const titles = await ctx.competencyTitles();
     const result = new Map<
       string,
-      { gaps: Candidate['gaps']; total: number; mandatory: number }
+      {
+        gaps: Candidate['gaps'];
+        total: number;
+        mandatory: number;
+        requirementsSet: boolean;
+      }
     >();
     for (const id of employeeIds) {
       const map = levels.get(id) ?? new Map<string, number>();
@@ -156,7 +193,12 @@ export function createSuccessionService(
         total += r.requiredLevel - current;
         if (r.mandatory) mandatory += 1;
       }
-      result.set(id, { gaps, total, mandatory });
+      result.set(id, {
+        gaps,
+        total,
+        mandatory,
+        requirementsSet: requirements.length > 0,
+      });
     }
     return result;
   }
@@ -191,6 +233,23 @@ export function createSuccessionService(
     return map;
   }
 
+  /** Each person's learning plans, labelled for people (`学习计划（待确认）`). */
+  async function developmentRecordsOf(employeeIds: readonly string[]) {
+    const map = new Map<string, string[]>();
+    if (!employeeIds.length) return map;
+    const rows = await database
+      .query()
+      .selectFrom('learningPlans')
+      .select(['employeeId', 'status'])
+      .where('employeeId', 'in', [...employeeIds])
+      .execute();
+    for (const r of rows) {
+      const id = str(r.employeeId);
+      map.set(id, [...(map.get(id) ?? []), developmentRecordLabel(str(r.status))]);
+    }
+    return map;
+  }
+
   /** 继任候选匹配 (the analyst's `matchSuccessors`): trusted; callers authorize first. */
   async function match(positionId: string, departmentId: string): Promise<SuccessorMatch[]> {
     const departments = new Set(
@@ -209,16 +268,7 @@ export function createSuccessionService(
     const boxes = await latestBoxes(pool.map((e) => e.id));
     const titles = await ctx.departmentTitles();
     const positions = await ctx.positionTitles();
-    const records = await database
-      .query()
-      .selectFrom('learningPlans')
-      .select(['employeeId', 'status', 'summary'])
-      .where(
-        'employeeId',
-        'in',
-        pool.length ? pool.map((e) => e.id) : ['__none__'],
-      )
-      .execute();
+    const records = await developmentRecordsOf(pool.map((e) => e.id));
     const ratingOrder = ['S', 'A', 'B', 'C', 'D'];
     return pool
       .map((e) => {
@@ -233,9 +283,8 @@ export function createSuccessionService(
           gaps: gap.gaps,
           latestRating: ratings.get(e.id)?.rating ?? null,
           box: boxes.get(e.id) ?? null,
-          developmentRecords: records
-            .filter((r) => str(r.employeeId) === e.id)
-            .map((r) => `学习计划（${str(r.status)}）`),
+          developmentRecords: records.get(e.id) ?? [],
+          requirementsSet: gap.requirementsSet,
         };
       })
       .sort(
@@ -268,6 +317,9 @@ export function createSuccessionService(
     const requirements = await ctx.requirementsOf(plan.positionId);
     const competencyTitles = await ctx.competencyTitles();
     const ratings = await ctx.latestRatings(plan.candidates.map((c) => c.employeeId));
+    const records = await developmentRecordsOf(
+      plan.candidates.map((c) => c.employeeId),
+    );
     const incumbent = plan.incumbentEmployeeId
       ? employees.get(plan.incumbentEmployeeId)
       : undefined;
@@ -288,12 +340,23 @@ export function createSuccessionService(
       status: plan.status,
       reviewedByName: plan.reviewedBy ? await ctx.userName(plan.reviewedBy) : null,
       reviewedAt: plan.reviewedAt,
+      requirementsSet: requirements.length > 0,
       requirements: requirements.map((r) => ({
         ...r,
         title: competencyTitles.get(r.competencyId) ?? r.competencyId,
       })),
       candidates: plan.candidates.map((c) => ({
         ...c,
+        // A note the analyst stored before the wording check may name fields or status codes
+        // (“gaps 为空”, “学习计划（draft）”): show the rule-based note instead.
+        note:
+          c.source === 'ai' && mentionsInternals(c.note)
+            ? successorNote({
+                requirementsSet: requirements.length > 0,
+                gaps: gaps.get(c.employeeId)?.gaps ?? [],
+                developmentRecords: records.get(c.employeeId) ?? [],
+              }) + (c.left ? '（已离职）' : '')
+            : c.note,
         name: employees.get(c.employeeId)?.name ?? '',
         departmentTitle:
           titles.get(employees.get(c.employeeId)?.departmentId ?? '') ?? '',

@@ -39,6 +39,38 @@ const UNATTENDED_PREFIX =
 const RETRY_PROMPT =
   '请直接按要求的结构化格式给出结果，不要附加说明、提问或请求确认。';
 
+/**
+ * True when an agent run failed because the model's structured answer did not
+ * match the schema. With a model that answers through the structured-output
+ * tool, LangChain (langchain 1.2.39) retries such an answer inside the graph by
+ * jumping back to the model node, while the model node's static edge to the
+ * plugin's after-model middleware fires as well; the two after-model hooks then
+ * run in the same step and both write `jumpTo`, which LangGraph rejects with
+ * INVALID_CONCURRENT_GRAPH_UPDATE. So an invalid structured answer never comes
+ * back as data: the plugin reports it as a PROVIDER_ERROR whose cause is that
+ * error. It is the same miss as an answer outside the format, and is retried
+ * the same way, in a fresh conversation. Remove once the in-graph retry works.
+ */
+export function isRejectedStructuredAnswer(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    const { lc_error_code: code, message } = current as {
+      lc_error_code?: unknown;
+      message?: unknown;
+    };
+    if (
+      code === 'INVALID_CONCURRENT_GRAPH_UPDATE' &&
+      typeof message === 'string' &&
+      message.includes('"jumpTo"')
+    )
+      return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 export interface StructuredRunInput<T> {
   /** The AI employee username; its own system prompt and model settings apply. */
   readonly employee: string;
@@ -208,17 +240,25 @@ export function createAIRunner(container: ServiceContainer): AIRunner {
             },
             skillSettings,
           });
-        const result = await agent.invoke({
-          // The plugin reads `content.content`; a bare string reaches the model as an empty question,
-          // although the Skill's examples pass one.
-          userMessages: [
-            { role: 'user', content: { type: 'text', content: text } },
-          ],
-          responseFormat: input.schema,
-          signal: AbortSignal.timeout(input.timeoutMs ?? 120_000),
-        });
+        let structuredResponse: unknown;
+        try {
+          const result = await agent.invoke({
+            // The plugin reads `content.content`; a bare string reaches the model as an empty question,
+            // although the Skill's examples pass one.
+            userMessages: [
+              { role: 'user', content: { type: 'text', content: text } },
+            ],
+            responseFormat: input.schema,
+            signal: AbortSignal.timeout(input.timeoutMs ?? 120_000),
+          });
+          structuredResponse = result.structuredResponse;
+        } catch (error) {
+          // An answer that missed the schema; see isRejectedStructuredAnswer.
+          if (!isRejectedStructuredAnswer(error)) throw error;
+          structuredResponse = undefined;
+        }
         return {
-          parsed: input.schema.safeParse(result.structuredResponse),
+          parsed: input.schema.safeParse(structuredResponse),
           sessionId: conversation.sessionId,
         };
       };

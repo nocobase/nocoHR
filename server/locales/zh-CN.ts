@@ -302,7 +302,7 @@ const zhCN: AppServerResource = {
     },
     automationPositionDrafted: {
       title: '体系顾问起草了新岗位的能力模型',
-      body: '岗位「{{position}}」：{{requirements}} 条岗位要求草稿（新建能力项 {{competencies}} 个），请审核。',
+      body: '岗位「{{position}}」：{{requirements}} 条岗位要求草稿（新建能力项 {{competencies}} 个），{{cited}} 条注明了出自说明书哪一条，请审核。',
     },
     automationDictionaryReview: {
       title: '能力词典月检建议',

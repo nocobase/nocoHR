@@ -8,6 +8,11 @@ import {
   computeCompetencyIssues,
   computePositionIssues,
 } from '../../providers/hr/competency-issues.js';
+import {
+  clauseListing,
+  positionClauses,
+  resolveSourceClauses,
+} from '../../providers/hr/jd-clauses.js';
 import { HrError } from '../../providers/hr/shared.js';
 import { talentServiceToken } from '../../providers/hr/tokens.js';
 
@@ -46,7 +51,7 @@ export const getPositionContext = defineTools({
   definition: {
     name: 'getPositionContext',
     description:
-      'Read one position by id: title, job family, grade, responsibilities (the short duty description), jdText (the text extracted from the uploaded 岗位说明书; when present it is the primary source) and its existing competency requirements with their review status. Call this first.',
+      'Read one position by id: title, job family, grade, responsibilities (the short duty description), jdText (the text extracted from the uploaded 岗位说明书; when present it is the primary source), clauses (both texts numbered clause by clause: J1, J2 … for the job description, D1, D2 … for the duties; cite these numbers when drafting requirements) and its existing competency requirements with their review status. Call this first.',
     schema: z.object({
       positionId: z.string().describe('The id of the position to read.'),
     }),
@@ -58,7 +63,22 @@ export const getPositionContext = defineTools({
         await actorContext(ctx.deps, ctx.actor),
         args.positionId,
       );
-      return { status: 'success', content: context };
+      // V3-08 每项注明出自说明书哪一条: the numbered clauses requirement drafts cite.
+      return {
+        status: 'success',
+        content: {
+          ...context,
+          clauses: clauseListing(
+            positionClauses({
+              jdText:
+                context.position.jdStatus === 'ready'
+                  ? context.position.jdText
+                  : null,
+              responsibilities: context.position.responsibilities,
+            }),
+          ),
+        },
+      };
     } catch (error) {
       return failure(error);
     }
@@ -213,7 +233,7 @@ export const createRequirementDrafts = defineTools({
   definition: {
     name: 'createRequirementDrafts',
     description:
-      'Create draft competency requirements for one position. A competency the position already requires is skipped, never overwritten; the skipped list is returned.',
+      'Create draft competency requirements for one position. A competency the position already requires is skipped, never overwritten; the skipped list is returned. Give each requirement the clauses it comes from (sourceClauses: the numbers getPositionContext lists, such as J3, with a short quote); an unknown number is dropped.',
     schema: z.object({
       positionId: z.string(),
       requirements: z
@@ -222,6 +242,22 @@ export const createRequirementDrafts = defineTools({
             competencyId: z.string(),
             requiredLevel: z.number().int().min(1).max(5),
             mandatory: z.boolean(),
+            sourceClauses: z
+              .array(
+                z.object({
+                  clause: z
+                    .string()
+                    .describe(
+                      'A clause number from getPositionContext, such as J3 or D2.',
+                    ),
+                  quote: z
+                    .string()
+                    .optional()
+                    .describe('A short quote copied from that clause.'),
+                }),
+              )
+              .max(3)
+              .optional(),
           }),
         )
         .min(1)
@@ -237,6 +273,7 @@ export const createRequirementDrafts = defineTools({
         competencyId: string;
         requiredLevel: number;
         mandatory: boolean;
+        sourceClauses?: { clause: string; quote?: string }[];
       }[];
     },
   ) => {
@@ -253,13 +290,31 @@ export const createRequirementDrafts = defineTools({
       return { status: 'error', content: { code: 'FORBIDDEN' } };
     const created: { id: string; competencyId: string }[] = [];
     const skipped: { competencyId: string; reason: string }[] = [];
-    for (const item of args.requirements) {
+    let clauses: ReturnType<typeof positionClauses>;
+    try {
+      const { position } = await ctx.deps.talent.positionContext(
+        actor,
+        args.positionId,
+      );
+      clauses = positionClauses({
+        jdText: position.jdStatus === 'ready' ? position.jdText : null,
+        responsibilities: position.responsibilities,
+      });
+    } catch (error) {
+      return failure(error);
+    }
+    for (const { sourceClauses, ...item } of args.requirements) {
       try {
         const saved = await ctx.deps.talent.saveRequirement(
           actor,
           args.positionId,
           item,
-          { source: 'ai', draft: true },
+          {
+            source: 'ai',
+            draft: true,
+            // V3-08: only clauses the position's texts really have are kept.
+            sourceClauses: resolveSourceClauses(sourceClauses, clauses),
+          },
         );
         created.push({ id: saved.id, competencyId: saved.competencyId });
       } catch (error) {

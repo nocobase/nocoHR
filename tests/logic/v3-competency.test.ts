@@ -1141,6 +1141,78 @@ describe('V3-08 framework advisor: monthly check facts', () => {
     );
     expect(run.json.data.status).toBe('failed');
   });
+
+  it('drafts from a numbered job description without a model, each requirement citing its clause', async () => {
+    const ctx = await actorOf('hr01');
+    // 每项注明出自说明书哪一条: the rule-based draft proposes a confirmed competency the description names.
+    const competency = await db()
+      .query()
+      .selectFrom('competencies')
+      .select(['id', 'title', 'maxLevel'])
+      .where('active', '=', true)
+      .where('reviewStatus', '=', 'confirmed')
+      .where('category', '=', 'skill')
+      .orderBy('code', 'asc')
+      .executeTakeFirstOrThrow();
+    const title = String(competency.title);
+    const position = await server.application.container
+      .resolve(talentServiceToken)
+      .savePosition(ctx, null, {
+        code: 'source-clauses-v308',
+        title: '技术支持专员',
+        jobFamilyId: 'jf-prod',
+        grade: 'S2',
+      });
+    await db()
+      .query()
+      .updateTable('positions')
+      .set({
+        jdText: [
+          '技术支持专员岗位说明书',
+          '一、岗位职责',
+          '1. 接听来电并记录问题。',
+          `2. 运用${title}处理现场问题。`,
+        ].join('\n'),
+        jdStatus: 'ready',
+      })
+      .where('id', '=', position.id)
+      .execute();
+    const run = await call(
+      'hr01',
+      'POST',
+      '/automations/frameworkAdvisor.draftNewPositions/run',
+    );
+    expect(run.json.data.status).toBe('succeeded');
+    const framework = await call('hr01', 'GET', '/framework');
+    expect(framework.status).toBe(200);
+    const drafted = (framework.json.data.requirements as Json[]).filter(
+      (r) => r.positionId === position.id,
+    );
+    expect(drafted).toContainEqual(
+      expect.objectContaining({
+        competencyId: String(competency.id),
+        source: 'ai',
+        reviewStatus: 'draft',
+        requiredLevel: Math.ceil(Number(competency.maxLevel) / 2),
+        sourceClauses: [
+          {
+            source: 'jd',
+            number: 2,
+            section: '岗位职责',
+            item: '2',
+            quote: `运用${title}处理现场问题。`,
+          },
+        ],
+      }),
+    );
+    // Every drafted requirement names a clause; a hand-entered one has none.
+    expect(drafted.every((r) => r.sourceClauses?.length)).toBe(true);
+    expect(
+      (framework.json.data.requirements as Json[])
+        .filter((r) => r.source === 'manual')
+        .every((r) => r.sourceClauses === null),
+    ).toBe(true);
+  });
 });
 
 describe('V3-08 migration 202610020001_extend_competency_framework', () => {

@@ -313,7 +313,7 @@ const enUS = {
     },
     automationPositionDrafted: {
       title: 'The framework advisor drafted a position model',
-      body: '{{position}}: {{requirements}} draft requirements ({{competencies}} new competencies). Please review.',
+      body: '{{position}}: {{requirements}} draft requirements ({{competencies}} new competencies), {{cited}} citing the job-description clause they come from. Please review.',
     },
     automationDictionaryReview: {
       title: 'Monthly competency dictionary review',

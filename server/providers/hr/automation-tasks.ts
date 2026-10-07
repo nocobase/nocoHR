@@ -10,13 +10,25 @@
  * When no model is available, tasks that only word a message fall back to a
  * rule-based text (the run is marked `fallback`); tasks whose product is AI
  * content (drafting a position model, a course, questions) fail and are
- * recorded as failed, to be retried on the next trigger.
+ * recorded as failed, to be retried on the next trigger. Drafting a position
+ * model is the one partial exception: confirmed competencies its job
+ * description names are still proposed, each with the clause that names
+ * them, and nothing new is invented.
  */
 import type { ServiceContainer } from '@nocobase/service-provider';
 import { z } from 'zod';
 
 import { AIUnavailableError, type AIRunner } from './ai-runner.js';
 import { guardedWording } from './ai-text-guard.js';
+import {
+  clauseListing,
+  describeSourceClauses,
+  matchClauses,
+  positionClauses,
+  resolveSourceClauses,
+  sourceClauseOf,
+  type SourceClause,
+} from './jd-clauses.js';
 import { authorizeAction, scopeForUser } from './authorize.js';
 import type {
   AutomationRunContext,
@@ -254,7 +266,15 @@ export function createAutomationTasks(
     const existing = (
       await query
         .selectFrom('competencies')
-        .select(['id', 'code', 'title', 'category', 'description', 'maxLevel'])
+        .select([
+          'id',
+          'code',
+          'title',
+          'category',
+          'description',
+          'maxLevel',
+          'reviewStatus',
+        ])
         .where('active', '=', true)
         .execute()
     ).map((c) => ({
@@ -264,6 +284,7 @@ export function createAutomationTasks(
       category: str(c.category),
       description: c.description == null ? '' : str(c.description),
       maxLevel: Number(c.maxLevel),
+      confirmed: c.reviewStatus === 'confirmed',
     }));
     const schema = z.object({
       items: z
@@ -291,51 +312,122 @@ export function createAutomationTasks(
               .nullable(),
             requiredLevel: z.number().int().min(1).max(5),
             mandatory: z.boolean(),
-            // V3-08: the clause of the job description or duties this item comes from.
-            basis: z.string().max(200).nullable(),
+            // V3-08 每项注明出自说明书哪一条: the numbered clauses this item comes from.
+            sourceClauses: z
+              .array(
+                z.object({
+                  clause: z
+                    .string()
+                    .max(20)
+                    .describe('The clause number as listed, such as J3 or D2.'),
+                  quote: z
+                    .string()
+                    .max(200)
+                    .nullable()
+                    .describe('A short quote copied from that clause.'),
+                }),
+              )
+              .max(3)
+              .nullable(),
           }),
         )
         .min(1)
         .max(12),
     });
+    type DraftItem = Omit<
+      z.infer<typeof schema>['items'][number],
+      'sourceClauses'
+    > & { sourceClauses: SourceClause[] };
     const drafted: {
       id: string;
       title: string;
       competencies: number;
       requirements: number;
-      basis: { competencyId: string; basis: string | null }[];
+      sourceClauses: { competencyId: string; sourceClauses: SourceClause[] }[];
     }[] = [];
+    let unavailable: AIUnavailableError | null = null;
     for (const position of batch) {
-      const result = await structured(
-        run,
-        'frameworkAdvisor',
-        `新岗位自动起草：${str(position.title)}`,
-        [
-          `请为岗位「${str(position.title)}」（职级 ${position.grade == null ? '未设' : str(position.grade)}）起草能力模型。`,
-          ...(position.responsibilities
-            ? [`职责说明：\n${str(position.responsibilities)}`]
-            : []),
-          // V3-08: the job description is the primary source when both exist.
-          ...(position.jdStatus === 'ready' && position.jdText
-            ? [
-                `岗位说明书（主要依据）：\n${str(position.jdText).slice(0, DOCUMENT_TEXT_LIMIT)}`,
-              ]
-            : []),
-          '要求：',
-          '1. 6–12 项，覆盖专业技能（skill）与通用素质（quality）；法规或内部要求的持证事项列为资质类（qualification，maxLevel 为 1）。',
-          '2. 优先复用下面已有的能力项：复用时 existingCompetencyId 填其 id，其余新建字段填 null；新建时 existingCompetencyId 为 null，并填写 code（小写英文加连字符）、title、category、description、maxLevel 和逐级 levels。',
-          '3. 等级描述写成可观察的行为，逐级递进，不用“较好”“优秀”这类形容词。',
-          '4. requiredLevel 不超过该能力项的最高等级。',
-          '5. 每项在 basis 中写明来自岗位说明书或职责说明的哪一条（如“职责 2：方案设计与报价”）；新建能力项的 description 末尾也用“依据：”注明；复用的能力项不改其描述。',
-          `已有能力项：${JSON.stringify(existing)}`,
-        ].join('\n'),
-        schema,
-      );
+      // V3-08: the job description is the primary source when both exist; both are numbered clause by clause.
+      const clauses = positionClauses({
+        jdText:
+          position.jdStatus === 'ready' && position.jdText
+            ? str(position.jdText).slice(0, DOCUMENT_TEXT_LIMIT)
+            : null,
+        responsibilities: position.responsibilities
+          ? str(position.responsibilities)
+          : null,
+      });
+      const jdClauses = clauses.filter((c) => c.source === 'jd');
+      const dutyClauses = clauses.filter((c) => c.source === 'duties');
+      let items: DraftItem[];
+      try {
+        const result = await structured(
+          run,
+          'frameworkAdvisor',
+          `新岗位自动起草：${str(position.title)}`,
+          [
+            `请为岗位「${str(position.title)}」（职级 ${position.grade == null ? '未设' : str(position.grade)}）起草能力模型。`,
+            ...(jdClauses.length
+              ? [
+                  `岗位说明书（主要依据，已逐条编号）：\n${clauseListing(jdClauses)}`,
+                ]
+              : []),
+            ...(dutyClauses.length
+              ? [`职责说明（已逐条编号）：\n${clauseListing(dutyClauses)}`]
+              : []),
+            '要求：',
+            '1. 6–12 项，覆盖专业技能（skill）与通用素质（quality）；法规或内部要求的持证事项列为资质类（qualification，maxLevel 为 1）。',
+            '2. 优先复用下面已有的能力项：复用时 existingCompetencyId 填其 id，其余新建字段填 null；新建时 existingCompetencyId 为 null，并填写 code（小写英文加连字符）、title、category、description、maxLevel 和逐级 levels。',
+            '3. 等级描述写成可观察的行为，逐级递进，不用“较好”“优秀”这类形容词。',
+            '4. requiredLevel 不超过该能力项的最高等级。',
+            '5. 每项在 sourceClauses 中注明出自上面哪一条：clause 填条目编号（如 J3、D2，只能用上面列出的编号），quote 摘录该条原文中的一小段；一项可对应 1–3 条。description 里不必再写依据，系统会按编号附上。',
+            `已有能力项：${JSON.stringify(existing.map(({ confirmed: _, ...c }) => c))}`,
+          ].join('\n'),
+          schema,
+        );
+        items = result.items.map((item) => ({
+          ...item,
+          sourceClauses: resolveSourceClauses(item.sourceClauses, clauses),
+        }));
+      } catch (error) {
+        if (!(error instanceof AIUnavailableError)) throw error;
+        // Without a model, only confirmed competencies the text names are proposed, each with the clause that names it;
+        // nothing new is invented, and a position no clause matches waits for the model (the run fails).
+        items = existing
+          .filter((c) => c.confirmed)
+          .map((c) => ({
+            competency: c,
+            matched: matchClauses(c.title, clauses),
+          }))
+          .filter((m) => m.matched.length > 0)
+          .slice(0, 12)
+          .map(({ competency, matched }) => ({
+            existingCompetencyId: competency.id,
+            code: null,
+            title: null,
+            category: null,
+            description: null,
+            maxLevel: null,
+            levels: null,
+            requiredLevel: Math.max(1, Math.ceil(competency.maxLevel / 2)),
+            mandatory: competency.category === 'qualification',
+            sourceClauses: matched.slice(0, 3).map(sourceClauseOf),
+          }));
+        if (!items.length) {
+          // This position waits for the model; the others in the batch may still match.
+          unavailable = error;
+          continue;
+        }
+        run.markFallback();
+      }
       const byId = new Map(existing.map((c) => [c.id, c]));
       let competencyCount = 0;
       let requirementCount = 0;
-      const basis: { competencyId: string; basis: string | null }[] = [];
-      for (const item of result.items) {
+      const sourceClauses: {
+        competencyId: string;
+        sourceClauses: SourceClause[];
+      }[] = [];
+      for (const item of items) {
         let competencyId: string | undefined;
         let maxLevel = 5;
         const reused = item.existingCompetencyId
@@ -363,7 +455,16 @@ export function createAutomationTasks(
                   code: item.code,
                   title: item.title,
                   category: item.category,
-                  description: item.description ?? undefined,
+                  // V3-08: a new competency names the clause it was drafted from.
+                  description: item.sourceClauses.length
+                    ? [
+                        item.description?.trim(),
+                        describeSourceClauses(item.sourceClauses),
+                      ]
+                        .filter(Boolean)
+                        .join('\n')
+                        .slice(0, 2000)
+                    : (item.description ?? undefined),
                   maxLevel:
                     item.category === 'qualification'
                       ? 1
@@ -384,6 +485,7 @@ export function createAutomationTasks(
                 category: created.category,
                 description: created.description ?? '',
                 maxLevel: created.maxLevel,
+                confirmed: false,
               });
               byId.set(created.id, existing[existing.length - 1]);
               await run.recordItems('competency', [
@@ -408,7 +510,7 @@ export function createAutomationTasks(
               requiredLevel: Math.min(item.requiredLevel, maxLevel),
               mandatory: item.mandatory,
             },
-            { source: 'ai', draft: true },
+            { source: 'ai', draft: true, sourceClauses: item.sourceClauses },
           );
           await run.recordItems('positionRequirement', [
             {
@@ -421,7 +523,10 @@ export function createAutomationTasks(
             },
           ]);
           requirementCount += 1;
-          basis.push({ competencyId, basis: item.basis ?? null });
+          sourceClauses.push({
+            competencyId,
+            sourceClauses: item.sourceClauses,
+          });
         } catch (error) {
           if (!(error instanceof HrError)) throw error;
         }
@@ -437,7 +542,7 @@ export function createAutomationTasks(
         title: str(position.title),
         competencies: competencyCount,
         requirements: requirementCount,
-        basis,
+        sourceClauses,
       });
       await platform.notify({
         key: `automation:positionDrafted:${str(position.id)}`,
@@ -447,10 +552,15 @@ export function createAutomationTasks(
           position: str(position.title),
           requirements: String(requirementCount),
           competencies: String(competencyCount),
+          cited: String(
+            sourceClauses.filter((r) => r.sourceClauses.length > 0).length,
+          ),
         },
         path: `/talent/framework?position=${encodeURIComponent(str(position.id))}`,
       });
     }
+    // Without a model and with nothing the rules could match, the run fails, to be retried on the next trigger.
+    if (unavailable && !drafted.length) throw unavailable;
     return {
       output: {
         positions: drafted,

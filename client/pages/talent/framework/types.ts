@@ -52,6 +52,16 @@ export interface Requirement {
   readonly mandatory: boolean;
   readonly source: string;
   readonly reviewStatus: string;
+  /** V3-08: the 岗位说明书 / 职责说明 clauses a drafted requirement comes from; null when entered by hand. */
+  readonly sourceClauses?: readonly RequirementSourceClause[] | null;
+}
+
+export interface RequirementSourceClause {
+  readonly source: 'jd' | 'duties';
+  readonly number: number;
+  readonly section: string | null;
+  readonly item: string | null;
+  readonly quote: string;
 }
 
 export interface FrameworkData {

@@ -6,9 +6,8 @@
  * confirms once every candidate has a readiness.
  */
 import { useTranslation } from '@nocobase/i18n/client';
-import { SparklesIcon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
-import { Link, useOutletContext, useParams } from 'react-router';
+import { useOutletContext, useParams } from 'react-router';
 
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
@@ -23,35 +22,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
-const READINESS = ['readyNow', 'oneToTwoYears', 'threePlusYears'] as const;
-
-interface Gap {
-  competencyId: string;
-  title: string;
-  required: number;
-  current: number;
-}
-interface Candidate {
-  employeeId: string;
-  name: string;
-  departmentTitle: string;
-  readiness: string | null;
-  source: string;
-  note: string;
-  left: boolean;
-  currentGaps: Gap[];
-  latestRating: string | null;
-  developmentPlanId: string | null;
-}
+import { SuccessionCandidateTable, type SuccessionCandidate as Candidate } from './candidate-table.js';
 interface Plan {
   id: string;
   positionTitle: string;
@@ -59,6 +31,8 @@ interface Plan {
   incumbent: { name: string; left: boolean } | null;
   status: string;
   reviewedByName: string | null;
+  /** False when the position has no requirements: gaps cannot be compared. */
+  requirementsSet: boolean;
   requirements: { competencyId: string; title: string; requiredLevel: number; mandatory: boolean }[];
   candidates: Candidate[];
   risk: string | null;
@@ -156,6 +130,9 @@ export default function SuccessionDetailPage(): ReactElement {
                 <CardTitle>{t('talentReview.succession.requirements')}</CardTitle>
               </CardHeader>
               <CardContent className='flex flex-wrap gap-2'>
+                {plan.requirementsSet ? null : (
+                  <p className='text-sm text-muted-foreground'>{t('talentReview.succession.noRequirements')}</p>
+                )}
                 {plan.requirements.map((r) => (
                   <Badge key={r.competencyId} variant={r.mandatory ? 'default' : 'outline'}>
                     {r.title} {r.requiredLevel}
@@ -163,75 +140,18 @@ export default function SuccessionDetailPage(): ReactElement {
                 ))}
               </CardContent>
             </Card>
-            <div className='overflow-x-auto rounded-lg border'>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('talentReview.succession.candidate')}</TableHead>
-                    <TableHead>{t('talentReview.succession.gaps')}</TableHead>
-                    <TableHead>{t('talentReview.detail.rating')}</TableHead>
-                    <TableHead>{t('talentReview.succession.readiness')}</TableHead>
-                    <TableHead>{t('talentReview.succession.note')}</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {plan.candidates.map((c) => (
-                    <TableRow key={c.employeeId} className={c.left ? 'opacity-60' : undefined}>
-                      <TableCell>
-                        <div className='flex items-center gap-1 font-medium'>
-                          {c.name}
-                          {c.source === 'ai' ? <SparklesIcon className='size-3.5' aria-label={t('talentReview.succession.aiCandidate')} /> : null}
-                          {c.left ? <Badge variant='secondary'>{t('talentReview.succession.left')}</Badge> : null}
-                        </div>
-                        <div className='text-muted-foreground text-xs'>{c.departmentTitle}</div>
-                      </TableCell>
-                      <TableCell>
-                        {c.currentGaps.length
-                          ? c.currentGaps.map((g) => `${g.title} ${g.current}/${g.required}`).join('、')
-                          : t('talentReview.succession.noGap')}
-                      </TableCell>
-                      <TableCell>{c.latestRating ?? '—'}</TableCell>
-                      <TableCell>
-                        <NativeSelect
-                          aria-label={t('talentReview.succession.readiness')}
-                          disabled={!plan.can.manage || c.left}
-                          value={(edits[c.employeeId]?.readiness !== undefined ? edits[c.employeeId].readiness : c.readiness) ?? ''}
-                          onChange={(e) =>
-                            setEdits((x) => ({
-                              ...x,
-                              [c.employeeId]: { ...x[c.employeeId], readiness: e.target.value || null },
-                            }))
-                          }
-                        >
-                          <NativeSelectOption value=''>{t('talentReview.succession.readinessEmpty')}</NativeSelectOption>
-                          {READINESS.map((r) => (
-                            <NativeSelectOption key={r} value={r}>
-                              {t(`talentReview.readiness.${r}`)}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
-                      </TableCell>
-                      <TableCell className='max-w-72 text-xs'>
-                        {c.note}
-                        {c.developmentPlanId ? (
-                          <Link className='ms-1 underline' to={`/talent/learning-plans?plan=${encodeURIComponent(c.developmentPlanId)}`}>
-                            {t('talentReview.succession.plan')}
-                          </Link>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        {plan.can.manage ? (
-                          <Button size='sm' variant='ghost' onClick={() => void saveCandidates(undefined, c.employeeId)}>
-                            {t('talentReview.common.remove')}
-                          </Button>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <SuccessionCandidateTable
+              candidates={plan.candidates}
+              requirementsSet={plan.requirementsSet}
+              canManage={plan.can.manage}
+              readinessOf={(c) =>
+                edits[c.employeeId]?.readiness !== undefined ? (edits[c.employeeId].readiness ?? null) : c.readiness
+              }
+              onReadiness={(employeeId, readiness) =>
+                setEdits((x) => ({ ...x, [employeeId]: { ...x[employeeId], readiness } }))
+              }
+              onRemove={(employeeId) => void saveCandidates(undefined, employeeId)}
+            />
             {plan.can.manage ? (
               <div className='flex flex-wrap items-center justify-end gap-2'>
                 <NativeSelect
@@ -245,7 +165,9 @@ export default function SuccessionDetailPage(): ReactElement {
                     .slice(0, 20)
                     .map((m) => (
                       <NativeSelectOption key={m.employeeId} value={m.employeeId}>
-                        {t('talentReview.succession.matchOption', { name: m.name, gap: m.totalGap })}
+                        {plan.requirementsSet
+                          ? t('talentReview.succession.matchOption', { name: m.name, gap: m.totalGap })
+                          : m.name}
                       </NativeSelectOption>
                     ))}
                 </NativeSelect>
