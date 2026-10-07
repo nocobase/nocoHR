@@ -133,6 +133,10 @@ export const DEFAULT_AI_ENTRY: AiEntrySettings = {
         '班次',
         '请假',
         '还有几天',
+        // “我今年的年假还剩几天” hit only the policy row's “年假” and went to the knowledge assistant.
+        '还剩',
+        '剩几天',
+        '剩多少',
         '余额',
         // V2-05 (realigned): 请一天事假、调班、打卡 in the bot reach the HR assistant too.
         '事假',
@@ -225,6 +229,34 @@ export const DEFAULT_AI_ENTRY: AiEntrySettings = {
   ],
   knowledgeScopes: {},
 };
+
+/**
+ * The row key in a routing answer the model gave as text instead of the structured format: a bare key
+ * ("myRecord"), a JSON object ("Returning structured response: {"key":"myRecord"}"), or a sentence naming
+ * exactly one key. Anything naming no key, or several, is no answer.
+ */
+export function routeKeyFromText(
+  text: string,
+  keys: readonly string[],
+): { key: string } | undefined {
+  const json = /\{[^{}]*\}/u.exec(text)?.[0];
+  if (json) {
+    try {
+      const value: unknown = JSON.parse(json);
+      if (
+        isRecord(value) &&
+        typeof value.key === 'string' &&
+        keys.includes(value.key)
+      )
+        return { key: value.key };
+    } catch {
+      // Not JSON after all; read the words below.
+    }
+  }
+  const words = new Set(text.match(/[A-Za-z][A-Za-z0-9_-]*/gu) ?? []);
+  const named = keys.filter((key) => words.has(key));
+  return named.length === 1 ? { key: named[0] } : undefined;
+}
 
 export function createAiEntryService(deps: {
   readonly database: DatabaseManager;
@@ -399,15 +431,20 @@ export function createAiEntryService(deps: {
         routes.at(-1)!;
       let chosen: (typeof routes)[number] | undefined;
       let method: 'model' | 'keywords' | 'fallback' = 'fallback';
+      const keys = routes.map((r) => r.key);
       try {
         const { data } = await deps.ai.structured({
           employee: 'knowledgeAssistant',
           userId: ctx.userId,
           title: 'AI 入口路由',
-          prompt: `把用户的问题归到下面其中一行，只输出该行的 key。\n${JSON.stringify(
+          // A question about someone's own data (a balance, how many days are left, a date, a record) goes to
+          // the row that reads that data, even when a rules row names the same subject ("年假规则").
+          prompt: `把用户的问题归到下面其中一行，只输出该行的 key。问的是提问者本人或某个人的具体数据（余额、还剩几天、日期、次数、记录）时，选处理这些数据的行；只问制度、规定或计算方法本身时，才选讲制度的行。\n${JSON.stringify(
             routes.map((r) => ({ key: r.key, description: r.description })),
           )}\n问题：${question.trim().slice(0, 500)}`,
-          schema: z.object({ key: z.string() }),
+          // The model must name one of these rows; `fromText` reads a key it gave as plain text.
+          schema: z.object({ key: z.enum(keys as [string, ...string[]]) }),
+          fromText: (text) => routeKeyFromText(text, keys),
           timeZone: deps.timeZone,
           timeoutMs: 30_000,
         });

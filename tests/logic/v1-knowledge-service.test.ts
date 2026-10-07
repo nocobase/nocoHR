@@ -378,6 +378,16 @@ describe('unified AI entry', () => {
       key: 'policy',
       employee: 'knowledgeAssistant',
     });
+    // Someone's own balance goes to the HR assistant even though the policy row names 年假; the rule itself
+    // stays with the knowledge assistant.
+    const balance = await call('emp_njl_1', 'POST', '/ai-entry/route', {
+      question: '我今年的年假还剩几天？',
+    });
+    expect(balance.json.data.key).toBe('myRecord');
+    const rule = await call('emp_njl_1', 'POST', '/ai-entry/route', {
+      question: '年假是怎么计算的？',
+    });
+    expect(rule.json.data.key).toBe('policy');
     // 导入体检 is for hr.admin only: an employee falls back to the knowledge assistant.
     const hrOnly = await call('emp_njl_1', 'POST', '/ai-entry/route', {
       question: '导入体检怎么处理',

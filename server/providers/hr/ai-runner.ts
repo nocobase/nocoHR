@@ -85,6 +85,12 @@ export interface StructuredRunInput<T> {
   readonly sessionId?: string;
   /** false for a conversation someone is taking part in (practice); true (default) for background work. */
   readonly unattended?: boolean;
+  /**
+   * Reads the answer from the reply text when the model answered in text instead of the structured format
+   * (DeepSeek often replies to the routing question with a bare "myRecord"). The result is still checked
+   * against `schema`.
+   */
+  readonly fromText?: (text: string) => unknown;
 }
 
 export interface AIRunner {
@@ -241,6 +247,7 @@ export function createAIRunner(container: ServiceContainer): AIRunner {
             skillSettings,
           });
         let structuredResponse: unknown;
+        let replyText = '';
         try {
           const result = await agent.invoke({
             // The plugin reads `content.content`; a bare string reaches the model as an empty question,
@@ -252,15 +259,27 @@ export function createAIRunner(container: ServiceContainer): AIRunner {
             signal: AbortSignal.timeout(input.timeoutMs ?? 120_000),
           });
           structuredResponse = result.structuredResponse;
+          const content = result.message?.content as unknown;
+          replyText =
+            typeof content === 'string'
+              ? content
+              : content &&
+                  typeof content === 'object' &&
+                  'content' in content &&
+                  typeof content.content === 'string'
+                ? content.content
+                : '';
         } catch (error) {
           // An answer that missed the schema; see isRejectedStructuredAnswer.
           if (!isRejectedStructuredAnswer(error)) throw error;
           structuredResponse = undefined;
         }
-        return {
-          parsed: input.schema.safeParse(structuredResponse),
-          sessionId: conversation.sessionId,
-        };
+        let parsed = input.schema.safeParse(structuredResponse);
+        if (!parsed.success && input.fromText && replyText) {
+          const fromText = input.schema.safeParse(input.fromText(replyText));
+          if (fromText.success) parsed = fromText;
+        }
+        return { parsed, sessionId: conversation.sessionId };
       };
       try {
         const unattended = input.unattended !== false;
