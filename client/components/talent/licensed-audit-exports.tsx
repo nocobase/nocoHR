@@ -74,7 +74,7 @@ const daysAgo = (days: number) => {
 
 /**
  * V4-14 审计导出 · 持证上岗 (a tab of the V3-11 audit page; talent.audit,
- * hr.admin and hr.auditor): 工单人员追溯 (offered only where the start logs
+ * hr.admin and hr.auditor): 持证操作追溯 (offered only where the start logs
  * exist) and 权限变化记录, each previewed on the page and downloaded as
  * Excel. Every download is written to the export log by the server.
  */

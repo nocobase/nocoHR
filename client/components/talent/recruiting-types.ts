@@ -50,6 +50,8 @@ export interface Plan {
   decision: { types: string[]; note: string | null } | null;
   requisitionId: string | null;
   calculationHash?: string;
+  /** 招聘设置's unit of the plan quantities; null: the neutral word of the locale. */
+  unitLabel?: string | null;
   can?: { decide?: boolean; recalculate?: boolean; settings?: boolean };
 }
 
@@ -474,6 +476,8 @@ export interface RecruitingSettingsValue {
     transferLimits: TransferRow[];
     /** The loan option carries the housing risk (off by default). */
     transferHousingRisk?: boolean;
+    /** The unit of the plan quantities (件, 单, 床日 …); unset shows the locale's neutral word. */
+    unitLabel?: string;
     recruitingCycleDays: number;
     absorbOvertimeHours: number;
     onboardingDays: number;

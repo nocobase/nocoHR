@@ -871,7 +871,7 @@ const enUS = {
     ...recruitingServerEn.top,
     permissionSets: {
       hrRecruiter: 'Recruiter',
-      hrIntegrationErp: 'ERP integration (production plans)',
+      hrIntegrationErp: 'Business-system integration (demand plans)',
     },
   },
   payroll: {

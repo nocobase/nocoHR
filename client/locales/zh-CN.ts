@@ -322,6 +322,7 @@ const zhCN: AppResource = {
         restBefore: '上一班后休息 {{hours}} 小时',
         restAfter: '距下一班 {{hours}} 小时',
         load: '本月加班 {{hours}} 小时、夜班 {{nights}} 次',
+        overtime: '本月加班 {{hours}} 小时',
         pick: '排入',
         picked: '已填入顶班，保存后校验并生效。',
       },
@@ -1195,7 +1196,7 @@ const zhCN: AppResource = {
     mergeAdjacent: '相邻两级为同一审批人时合并',
     ruleOrder: '顺序',
     ruleName: '级别名称',
-    ruleNamePlaceholder: '如：厂长审批',
+    ruleNamePlaceholder: '如：分管负责人审批',
     ruleDepartment: '部门（含下级）',
     ruleTypes: '异动类型',
     ruleApprover: '审批人',
@@ -1629,7 +1630,7 @@ const zhCN: AppResource = {
       'hrAssistant.workforceExplain': {
         title: '用工测算说明',
         description:
-          '排产计划到达且有用工缺口时，对每次测算结果说明一次，并告知部门负责人。',
+          '业务量计划到达且有用工缺口时，对每次测算结果说明一次，并告知部门负责人。',
       },
       'hrAssistant.preboarding': {
         title: '待入职跟进',
@@ -2165,7 +2166,7 @@ const zhCN: AppResource = {
       inactive: '已停用',
       fromAi: '陪练教练起草',
       personaHint:
-        'AI 扮演的角色与语气，例如“机加工车间班组长，说话直接，会追问细节”。',
+        'AI 扮演的角色与语气，例如“一线主管，说话直接，会追问细节”。',
       documentHint: '陪练中 AI 只以这份文档为事实依据。',
       weightTotal: '合计 {{total}} / 100',
       addPoint: '添加要点',
@@ -2737,9 +2738,9 @@ const zhCN: AppResource = {
       relatedCourses: '相关课程',
       placeholder: '输入你想了解的制度或操作规范…',
       examples: {
-        stopReport: '设备停机多久后重新开机要做首件检验？',
-        lockout: '操作旋转设备时可以戴手套吗？',
-        inspection: '首件检验合格后才能批量加工吗？',
+        travel: '出差住宿的报销标准是多少？',
+        annualLeave: '年假是怎么计算的？',
+        probation: '试用期内可以申请调岗吗？',
       },
     },
     knowledge: {

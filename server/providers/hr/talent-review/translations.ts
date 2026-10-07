@@ -183,7 +183,7 @@ export function createTranslationService(
         employee: 'contentWriter',
         userId: run?.owner.userId ?? userId,
         title: `译文起草 ${title}`,
-        prompt: `把下列培训内容翻译成英文（en-US），按原结构返回 fields。保留编号、数字、单位和作业文件条款号不变（如 WI-MC-0231、4.3、10 分钟 → 10 minutes）；id 和 key 不翻译。术语按术语表翻译：${settings.glossary.map((g) => `${g.zh} → ${g.en}`).join('；')}。
+        prompt: `把下列培训内容翻译成英文（en-US），按原结构返回 fields。保留编号、数字、单位和作业文件条款号不变（如 SOP-0231、4.3、10 分钟 → 10 minutes）；id 和 key 不翻译。术语按术语表翻译：${settings.glossary.map((g) => `${g.zh} → ${g.en}`).join('；')}。
 内容（JSON）：${JSON.stringify(texts).slice(0, 30_000)}`,
         schema: translatedSchema,
         timeZone: platform.timeZone,

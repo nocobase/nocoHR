@@ -45,6 +45,7 @@ export default function WorkforcePlanDetail(): ReactElement {
   };
   const data = plan.data;
   const c = data?.calculation ?? undefined;
+  const unit = data?.unitLabel || t('recruiting.workforce.defaultUnit');
   return (
     <RouteChildPage>
       <PageContainer>
@@ -90,11 +91,11 @@ export default function WorkforcePlanDetail(): ReactElement {
           <div className='space-y-4'>
             <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
               <Metric
-                label={t('recruiting.workforce.planned')}
+                label={t('recruiting.workforce.planned', { unit })}
                 value={Number(c.plannedOutput).toLocaleString()}
                 hint={
                   c.currentOutput !== null
-                    ? `${t('recruiting.workforce.current')} ${Number(c.currentOutput).toLocaleString()}`
+                    ? `${t('recruiting.workforce.current', { unit })} ${Number(c.currentOutput).toLocaleString()}`
                     : undefined
                 }
               />
@@ -103,7 +104,7 @@ export default function WorkforcePlanDetail(): ReactElement {
                 value={String(c.headcount)}
               />
               <Metric
-                label={t('recruiting.workforce.capacity')}
+                label={t('recruiting.workforce.capacity', { unit })}
                 value={Number(c.capacity).toLocaleString()}
               />
               <Metric
@@ -136,7 +137,7 @@ export default function WorkforcePlanDetail(): ReactElement {
               <CardContent>
                 <dl className='grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2'>
                   <Param
-                    label={t('recruiting.workforce.perShift')}
+                    label={t('recruiting.workforce.perShift', { unit })}
                     value={c.outputPerShift}
                     source={t('recruiting.workforce.sourceSettings')}
                   />

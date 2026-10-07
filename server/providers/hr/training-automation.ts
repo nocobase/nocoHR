@@ -706,7 +706,7 @@ export function createTrainingAutomation(deps: TrainingAutomationDeps) {
       [
         `课程《${str(course.title)}》刚发布。请根据依据文档起草 1 个陪练场景，考察这些能力项：${JSON.stringify(uncovered.map((c) => ({ id: str(c.id), title: str(c.title) })))}。`,
         '评分要点来自文档中明确的要求（如时限、通知对象、记录方式），每条填 sourceExcerpt（逐字摘自文档的原文）和 competencyId；权重是整数，合计 100。',
-        'persona 写 AI 扮演的角色与语气（如机加工车间班组长，说话直接，会追问细节；或整车厂审核员，礼貌但会追问依据）；situation 写给员工看的情境；openingLine 是 AI 的第一句话。',
+        'persona 写 AI 扮演的角色与语气（如一线主管，说话直接，会追问细节；或客户、审核员，礼貌但会追问依据）；situation 写给员工看的情境；openingLine 是 AI 的第一句话。',
         `依据文档《${str(document.title)}》：\n${str(document.contentText ?? '').slice(0, DOCUMENT_TEXT_LIMIT)}`,
       ].join('\n'),
       z.object({

@@ -836,7 +836,7 @@ const zhCN: AppServerResource = {
     ...recruitingServerZh.top,
     permissionSets: {
       hrRecruiter: '招聘专员',
-      hrIntegrationErp: 'ERP 集成（排产计划）',
+      hrIntegrationErp: '业务系统集成（业务量计划）',
     },
   },
   payroll: {

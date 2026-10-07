@@ -1,7 +1,8 @@
 /**
- * V2-07 招聘 / 用工计划 (`talent.workforcePlans`): the production plans the ERP
- * pushed, by month and department, with the gap; hr.admin may enter one by
- * hand (same calculation). A plan opens as a child page.
+ * V2-07 招聘 / 用工计划 (`talent.workforcePlans`): the demand plans (业务量计划)
+ * a business system pushed, by month and department, with the gap; hr.admin
+ * may enter one by hand (same calculation). Quantities are labelled with
+ * 招聘设置's unit. A plan opens as a child page.
  */
 import { useTranslation } from '@nocobase/i18n/client';
 import { useState, type ReactElement } from 'react';
@@ -39,6 +40,7 @@ import {
 
 interface PlanList {
   items: Plan[];
+  unitLabel?: string | null;
   can: { import: boolean; settings: boolean };
 }
 
@@ -46,6 +48,7 @@ export default function WorkforcePlansPage(): ReactElement {
   const { t } = useTranslation();
   const list = useRemote<PlanList>('talent/recruiting/workforce-plans');
   const [entering, setEntering] = useState(false);
+  const unit = list.data?.unitLabel || t('recruiting.workforce.defaultUnit');
   return (
     <>
       <PageContainer>
@@ -62,6 +65,7 @@ export default function WorkforcePlansPage(): ReactElement {
         />
         {entering ? (
           <PushForm
+            unit={unit}
             onDone={() => {
               setEntering(false);
               list.reload();
@@ -83,10 +87,10 @@ export default function WorkforcePlansPage(): ReactElement {
                   <TableHead>{t('recruiting.common.department')}</TableHead>
                   <TableHead>{t('recruiting.common.position')}</TableHead>
                   <TableHead className='text-right'>
-                    {t('recruiting.workforce.planned')}
+                    {t('recruiting.workforce.planned', { unit })}
                   </TableHead>
                   <TableHead className='text-right'>
-                    {t('recruiting.workforce.capacity')}
+                    {t('recruiting.workforce.capacity', { unit })}
                   </TableHead>
                   <TableHead className='text-right'>
                     {t('recruiting.workforce.gap')}
@@ -131,7 +135,13 @@ export default function WorkforcePlansPage(): ReactElement {
   );
 }
 
-function PushForm({ onDone }: { onDone: () => void }): ReactElement {
+function PushForm({
+  unit,
+  onDone,
+}: {
+  unit: string;
+  onDone: () => void;
+}): ReactElement {
   const { t } = useTranslation();
   const { busy, run } = useAction();
   const [form, setForm] = useState({
@@ -213,7 +223,7 @@ function PushForm({ onDone }: { onDone: () => void }): ReactElement {
           </Field>
           <Field>
             <FieldLabel htmlFor='wp-planned'>
-              {t('recruiting.workforce.planned')}
+              {t('recruiting.workforce.planned', { unit })}
             </FieldLabel>
             <Input
               id='wp-planned'
@@ -226,7 +236,7 @@ function PushForm({ onDone }: { onDone: () => void }): ReactElement {
           </Field>
           <Field>
             <FieldLabel htmlFor='wp-current'>
-              {t('recruiting.workforce.current')}
+              {t('recruiting.workforce.current', { unit })}
             </FieldLabel>
             <Input
               id='wp-current'

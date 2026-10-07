@@ -46,7 +46,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 
-// V4-14: 'licensed' — 工单人员追溯 and 权限变化记录 (licensed-audit-exports.tsx).
+// V4-14: 'licensed' — 持证操作追溯 and 权限变化记录 (licensed-audit-exports.tsx).
 // V3-11 客户审核问询: 'requests' — the customers' requests from the audit mailbox (audit-requests.tsx).
 const TABS = [
   'requests',

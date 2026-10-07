@@ -338,7 +338,7 @@ export const auditResource = defineCompositeResource('talent.audit', (r) =>
         .title(label('authz.audit.exportAuditPack'))
         .grant('employees', employeeRead),
     )
-    // V4-14 审计导出扩展: 工单人员追溯 and 权限变化记录 (licensed/exports.ts).
+    // V4-14 审计导出扩展: 持证操作追溯 and 权限变化记录 (licensed/exports.ts).
     .action('exportStartTrace', (a) =>
       a
         .title(label('licensed.authz.exportStartTrace'))

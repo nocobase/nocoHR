@@ -1,6 +1,8 @@
 /**
- * 用工计划 (V2-07): the ERP's production plan becomes a staffing gap and three
- * options, all computed here by rule; the HR assistant only explains them.
+ * 用工计划 (V2-07): a business system's demand plan (业务量计划; in the demo
+ * the ERP's production plan) becomes a staffing gap and three options, all
+ * computed here by rule; the HR assistant only explains them. The quantities
+ * count in 招聘设置's unit (`workforce.unitLabel`, 单位 when unset).
  *
  * 测算规则 (招聘设置 · 用工测算参数, per department and position, the nearest
  * department up the tree that has parameters):
@@ -524,7 +526,7 @@ export function createWorkforceService(
     present: presentPlan,
     visible,
 
-    /** 排产计划到达: the ERP account (API key) or an HR administrator's import. */
+    /** 业务量计划到达: the integration account (API key) or an HR administrator's import. */
     async push(actor: ActorContext, input: unknown, source: 'api' | 'import') {
       await authorizeAction(actor.authz, COMPOSITE.plan, 'import');
       const parsed = pushSchema.safeParse(input);
@@ -605,6 +607,8 @@ export function createWorkforceService(
       }
       return {
         items,
+        /** 招聘设置's unit of the quantities; null: the client's neutral word. */
+        unitLabel: (await ctx.settings()).workforce.unitLabel ?? null,
         can: {
           import: await ctx.can(actor, COMPOSITE.plan, 'import'),
           settings: await ctx.can(actor, COMPOSITE.settings, 'manage'),
@@ -622,6 +626,7 @@ export function createWorkforceService(
       );
       return {
         ...(await decorate(plan)),
+        unitLabel: (await ctx.settings()).workforce.unitLabel ?? null,
         can: {
           decide:
             plan.status === 'calculated' &&

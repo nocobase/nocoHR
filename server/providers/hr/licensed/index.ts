@@ -13,7 +13,7 @@
  * - transfer.ts: 调岗资质检查 (job-event handler, checklist provider
  *   `grants`); the certification steward's notice goes to the task owner
  *   (hr01 by default) and the new department's head, once per event.
- * - exports.ts: 工单人员追溯 and 权限变化记录.
+ * - exports.ts: 持证操作追溯 and 权限变化记录.
  * - the demonstration pages are demo-batch.ts.
  *
  * Certificate states and permissions follow rules only; no AI employee

@@ -103,7 +103,7 @@ export function createHrAssistantAttendance(deps: {
           'hrAssistant',
           '顶班推荐',
           [
-            '以下是规则筛出的可顶班人员（已按当月加班少者优先排序）。只从中选，最多 3 人，逐人用一句话说明理由（当天空闲、前后休息时间、当月加班与夜班数），只陈述事实、不评价员工；restBeforeHours 或 restAfterHours 为 null 表示那一侧没有相邻班次，不要写这一项，也不要写“—”。',
+            '以下是规则筛出的可顶班人员（已按当月加班少者优先排序）。只从中选，最多 3 人，逐人用一句话说明理由（当天空闲、前后休息时间、当月加班，有夜班时写夜班数），只陈述事实、不评价员工；restBeforeHours 或 restAfterHours 为 null 表示那一侧没有相邻班次，不要写这一项，也不要写“—”。',
             JSON.stringify(
               candidates.slice(0, 10).map((c) => ({
                 employeeId: c.employeeId,
@@ -111,7 +111,10 @@ export function createHrAssistantAttendance(deps: {
                 restBeforeHours: c.restBeforeHours,
                 restAfterHours: c.restAfterHours,
                 monthOvertimeHours: c.monthOvertimeHours,
-                monthNightShifts: c.monthNightShifts,
+                // Without night shifts in the department there is no night count to word.
+                ...(result.nightShifts === false
+                  ? {}
+                  : { monthNightShifts: c.monthNightShifts }),
               })),
             ),
           ].join('\n'),

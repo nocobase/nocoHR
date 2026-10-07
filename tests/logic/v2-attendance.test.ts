@@ -476,6 +476,55 @@ describe('V2-05 leave conflicts and cover suggestions', () => {
     // A rest that cannot be worked out is left out, never shown as “—”.
     for (const c of offered)
       expect((c.reasons as string[]).join('')).not.toContain('—');
+    // The machining department works nights, so the night count is part of each reason.
+    expect(candidates.json.data.nightShifts).toBe(true);
+    for (const c of offered)
+      expect((c.reasons as string[]).join('')).toMatch(/夜班 \d+ 次/u);
+    // A department without night shifts (an office, a shop) never reads “夜班 0 次”.
+    const nightShiftIds = (
+      await (
+        await db()
+      )
+        .query()
+        .selectFrom('shifts')
+        .select(['id'])
+        .where('isNight', '=', true)
+        .execute()
+    ).map((s) => String(s.id));
+    expect(nightShiftIds.length).toBeGreaterThan(0);
+    try {
+      await (
+        await db()
+      )
+        .query()
+        .updateTable('shifts')
+        .set({ isNight: false })
+        .where('id', 'in', nightShiftIds)
+        .execute();
+      const dayOnly = await call(
+        'mgr_njl',
+        'GET',
+        `/schedules/${String(cell?.id)}/candidates`,
+      );
+      expect(dayOnly.status).toBe(200);
+      expect(dayOnly.json.data.nightShifts).toBe(false);
+      const dayOffered = dayOnly.json.data.candidates as Json[];
+      expect(dayOffered.length).toBeGreaterThan(0);
+      for (const c of dayOffered) {
+        const reasons = (c.reasons as string[]).join('');
+        expect(reasons).not.toContain('夜班');
+        expect(reasons).toMatch(/本月加班 [\d.]+ 小时/u);
+      }
+    } finally {
+      await (
+        await db()
+      )
+        .query()
+        .updateTable('shifts')
+        .set({ isNight: true })
+        .where('id', 'in', nightShiftIds)
+        .execute();
+    }
   });
 
   it('does not suggest or notify again for the same conflict on the 09:00 run', async () => {

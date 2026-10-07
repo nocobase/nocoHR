@@ -365,6 +365,7 @@ const enUS = {
         restBefore: 'Rest since the last shift: {{hours}} h',
         restAfter: 'Until the next shift: {{hours}} h',
         load: 'This month: {{hours}} h overtime, {{nights}} nights',
+        overtime: 'This month: {{hours}} h overtime',
         pick: 'Assign',
         picked: 'Cover filled in. Save to check and keep it.',
       },
@@ -1307,7 +1308,7 @@ const enUS = {
     mergeAdjacent: 'Merge adjacent levels with the same approver',
     ruleOrder: 'Order',
     ruleName: 'Level name',
-    ruleNamePlaceholder: 'For example: Plant director approval',
+    ruleNamePlaceholder: 'For example: Division head approval',
     ruleDepartment: 'Department (with sub-departments)',
     ruleTypes: 'Action types',
     ruleApprover: 'Approver',
@@ -1760,7 +1761,7 @@ const enUS = {
       'hrAssistant.workforceExplain': {
         title: 'Explain staffing needs',
         description:
-          'When a production plan arrives with a staffing gap, explains the calculated numbers once per calculation and tells the department head.',
+          'When a demand plan arrives with a staffing gap, explains the calculated numbers once per calculation and tells the department head.',
       },
       'hrAssistant.preboarding': {
         title: 'Pre-boarding follow-up',
@@ -2311,7 +2312,7 @@ const enUS = {
       inactive: 'Disabled',
       fromAi: 'Drafted by the practice coach',
       personaHint:
-        'The role and tone the coach keeps, e.g. a machining team leader who is direct and asks for details.',
+        'The role and tone the coach keeps, e.g. a frontline supervisor who is direct and asks for details.',
       documentHint: 'The coach takes facts only from this document.',
       weightTotal: 'Total {{total}} / 100',
       addPoint: 'Add point',
@@ -2909,11 +2910,9 @@ const enUS = {
       relatedCourses: 'Related courses',
       placeholder: 'Ask about a policy or procedure…',
       examples: {
-        stopReport:
-          'After how long a stop does a machine need a first-article inspection?',
-        lockout: 'May I wear gloves when operating rotating equipment?',
-        inspection:
-          'Must the first article pass before batch machining starts?',
+        travel: 'What is the hotel allowance on a business trip?',
+        annualLeave: 'How is annual leave calculated?',
+        probation: 'May I apply for a transfer during probation?',
       },
     },
     knowledge: {

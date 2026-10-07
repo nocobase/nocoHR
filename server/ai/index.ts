@@ -123,7 +123,7 @@ export default class AppAIResources extends AIResourceRegistrar {
     await manager.registerEmployee(knowledgeAssistant);
     // V3-11: the writer's version revision, the steward's audit pack, the coach's recommendation content.
     await manager.registerEmployee(withRevisionTools(contentWriter));
-    // V4-14: 认证即权限、调岗资质检查与工单人员追溯 (licensed-tools.ts).
+    // V4-14: 认证即权限、调岗资质检查与持证操作追溯 (licensed-tools.ts).
     await manager.registerEmployee(
       withLicensedStewardTools(withAuditPackTools(certificationSteward)),
     );

@@ -34,6 +34,11 @@ import { createTemplates } from './templates.js';
 import { createWorkforceService } from './workforce.js';
 
 const INTEGRATION_SET = 'hr.integrationErp';
+/**
+ * A new key's name when the administrator gives none. Keys created before
+ * 2026-10 keep the name they were stored with (ERP 排产计划推送).
+ */
+export const INTEGRATION_KEY_DEFAULT_NAME = '业务量计划推送';
 const KEYS_ID = 'recruiting.integrationKeys';
 
 export function createRecruitingServices(deps: RecruitingDeps) {
@@ -255,7 +260,7 @@ export function createRecruitingServices(deps: RecruitingDeps) {
         return writeRecruitingSettings(ctx.database, input, actor.userId);
       },
 
-      /** ERP 集成账号的 API 密钥: shown once, never stored in clear. */
+      /** 业务系统集成账号的 API 密钥 (pushes 业务量计划): shown once, never stored in clear. */
       async integration(actor: ActorContext) {
         await authorizeAction(actor.authz, COMPOSITE.settings, 'manage');
         const holders = await ctx.holdersOf(INTEGRATION_SET);
@@ -272,7 +277,7 @@ export function createRecruitingServices(deps: RecruitingDeps) {
         const body = (input ?? {}) as { userId?: unknown; name?: unknown };
         const userId = typeof body.userId === 'string' ? body.userId : holders[0];
         if (!userId || !holders.includes(userId)) throw new HrError('INTEGRATION_ACCOUNT_MISSING', 409);
-        const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 64) : 'ERP 排产计划推送';
+        const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 64) : INTEGRATION_KEY_DEFAULT_NAME;
         const { key, secret } = await apiKeys().create({ userId, name, expiresIn: 365 * 86_400 });
         const rows = await keyRows();
         rows.push({ id: str(key.id), name, userId, createdAt: new Date().toISOString(), createdBy: actor.userId, disabledAt: null });

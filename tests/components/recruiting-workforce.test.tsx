@@ -130,4 +130,39 @@ describe('WorkforcePlanDetail', () => {
       ),
     );
   });
+
+  it('labels the quantities with the unit of 招聘设置, else the neutral word', async () => {
+    const renderPlan = async (unitLabel: string | null) => {
+      state.request.mockResolvedValue({ data: { ...PLAN, unitLabel } });
+      const view = render(
+        <MemoryRouter initialEntries={['/talent/workforce-plans/plan-1']}>
+          <Routes>
+            <Route
+              path='/talent/workforce-plans/:planId'
+              element={<WorkforcePlanDetail />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByText('39,600');
+      const text = document.body.textContent ?? '';
+      view.unmount();
+      return text;
+    };
+    const orders = await renderPlan('orders');
+    expect(orders).toContain(
+      en.recruiting.workforce.planned.replace('{{unit}}', 'orders'),
+    );
+    expect(orders).toContain(
+      en.recruiting.workforce.perShift.replace('{{unit}}', 'orders'),
+    );
+    const unset = await renderPlan(null);
+    expect(unset).toContain(
+      en.recruiting.workforce.capacity.replace(
+        '{{unit}}',
+        en.recruiting.workforce.defaultUnit,
+      ),
+    );
+    expect(unset).not.toMatch(/件|pieces|output/iu);
+  });
 });

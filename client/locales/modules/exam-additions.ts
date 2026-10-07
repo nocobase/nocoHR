@@ -117,7 +117,7 @@ const en = {
       noScan: 'No scan',
       mineTitle: 'My external certificates',
       mineDescription:
-        'Certificates issued by outside authorities, such as a forklift licence. They count once HR has verified them.',
+        'Certificates issued by outside authorities, such as an electrician licence, a teaching certificate or an accounting qualification. They count once HR has verified them.',
       register: 'Register',
       mineEmpty: 'None registered.',
       verifyStatus: {
@@ -335,7 +335,7 @@ const zh: Shape<typeof en> = {
       noScan: '无扫描件',
       mineTitle: '我的外部证书',
       mineDescription:
-        '由外部机构颁发的证书，如叉车证；HR 核验后才计入有效持证。',
+        '由外部机构颁发的证书，如电工证、教师资格证、会计专业技术资格证书；HR 核验后才计入有效持证。',
       register: '登记外部证书',
       mineEmpty: '还没有登记。',
       verifyStatus: {

@@ -7,6 +7,11 @@
  * Each comes with the month's approved overtime and night count, fewest
  * overtime hours first. Rules decide; the HR assistant only words reasons.
  *
+ * The night count is shown only where nights exist: the shift is a night
+ * shift, an active night shift applies to the department, or a peer worked
+ * one this month (`nightShifts`). An office or a shop without night shifts
+ * does not read “夜班 0 次” on every candidate.
+ *
  * Only peers in the absent employee's position are offered, and never the
  * department's head: a leave of a CNC operator once suggested 车间主任 陈静,
  * who was also its approver.
@@ -61,6 +66,8 @@ export async function replacementCandidates(input: {
     departmentId: string;
   };
   candidates: ReplacementCandidate[];
+  /** Whether night shifts concern this department, so the night count means something. */
+  nightShifts?: boolean;
 }> {
   const q = input.connection.query;
   const cell = await q
@@ -187,46 +194,60 @@ export async function replacementCandidates(input: {
     : [];
   const span = rule.maxConsecutiveNights + 1;
   const { from, to } = monthDays(date.slice(0, 7));
-  const [schedules, leaves, overtime, monthSchedules] = await Promise.all([
-    q
-      .selectFrom('shiftSchedules')
-      .innerJoin('shifts', 'shifts.id', 'shiftSchedules.shiftId')
-      .select([
-        'shiftSchedules.employeeId as employeeId',
-        'shiftSchedules.date as date',
-        'shifts.startTime as startTime',
-        'shifts.endTime as endTime',
-        'shifts.isNight as isNight',
-      ])
-      .where('shiftSchedules.employeeId', 'in', ids)
-      .where('shiftSchedules.date', '>=', addDays(date, -span))
-      .where('shiftSchedules.date', '<=', addDays(date, span))
-      .execute(),
-    q
-      .selectFrom('leaveRequests')
-      .select(['employeeId', 'startAt', 'endAt'])
-      .where('employeeId', 'in', ids)
-      .where('status', 'in', ['pending', 'approved'])
-      .execute(),
-    q
-      .selectFrom('attendanceAdjustments')
-      .select(['employeeId', 'details'])
-      .where('employeeId', 'in', ids)
-      .where('type', '=', 'overtime')
-      .where('status', '=', 'approved')
-      .where('date', '>=', from)
-      .where('date', '<=', to)
-      .execute(),
-    q
-      .selectFrom('shiftSchedules')
-      .innerJoin('shifts', 'shifts.id', 'shiftSchedules.shiftId')
-      .select(['shiftSchedules.employeeId as employeeId'])
-      .where('shiftSchedules.employeeId', 'in', ids)
-      .where('shifts.isNight', '=', true)
-      .where('shiftSchedules.date', '>=', from)
-      .where('shiftSchedules.date', '<=', to)
-      .execute(),
-  ]);
+  const [schedules, leaves, overtime, monthSchedules, nightShiftRows] =
+    await Promise.all([
+      q
+        .selectFrom('shiftSchedules')
+        .innerJoin('shifts', 'shifts.id', 'shiftSchedules.shiftId')
+        .select([
+          'shiftSchedules.employeeId as employeeId',
+          'shiftSchedules.date as date',
+          'shifts.startTime as startTime',
+          'shifts.endTime as endTime',
+          'shifts.isNight as isNight',
+        ])
+        .where('shiftSchedules.employeeId', 'in', ids)
+        .where('shiftSchedules.date', '>=', addDays(date, -span))
+        .where('shiftSchedules.date', '<=', addDays(date, span))
+        .execute(),
+      q
+        .selectFrom('leaveRequests')
+        .select(['employeeId', 'startAt', 'endAt'])
+        .where('employeeId', 'in', ids)
+        .where('status', 'in', ['pending', 'approved'])
+        .execute(),
+      q
+        .selectFrom('attendanceAdjustments')
+        .select(['employeeId', 'details'])
+        .where('employeeId', 'in', ids)
+        .where('type', '=', 'overtime')
+        .where('status', '=', 'approved')
+        .where('date', '>=', from)
+        .where('date', '<=', to)
+        .execute(),
+      q
+        .selectFrom('shiftSchedules')
+        .innerJoin('shifts', 'shifts.id', 'shiftSchedules.shiftId')
+        .select(['shiftSchedules.employeeId as employeeId'])
+        .where('shiftSchedules.employeeId', 'in', ids)
+        .where('shifts.isNight', '=', true)
+        .where('shiftSchedules.date', '>=', from)
+        .where('shiftSchedules.date', '<=', to)
+        .execute(),
+      q
+        .selectFrom('shifts')
+        .select(['departmentIds'])
+        .where('isNight', '=', true)
+        .where('active', '=', true)
+        .execute(),
+    ]);
+  const nightShifts =
+    Boolean(shift.isNight) ||
+    monthSchedules.length > 0 ||
+    nightShiftRows.some((row) => {
+      const applies = json<string[] | null>(row.departmentIds, null);
+      return !applies?.length || applies.some((id) => chain.includes(id));
+    });
   const candidates: ReplacementCandidate[] = [];
   for (const peer of peers) {
     const id = str(peer.id);
@@ -345,7 +366,9 @@ export async function replacementCandidates(input: {
                 .filter(Boolean)
                 .join('、') + `（不少于 ${rule.minRestHours} 小时）`,
             ]),
-        `本月加班 ${Math.round(hours * 100) / 100} 小时、夜班 ${nights} 次`,
+        nightShifts
+          ? `本月加班 ${Math.round(hours * 100) / 100} 小时、夜班 ${nights} 次`
+          : `本月加班 ${Math.round(hours * 100) / 100} 小时`,
       ],
     });
   }
@@ -364,5 +387,6 @@ export async function replacementCandidates(input: {
       departmentId,
     },
     candidates,
+    nightShifts,
   };
 }

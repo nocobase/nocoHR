@@ -100,6 +100,13 @@ export function ChecklistItems({
         .split(',')
         .map((f) => t(`checklists.profileFields.${f}`))
         .join('、');
+    // The office suite the external account comes from; items written before it was recorded were Feishu's.
+    if (item.code.startsWith('externalAccount')) {
+      const provider = item.params.provider ?? 'feishu';
+      params.provider = ['feishu', 'dingtalk', 'wecom'].includes(provider)
+        ? t(`orgSync.provider.${provider}`)
+        : t('checklists.otherDirectory');
+    }
     return t(`checklists.items.${item.code}`, params);
   };
 

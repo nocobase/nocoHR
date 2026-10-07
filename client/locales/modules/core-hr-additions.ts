@@ -530,7 +530,7 @@ const en = {
         accountDisable:
           'Disable the sign-in account on the leaving date {{date}}.',
         externalAccountDisable:
-          'Disable the Feishu account on the leaving date {{date}}.',
+          'Disable the {{provider}} account on the leaving date {{date}}.',
         handover: 'Name who takes over the work; the department head confirms.',
         leaveCertificate: 'Issue the leaving certificate.',
         accountCreated: 'The sign-in account was created.',
@@ -557,7 +557,7 @@ const en = {
         salaryStructureCheck:
           'The position changes: check whether the salary structure needs an adjustment.',
         externalAccountUnchanged:
-          'The Feishu account stays as it is; the sync follows the new department.',
+          'The {{provider}} account stays as it is; the sync follows the new department.',
         scheduleRevalidatePending:
           '{{count}} published shifts from {{from}} to {{to}} are rechecked on effect; the schedulers are told.',
         scheduleRevalidated:
@@ -574,6 +574,8 @@ const en = {
         personalEmailMissing:
           'No contact email after leaving: ask for a personal address so the leaving certificate and the last payslip can be sent.',
       },
+      // The external account's directory when the item names none it knows (orgSync.provider has the rest).
+      otherDirectory: 'office suite',
       profileFields: {
         idNumber: 'ID details',
         education: 'education',
@@ -671,12 +673,15 @@ const en = {
       chatTitle: 'HR assistant',
       chatDescription:
         'Describe the change. Drafts appear on the settings page for you to apply.',
-      placeholder: 'e.g. add a plant director level to 成都工厂 onboarding',
+      placeholder:
+        'e.g. add a Human Resources head approval to Sales onboarding',
       greeting:
         'Tell me which rule, field or setting to change. I’ll draft it with a preview; nothing takes effect until you confirm it on this page.',
       examples: {
-        chain: '成都工厂的入职单在部门负责人之后加一级厂长审批',
-        field: '员工档案加一个宿舍号，放进入职单和花名册导出',
+        chain:
+          'Add a Human Resources head approval after the department head on Sales onboarding',
+        field:
+          'Add a licence plate number to the employee profile, on the onboarding form and the roster export',
       },
     },
   },
@@ -1271,7 +1276,7 @@ const zh: Shape = {
           '还有未结单据：待本人审批 {{approvals}} 张、以本人为对象 {{actions}} 张、信息修改 {{changes}} 条。',
         pendingReassign: '本人还有 {{approvals}} 张待审批的单据需要改派。',
         accountDisable: '登录账号需在离职日 {{date}} 停用。',
-        externalAccountDisable: '飞书账号需在离职日 {{date}} 停用。',
+        externalAccountDisable: '{{provider}}账号需在离职日 {{date}} 停用。',
         handover: '指定工作交接人，由部门负责人确认。',
         leaveCertificate: '出具离职证明。',
         accountCreated: '登录账号已创建。',
@@ -1294,7 +1299,8 @@ const zh: Shape = {
         learningNoPath: '新岗位没有配置学习路径。',
         salaryStructureCheck:
           '岗位变化，核对薪资结构是否需要调整（发起调薪单）。',
-        externalAccountUnchanged: '飞书账号无需变动，同步会跟随新部门。',
+        externalAccountUnchanged:
+          '{{provider}}账号无需变动，同步会跟随新部门。',
         scheduleRevalidatePending:
           '生效后重新校验 {{from}} 至 {{to}} 已发布的 {{count}} 个班次，并通知排班人。',
         scheduleRevalidated:
@@ -1309,6 +1315,7 @@ const zh: Shape = {
         personalEmailMissing:
           '未填写离职后联系邮箱：请向员工要一个个人邮箱，以便发送离职证明和最后一个月的工资条。',
       },
+      otherDirectory: '办公软件',
       profileFields: {
         idNumber: '证件信息',
         education: '学历',
@@ -1403,12 +1410,12 @@ const zh: Shape = {
       done: '已处理',
       chatTitle: '人事助理',
       chatDescription: '说出要改什么，草稿会出现在人事设置页，确认后生效。',
-      placeholder: '例如：成都工厂的入职单加一级厂长审批',
+      placeholder: '例如：销售部的入职单加一级人力资源部负责人审批',
       greeting:
         '说出要改的审批链、追加字段或人事设置，我起草配置变更并附预览；你在本页逐条确认后才生效。',
       examples: {
-        chain: '成都工厂的入职单在部门负责人之后加一级厂长审批',
-        field: '员工档案加一个宿舍号，放进入职单和花名册导出',
+        chain: '销售部的入职单在部门负责人之后加一级人力资源部负责人审批',
+        field: '员工档案加一个车牌号，放进入职单和花名册导出',
       },
     },
   },

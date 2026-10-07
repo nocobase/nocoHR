@@ -17,7 +17,7 @@
  * - dailyDigest (每天 18:00): each recruiter's new applications and levels.
  *
  * 人事助理 hrAssistant — runs as the task owner (default hr01):
- * - workforceExplain (排产计划到达且有缺口): explains the server's numbers once
+ * - workforceExplain (业务量计划到达且有缺口): explains the server's numbers once
  *   per calculation and tells the department's head.
  * - newHireCheckIn and preboarding (每天 09:00), see checkins.ts / preboarding.ts.
  *
@@ -41,6 +41,7 @@ import {
   type ScreeningSuggestion,
   yesNoValue,
 } from './common.js';
+import { workforceUnit } from './config.js';
 import type { RecruitingContext } from './context.js';
 import type { InterviewService, Scorecard } from './interviews.js';
 import type { PostingService } from './postings.js';
@@ -54,7 +55,7 @@ import {
   sanitizeResumeText,
   type ParsedProfile,
 } from './resume-text.js';
-import type { WorkforceService } from './workforce.js';
+import type { WorkforcePlanView, WorkforceService } from './workforce.js';
 
 /**
  * The words a talent-pool candidate's parsed resume is searched for: the
@@ -183,6 +184,67 @@ const poolSchema = z.object({
 
 /** Advice words a screening or summary may not contain (招聘助理不建议淘汰、不给录用建议). */
 const VERDICT = /(建议淘汰|淘汰|不予录用|建议录用|录用建议|建议不录用)/u;
+
+/**
+ * The rule text of a workforce plan when the HR assistant's words are not
+ * available: every quantity in 招聘设置's unit (`unit`), the housing note only
+ * when the loan option carries the housing risk.
+ */
+export function workforceRuleNotes(
+  plan: Pick<
+    WorkforcePlanView,
+    'month' | 'departmentTitle' | 'positionTitle' | 'calculation' | 'options'
+  >,
+  unit: string,
+) {
+  const c = plan.calculation!;
+  const n = (value: number) => value.toLocaleString('zh-CN');
+  const overtime = plan.options.find((o) => o.type === 'overtime');
+  const transfer = plan.options.find((o) => o.type === 'transfer');
+  const hire = plan.options.find((o) => o.type === 'hire');
+  const increase =
+    c.currentOutput !== null
+      ? `，比本月的 ${n(c.currentOutput)} ${unit}增加 ${n(c.plannedOutput - c.currentOutput)} ${unit}`
+      : '';
+  const od = (overtime?.detail ?? {}) as {
+    hoursPerPerson?: number | null;
+    limitHours?: number;
+  };
+  const td = (transfer?.detail ?? {}) as {
+    maxHeadcount?: number;
+    covers?: boolean;
+  };
+  const hd = (hire?.detail ?? {}) as {
+    recruitingCycleDays?: number;
+    onboardingDays?: number;
+    readyInWeeks?: number;
+  };
+  const housing = transfer?.risks.includes('housing')
+    ? '；借调人员的住宿需要提前安排'
+    : '';
+  return {
+    summary: `${plan.month} ${plan.departmentTitle}${plan.positionTitle}计划业务量 ${n(c.plannedOutput)} ${unit}${increase}。现有在岗 ${c.headcount} 人，按人均每班 ${c.outputPerShift} ${unit}、每月 ${c.shiftsPerMonth} 个班，可承接 ${n(c.capacity)} ${unit}，缺口 ${c.gapHeadcount} 人。是否招聘、借调谁，由用人部门负责人决定。`,
+    overtime: overtime
+      ? `现有人员每人每月约加班 ${od.hoursPerPerson ?? '—'} 小时，${overtime.feasible ? `未超过 ${od.limitHours} 小时上限` : `超过每月 ${od.limitHours} 小时的上限，不可行`}。`
+      : '',
+    transfer: transfer
+      ? td.maxHeadcount
+        ? `最多可借调 ${td.maxHeadcount} 人，${td.covers ? '可以覆盖缺口' : '不能覆盖缺口'}${housing}。`
+        : '招聘设置中没有可借调的部门。'
+      : '',
+    hire: hire
+      ? `招聘约 ${hd.recruitingCycleDays} 天，加上岗 ${hd.onboardingDays} 天，约 ${hd.readyInWeeks} 周后能独立上岗；此前的缺口需要加班或借调过渡。`
+      : '',
+  };
+}
+
+/**
+ * The LLM's instruction on the units of the numbers it explains: quantities
+ * in 招聘设置's unit, never a factory's 件 unless that is the unit.
+ */
+export function workforceUnitsPrompt(unit: string): string {
+  return `数字的单位：业务量的单位是“${unit}”。outputPerShift 是每人每班的业务量（${unit}/班），hoursPerShift 是每班小时数，shiftsPerMonth 是每人每月班数，capacity、plannedOutput、currentOutput 和 gapOutput 的单位是${unit}，headcount 和 gapHeadcount 是人；列算式时按这些单位写，不要写成“${unit}/小时”，也不要换成别的单位。`;
+}
 
 export function createRecruitingAssistant(
   ctx: RecruitingContext,
@@ -1091,53 +1153,14 @@ export function createRecruitingAssistant(
 
   // ---------- 用工测算（人事助理）----------
 
-  function ruleNotes(
-    plan: Awaited<ReturnType<WorkforceService['trustedGet']>>,
-  ) {
-    const c = plan.calculation!;
-    const overtime = plan.options.find((o) => o.type === 'overtime');
-    const transfer = plan.options.find((o) => o.type === 'transfer');
-    const hire = plan.options.find((o) => o.type === 'hire');
-    const increase =
-      c.currentOutput !== null
-        ? `，比本月的 ${c.currentOutput.toLocaleString('zh-CN')} 件增加 ${(c.plannedOutput - c.currentOutput).toLocaleString('zh-CN')} 件`
-        : '';
-    const od = (overtime?.detail ?? {}) as {
-      hoursPerPerson?: number | null;
-      limitHours?: number;
-    };
-    const td = (transfer?.detail ?? {}) as {
-      maxHeadcount?: number;
-      covers?: boolean;
-    };
-    const hd = (hire?.detail ?? {}) as {
-      recruitingCycleDays?: number;
-      onboardingDays?: number;
-      readyInWeeks?: number;
-    };
-    return {
-      summary: `${plan.month} ${plan.departmentTitle}${plan.positionTitle}计划产量 ${c.plannedOutput.toLocaleString('zh-CN')} 件${increase}。现有在岗 ${c.headcount} 人，按人均每班 ${c.outputPerShift} 件、每月 ${c.shiftsPerMonth} 个班，可产出 ${c.capacity.toLocaleString('zh-CN')} 件，缺口 ${c.gapHeadcount} 人。是否招聘、借调谁，由用人部门负责人决定。`,
-      overtime: overtime
-        ? `现有人员每人每月约加班 ${od.hoursPerPerson ?? '—'} 小时，${overtime.feasible ? `未超过 ${od.limitHours} 小时上限` : `超过每月 ${od.limitHours} 小时的上限，不可行`}。`
-        : '',
-      transfer: transfer
-        ? td.maxHeadcount
-          ? `最多可借调 ${td.maxHeadcount} 人，${td.covers ? '可以覆盖缺口' : '不能覆盖缺口'}；借调人员的住宿需要提前安排。`
-          : '招聘设置中没有可借调的部门。'
-        : '',
-      hire: hire
-        ? `招聘约 ${hd.recruitingCycleDays} 天，加上岗 ${hd.onboardingDays} 天，约 ${hd.readyInWeeks} 周后能独立上岗；此前的缺口需要加班或借调过渡。`
-        : '',
-    };
-  }
-
   async function workforceExplain(run: AutomationRunContext, planId: string) {
     const plan = await deps.workforce.trustedGet(planId);
     if (!plan.calculation || plan.calculation.gapHeadcount <= 0)
       return { status: 'skipped' as const, output: { reason: 'NO_GAP' } };
     if (plan.aiSummaryCurrent)
       return { status: 'skipped' as const, output: { reason: 'CURRENT' } };
-    let notes = ruleNotes(plan);
+    const unit = workforceUnit((await ctx.settings()).workforce);
+    let notes = workforceRuleNotes(plan, unit);
     try {
       const answer = await structured(
         run,
@@ -1145,8 +1168,8 @@ export function createRecruitingAssistant(
         'hrAssistant',
         `用工测算 · ${plan.departmentTitle}`,
         [
-          '数字的单位：outputPerShift 是每人每班的件数（件/班），hoursPerShift 是每班小时数，shiftsPerMonth 是每人每月班数，capacity 和 plannedOutput 是件，headcount 和 gapHeadcount 是人；列算式时按这些单位写，不要写成“件/小时”。',
-          '只解释下面服务端算出的数字，不自行估算。先说缺口有多大、原因（计划产量增加多少），再逐个方案说清能补多少、什么时候能补上、有什么风险；超过法定加班上限的方案明确写“不可行”，不建议变通；是否招聘、借调谁由用人部门负责人决定，不评价具体员工。',
+          workforceUnitsPrompt(unit),
+          '只解释下面服务端算出的数字，不自行估算。先说缺口有多大、原因（计划业务量增加多少），再逐个方案说清能补多少、什么时候能补上、有什么风险；超过法定加班上限的方案明确写“不可行”，不建议变通；是否招聘、借调谁由用人部门负责人决定，不评价具体员工。',
           JSON.stringify({
             plan: {
               month: plan.month,

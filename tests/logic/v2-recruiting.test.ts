@@ -248,6 +248,8 @@ describe('V2-07 用工计划', () => {
     const key = await call('hr01', 'POST', '/settings/integration/keys', {});
     expect(key.status).toBe(201);
     expect(typeof key.json.data.secret).toBe('string');
+    // A key named by nobody gets a neutral name, not the demo's ERP.
+    expect(key.json.data.name).toBe('业务量计划推送');
     state.apiKey = key.json.data.secret;
     const push = await call(
       null,
@@ -313,6 +315,10 @@ describe('V2-07 用工计划', () => {
       readyInWeeks: 4,
     });
     expect(plan.aiSummary).toContain('10');
+    // The demo counts pieces (seed 202610220101); a new install has no unit and reads 单位.
+    expect(plan.unitLabel).toBe('件');
+    expect(plan.aiSummary).toContain('计划业务量 61,600 件');
+    expect(option('transfer').note).toContain('住宿');
     expect(option('overtime').note).toContain('不可行');
     expect(
       await notified(

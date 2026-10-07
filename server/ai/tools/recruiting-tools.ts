@@ -5,7 +5,10 @@ import { z } from 'zod';
 import { scopeForUser } from '../../providers/hr/authorize.js';
 import { validateDraft } from '../../providers/hr/recruiting/postings.js';
 import { REQUIREMENT_TYPES } from '../../providers/hr/recruiting/common.js';
-import { CHECK_IN_TOPICS } from '../../providers/hr/recruiting/config.js';
+import {
+  CHECK_IN_TOPICS,
+  DEFAULT_WORKFORCE_UNIT,
+} from '../../providers/hr/recruiting/config.js';
 import { HrError, str } from '../../providers/hr/shared.js';
 import { recruitingServicesToken } from '../../providers/hr/tokens.js';
 
@@ -367,7 +370,7 @@ export const getWorkforcePlan = tool({
   title: 'Read a workforce plan',
   about: 'The calculation, options and parameters; no salary.',
   description:
-    'Return a workforce plan the user may see: the month, department and position, the server calculation (people on duty, output per shift, shifts, capacity, gap and the parameters used) and the options (overtime, transfer, hire) with feasibility, risks and cost notes. No salary data.',
+    'Return a workforce plan the user may see: the month, department and position, the server calculation (people on duty, volume per person and shift, shifts, capacity, gap and the parameters used), the unit the volumes count in (unit, from recruiting settings) and the options (overtime, transfer, hire) with feasibility, risks and cost notes. No salary data.',
   schema: z.object({ planId: id }),
   invoke: async (s, actor, args) => {
     const plan = await s.workforce.detail(actor, args.planId);
@@ -378,6 +381,7 @@ export const getWorkforcePlan = tool({
       position: plan.positionTitle,
       plannedOutput: plan.plannedOutput,
       currentOutput: plan.currentOutput,
+      unit: plan.unitLabel ?? DEFAULT_WORKFORCE_UNIT,
       calculation: plan.calculation,
       options: plan.options,
       status: plan.status,
@@ -479,7 +483,7 @@ export const RECRUITING_TOOLS: ReturnType<typeof tool>[] = [
 const HR_ASSISTANT_PROMPT = `
 
 用工测算与新员工回访（第七步）：
-1. 用工测算只解释 getWorkforcePlan 返回的服务端数字，不自行估算；先说缺口有多大、原因是什么（计划产量增加多少），再逐个方案说清能补多少、什么时候能补上、有什么风险；超过法定加班上限的方案明确写“不可行”，不建议变通。说明用 saveWorkforcePlanNotes 保存，只写说明，不改数字和方案。
+1. 用工测算只解释 getWorkforcePlan 返回的服务端数字，不自行估算；先说缺口有多大、原因是什么（计划业务量增加多少），业务量一律按 getWorkforcePlan 返回的 unit 写单位，不换成别的单位；再逐个方案说清能补多少、什么时候能补上、有什么风险；超过法定加班上限的方案明确写“不可行”，不建议变通。说明用 saveWorkforcePlanNotes 保存，只写说明，不改数字和方案。
 2. 是否招聘、借调谁，由用人部门负责人决定；不评价具体员工。
 3. 回访语气像 HR 同事的关心，问题简短，一次只问一件事；员工提到问题时，先按制度说明能怎么办（用 searchKnowledge，附出处），再用 saveCheckInIssues 保存并告诉他已经转给谁跟进。
 4. 回访内容不告诉部门负责人以外的人；员工表示不想回答时结束回访（declined=true）。不代员工提交任何申请。`;

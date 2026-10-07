@@ -60,6 +60,22 @@ type Worded = (
   fallback: () => string,
 ) => Promise<string>;
 
+/**
+ * The office suite an external account belongs to. Items written before the provider was recorded were all
+ * Feishu (the only directory then); an unknown one is named generically rather than as one vendor.
+ */
+function directoryName(provider: string | undefined): string {
+  if (provider === undefined) return '飞书';
+  return (
+    (
+      { feishu: '飞书', dingtalk: '钉钉', wecom: '企业微信' } as Record<
+        string,
+        string
+      >
+    )[provider] ?? '办公软件'
+  );
+}
+
 /** Plain Chinese for each item code, used by the template and handed to the model. */
 const ITEM_TEXT: Record<string, (p: Record<string, string>) => string> = {
   orgAccessPending: (p) =>
@@ -77,7 +93,8 @@ const ITEM_TEXT: Record<string, (p: Record<string, string>) => string> = {
     `还有未结单据：待本人审批 ${p.approvals} 张、以本人为对象 ${p.actions} 张、信息修改 ${p.changes} 条`,
   pendingReassign: (p) => `本人还有 ${p.approvals} 张待审批的单据需要改派`,
   accountDisable: (p) => `登录账号需在离职日 ${p.date} 停用`,
-  externalAccountDisable: (p) => `飞书账号需在离职日 ${p.date} 停用`,
+  externalAccountDisable: (p) =>
+    `${directoryName(p.provider)}账号需在离职日 ${p.date} 停用`,
   handover: () => '指定工作交接人，由部门负责人确认',
   leaveCertificate: () => '出具离职证明',
   accountCreated: () => '登录账号已创建',

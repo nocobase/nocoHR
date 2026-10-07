@@ -81,6 +81,8 @@ export interface ChecklistEmployee {
   positionId: string | null;
   managerEmployeeId: string | null;
   externalUserId: string | null;
+  /** The directory the external account comes from (feishu, dingtalk, wecom); named in the account items. */
+  externalProvider?: string | null;
   status: string;
   customFields: Record<string, unknown>;
 }
@@ -374,7 +376,7 @@ export function coreProviders(): ChecklistProvider[] {
                 {
                   key: 'externalAccount',
                   code: 'externalAccountUnchanged',
-                  params: {},
+                  params: { provider: employee.externalProvider ?? '' },
                   status: 'auto',
                   link: null,
                 },
@@ -393,7 +395,10 @@ export function coreProviders(): ChecklistProvider[] {
           items.push({
             key: 'externalAccount',
             code: 'externalAccountDisable',
-            params: { date: ctx.action?.effectiveDate ?? '' },
+            params: {
+              date: ctx.action?.effectiveDate ?? '',
+              provider: employee.externalProvider ?? '',
+            },
             status: 'todo',
             link: null,
           });
@@ -598,6 +603,7 @@ export function createChecklistService(deps: ChecklistServiceDeps) {
         'positionId',
         'managerEmployeeId',
         'externalUserId',
+        'externalProvider',
         'status',
         'customFields',
       ])
@@ -614,6 +620,8 @@ export function createChecklistService(deps: ChecklistServiceDeps) {
         row.managerEmployeeId == null ? null : str(row.managerEmployeeId),
       externalUserId:
         row.externalUserId == null ? null : str(row.externalUserId),
+      externalProvider:
+        row.externalProvider == null ? null : str(row.externalProvider),
       status: str(row.status),
       customFields: readValues(row.customFields),
     };

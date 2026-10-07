@@ -568,7 +568,7 @@ export function createDecisionService(deps: ProfileDeps, reads: ProfileReads) {
       { kind: 'text', text: `能力项：${view.competencyTitle}` },
       {
         kind: 'text',
-        text: `相关 8D 报告：${view.correctiveActionRefs.join('、') || '无'}`,
+        text: `相关纠正措施：${view.correctiveActionRefs.join('、') || '无'}`,
       },
       { kind: 'text', text: `培训原因：${view.reason}` },
       {

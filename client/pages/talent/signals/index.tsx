@@ -101,7 +101,7 @@ function fieldText(value: unknown): string {
 /**
  * 业务数据 (V3-11): records pushed or imported from other systems, matched by
  * rule; 待匹配 for HR to assign people and confirm the analyst's rule drafts;
- * 匹配规则; and the notice of failed 8D write-backs with a retry. Heads read
+ * 匹配规则; and the notice of failed corrective-action write-backs with a retry. Heads read
  * their departments' records only.
  */
 export default function SignalsPage(): ReactElement {

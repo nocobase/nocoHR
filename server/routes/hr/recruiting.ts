@@ -88,7 +88,8 @@ export const recruitingRoutes: AppApiRouteContribution<Application> =
     guarded.post('/workforce-plans', async (c) =>
       c.json({ data: await s().workforce.push(actor(c), await j(c), 'import') }, 201),
     );
-    // ERP 经 API 密钥推送排产计划 (integration_mes): writes plan numbers, reads nothing back but its outcome.
+    // 业务系统 (ERP, MES, HIS, POS …) 经 API 密钥推送业务量计划 (the demo's account: integration_mes):
+    // writes plan numbers, reads nothing back but its outcome. The path keeps its original name.
     guarded.post('/integration/production-plans', async (c) =>
       c.json({ data: await s().workforce.push(actor(c), await j(c), 'api') }, 201),
     );

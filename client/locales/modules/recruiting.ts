@@ -26,7 +26,7 @@ export const recruitingEn = {
     workforcePlan: {
       title: 'Workforce plans',
       decide: 'Decide',
-      import: 'Import production plans',
+      import: 'Import demand plans',
     },
     requisition: {
       title: 'Requisitions',
@@ -70,7 +70,7 @@ export const recruitingEn = {
   },
   permissionSets: {
     hrRecruiter: 'Recruiter',
-    hrIntegrationErp: 'ERP integration (production plans)',
+    hrIntegrationErp: 'Business-system integration (demand plans)',
   },
   common: {
     save: 'Save',
@@ -264,21 +264,23 @@ export const recruitingEn = {
   workforce: {
     title: 'Workforce plans',
     description:
-      'Production plans from the ERP turned into a staffing gap and three options; the department head decides.',
-    empty: 'No production plan yet. The ERP pushes plans through its API key.',
+      'Demand plans from a business system turned into a staffing gap and three options; the department head decides.',
+    empty:
+      'No demand plan yet. A business system pushes plans through the integration account’s API key.',
     push: 'Enter a plan',
-    pushTitle: 'Enter a production plan',
+    pushTitle: 'Enter a demand plan',
     pushDescription:
-      'The same calculation runs as for an ERP push. Use department and position IDs or codes.',
-    planned: 'Planned output',
-    current: 'This month',
-    capacity: 'Can produce',
+      'The same calculation runs as for a pushed plan. Use department and position IDs or codes.',
+    planned: 'Planned volume ({{unit}})',
+    current: 'This month ({{unit}})',
+    capacity: 'Can take on ({{unit}})',
+    defaultUnit: 'units',
     gap: 'Gap',
     headcountOnDuty: 'On duty',
     params: 'Calculation',
     paramsDescription:
       'Every number is calculated by the server from 招聘设置 and the employee records.',
-    perShift: 'Output per person and shift',
+    perShift: 'Per person and shift ({{unit}})',
     shiftsPerMonth: 'Shifts per month',
     hoursPerShift: 'Hours per shift',
     overtimeLimit: 'Monthly overtime limit',
@@ -570,7 +572,7 @@ export const recruitingEn = {
   settings: {
     title: 'Recruiting settings',
     description:
-      'The rules of recruiting and onboarding: the careers page, reminders, approvals, workforce parameters, check-ins, emails and the ERP key.',
+      'The rules of recruiting and onboarding: the careers page, reminders, approvals, workforce parameters, check-ins, emails and the integration key.',
     saved: 'Settings saved',
     publicPage: 'Careers page',
     publicEnabled: 'Careers page on',
@@ -584,7 +586,10 @@ export const recruitingEn = {
     preboardingDays: 'Arrival reminders (days before, comma separated)',
     escalate: 'Tell the recruiter when arrival is unconfirmed (days before)',
     workforce: 'Workforce parameters',
-    capacity: 'Output per department and position',
+    unitLabel: 'Unit of the plan volume',
+    unitLabelHint:
+      'What the plans count, e.g. pieces, orders, bed-days, visitors or hours. Empty shows “units”.',
+    capacity: 'Capacity per department and position',
     addCapacity: 'Add a row',
     transfer: 'Loan limits',
     addTransfer: 'Add a department',
@@ -623,14 +628,15 @@ export const recruitingEn = {
     templates: 'Email templates',
     templatesHint:
       'Empty uses the default wording. Placeholders, in double braces: name, position, time, location, link, date.',
-    integration: 'ERP integration',
+    integration: 'Business-system integration',
     integrationHint:
-      'The integration account can only push production plans. A key is shown once.',
+      'The integration account can only push demand plans. A key is shown once.',
     createKey: 'Create key',
     keyCreated: 'Copy the key now; it is not shown again:',
     disableKey: 'Disable',
     disabled: 'Disabled',
-    noAccount: 'No account holds the ERP integration permission set.',
+    noAccount:
+      'No account holds the business-system integration permission set.',
   },
   public: {
     deletionTitle: 'Delete my information',
@@ -698,7 +704,7 @@ export const recruitingEn = {
   errors: {
     FORBIDDEN: 'You do not have access.',
     WORKFORCE_PARAMS_MISSING:
-      'Set the output parameters for this department and position in recruiting settings.',
+      'Set the capacity parameters for this department and position in recruiting settings.',
     WORKFORCE_OPTION_INFEASIBLE: 'Overtime is not feasible for this gap.',
     WORKFORCE_PLAN_NOT_OPEN: 'This plan was already decided.',
     WORKFORCE_DEPARTMENT_UNKNOWN: 'Unknown department.',
@@ -790,7 +796,7 @@ export const recruitingZh: typeof recruitingEn = {
     workforcePlan: {
       title: '用工计划',
       decide: '确定方案',
-      import: '导入排产计划',
+      import: '导入业务量计划',
     },
     requisition: {
       title: '招聘需求',
@@ -830,7 +836,7 @@ export const recruitingZh: typeof recruitingEn = {
   },
   permissionSets: {
     hrRecruiter: '招聘专员',
-    hrIntegrationErp: 'ERP 集成（排产计划）',
+    hrIntegrationErp: '业务系统集成（业务量计划）',
   },
   common: {
     save: '保存',
@@ -1014,19 +1020,20 @@ export const recruitingZh: typeof recruitingEn = {
   workforce: {
     title: '用工计划',
     description:
-      'ERP 推来的排产计划按人均产能算出用工缺口和三种方案，由用人部门负责人决定。',
-    empty: '还没有排产计划。ERP 通过集成账号的 API 密钥推送。',
+      '业务系统推来的业务量计划按人均产能算出用工缺口和三种方案，由用人部门负责人决定。',
+    empty: '还没有业务量计划。业务系统通过集成账号的 API 密钥推送。',
     push: '录入计划',
-    pushTitle: '录入排产计划',
-    pushDescription: '与 ERP 推送走同一套测算。部门、岗位可填编号或代码。',
-    planned: '计划产量',
-    current: '本月产量',
-    capacity: '可产出',
+    pushTitle: '录入业务量计划',
+    pushDescription: '与业务系统推送走同一套测算。部门、岗位可填编号或代码。',
+    planned: '计划业务量（{{unit}}）',
+    current: '本月业务量（{{unit}}）',
+    capacity: '可承接（{{unit}}）',
+    defaultUnit: '单位',
     gap: '缺口',
     headcountOnDuty: '在岗人数',
     params: '测算过程',
     paramsDescription: '每个数字都由服务端按招聘设置和员工档案算出。',
-    perShift: '人均产能（件 / 人·班）',
+    perShift: '人均产能（{{unit}} / 人·班）',
     shiftsPerMonth: '每月班数',
     hoursPerShift: '每班工时',
     overtimeLimit: '每月加班上限',
@@ -1297,7 +1304,7 @@ export const recruitingZh: typeof recruitingEn = {
   settings: {
     title: '招聘设置',
     description:
-      '招聘与入职的规则：公开页面、提醒、审批、用工测算参数、新员工回访、邮件与 ERP 密钥。',
+      '招聘与入职的规则：公开页面、提醒、审批、用工测算参数、新员工回访、邮件与集成密钥。',
     saved: '设置已保存',
     publicPage: '公开页面',
     publicEnabled: '开启公开职位页',
@@ -1311,6 +1318,9 @@ export const recruitingZh: typeof recruitingEn = {
     preboardingDays: '报到提醒（入职前天数，逗号分隔）',
     escalate: '未确认到岗时提醒招聘负责人（入职前天数）',
     workforce: '用工测算参数',
+    unitLabel: '业务量单位',
+    unitLabelHint:
+      '计划按什么计量，如件、单、床日、客流、工时；不填显示为“单位”。',
     capacity: '按部门与岗位的人均产能',
     addCapacity: '添加一行',
     transfer: '可借调上限',
@@ -1346,13 +1356,13 @@ export const recruitingZh: typeof recruitingEn = {
     templates: '邮件模板',
     templatesHint:
       '留空使用默认内容。可用占位符（用双花括号括起）：name、position、time、location、link、date。',
-    integration: 'ERP 集成',
-    integrationHint: '集成账号只能推送排产计划。密钥只显示一次。',
+    integration: '业务系统集成',
+    integrationHint: '集成账号只能推送业务量计划。密钥只显示一次。',
     createKey: '生成密钥',
     keyCreated: '请立即复制密钥，关闭后不再显示：',
     disableKey: '停用',
     disabled: '已停用',
-    noAccount: '没有账号持有 ERP 集成权限集。',
+    noAccount: '没有账号持有业务系统集成权限集。',
   },
   public: {
     deletionTitle: '删除我的个人信息',

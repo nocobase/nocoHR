@@ -179,7 +179,8 @@ export const DEFAULT_AI_ENTRY: AiEntrySettings = {
     },
     {
       key: 'policy',
-      description: '制度、规定、作业要求（如夜班津贴、年假规则、车间安全）',
+      description:
+        '制度、规定、作业要求（如津贴标准、年假规则、安全与着装要求）',
       employee: 'knowledgeAssistant',
       permissionSets: [],
       enabled: true,
@@ -189,8 +190,8 @@ export const DEFAULT_AI_ENTRY: AiEntrySettings = {
         '津贴',
         '年假',
         '安全',
-        '首饰',
-        '手套',
+        '着装',
+        '规范',
         '加班',
         '作业',
       ],

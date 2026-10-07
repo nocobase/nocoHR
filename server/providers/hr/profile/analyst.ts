@@ -158,12 +158,12 @@ export function createAnalystWork(input: {
     ];
     const shifts = cluster.signals.filter((s) => s.shift).map((s) => s.shift);
     return [
-      `${cluster.departmentTitle}近 ${windowDays} 天内发生 ${cluster.signals.length} 起与“${cluster.competencyTitle}”相关的质量问题（${cluster.signals.map((s) => s.externalId).join('、')}）${categories.length ? `，均为“${categories.join('、')}”类` : ''}。`,
-      refs.length ? `相关 8D 报告：${refs.join('、')}。` : '',
+      `${cluster.departmentTitle}近 ${windowDays} 天内发生 ${cluster.signals.length} 起与“${cluster.competencyTitle}”相关的问题记录（${cluster.signals.map((s) => s.externalId).join('、')}）${categories.length ? `，均为“${categories.join('、')}”类` : ''}。`,
+      refs.length ? `相关纠正措施：${refs.join('、')}。` : '',
       shifts.length
         ? `其中 ${shifts.length} 起发生在${[...new Set(shifts)].join('、')}。`
         : '',
-      '建议主管考虑为车间要求该能力项的员工安排一次专项培训；是否安排由主管决定。',
+      '建议主管考虑为本部门要求该能力项的员工安排一次专项培训；是否安排由主管决定。',
     ]
       .filter(Boolean)
       .join('');
@@ -200,7 +200,7 @@ export function createAnalystWork(input: {
                 run,
                 ANALYST,
                 '专项培训检查',
-                `为下列质量问题聚集起草一条专项培训建议的原因（120 字以内）。只写事实：数量、类别、8D 编号；措辞用“建议主管考虑”；不评价个人，不写问题描述原文。\n${JSON.stringify(
+                `为下列问题记录聚集起草一条专项培训建议的原因（120 字以内）。只写事实：数量、类别、纠正措施编号；措辞用“建议主管考虑”；不评价个人，不写问题描述原文。\n${JSON.stringify(
                   {
                     department: cluster.departmentTitle,
                     competency: cluster.competencyTitle,
@@ -384,12 +384,12 @@ export function createAnalystWork(input: {
   ): string {
     if (candidate.direction === 'down')
       return [
-        `近 ${windowDays} 天内有 ${candidate.evidence.length} 起与“${candidate.competencyTitle}”相关的 major 及以上质量问题（${candidate.evidence.map((e) => e.summary.split(' ')[0]).join('、')}）`,
+        `近 ${windowDays} 天内有 ${candidate.evidence.length} 起与“${candidate.competencyTitle}”相关的 major 及以上问题记录（${candidate.evidence.map((e) => e.summary.split(' ')[0]).join('、')}）`,
         candidate.categories.length
           ? `，共同点是均为“${candidate.categories.join('、')}”类问题`
           : '',
         `。建议主管关注，并考虑将等级由 ${candidate.currentLevel} 级调整为 ${candidate.suggestedLevel} 级。`,
-        `也可能存在非个人原因（如设备、排班${candidate.shifts.length ? `、${candidate.shifts.join('、')}——其中有问题发生在${candidate.shifts.join('、')}` : '、夜班'}），请主管结合现场情况判断。`,
+        `也可能存在非个人原因（如设备、排班${candidate.shifts.length ? `、${candidate.shifts.join('、')}——其中有问题发生在${candidate.shifts.join('、')}` : '、工作负荷'}），请主管结合现场情况判断。`,
       ].join('');
     return [
       `“${candidate.competencyTitle}”当前 ${candidate.currentLevel} 级，低于${candidate.requiredLevel !== null ? `要求的 ${candidate.requiredLevel} 级` : '要求'}。`,
@@ -434,7 +434,7 @@ export function createAnalystWork(input: {
             run,
             ANALYST,
             '能力等级建议',
-            `核对证据后为下列能力等级建议写理由（150 字以内）。措辞用“建议主管关注/考虑”；一起问题不足以说明能力问题；建议降级时说明问题的共同点，并提示可能的非个人原因（如设备、排班、夜班）；不评价性格与态度；只引用给出的证据。证据不足时 skip 为 true。\n${JSON.stringify(candidate)}`,
+            `核对证据后为下列能力等级建议写理由（150 字以内）。措辞用“建议主管关注/考虑”；一起问题不足以说明能力问题；建议降级时说明问题的共同点，并提示可能的非个人原因（如设备、排班、工作负荷）；不评价性格与态度；只引用给出的证据。证据不足时 skip 为 true。\n${JSON.stringify(candidate)}`,
             z.object({
               skip: z.boolean().default(false),
               rationale: z.string().max(800).default(''),

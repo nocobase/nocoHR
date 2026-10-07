@@ -237,9 +237,13 @@ export const IMPORT_HEADER = [
   '描述',
   '发生时间',
   '人员标识',
-  '8D 编号',
+  '纠正措施编号',
   '链接',
 ] as const;
+/** Earlier names of import columns, still read: the template called the corrective action an 8D. */
+const LEGACY_IMPORT_HEADER: Readonly<Record<string, string>> = {
+  '8D 编号': '纠正措施编号',
+};
 const IMPORT_KEYS = [
   'sourceSystem',
   'externalId',
@@ -1075,9 +1079,9 @@ export function createSignalService(
           'qms',
           'QI-2026-0500',
           'qualityIssue',
-          '首件检验',
+          '记录规范',
           'minor',
-          '首件尺寸超差',
+          '交接记录缺项',
           '',
           new Date().toISOString().slice(0, 10),
           'QH2001',
@@ -1121,7 +1125,9 @@ export function createSignalService(
       const parsed = items.map((cells) => {
         const item: Record<string, unknown> = {};
         header.forEach((name, i) => {
-          const at = (IMPORT_HEADER as readonly string[]).indexOf(name);
+          const at = (IMPORT_HEADER as readonly string[]).indexOf(
+            LEGACY_IMPORT_HEADER[name] ?? name,
+          );
           const value = cells[i];
           if (at >= 0)
             item[IMPORT_KEYS[at]] =
@@ -1155,7 +1161,7 @@ export function createSignalService(
           '严重程度',
           '发生时间',
           '匹配状态',
-          '8D 编号',
+          '纠正措施编号',
           ...visible.map((d) => fieldLabel(d, 'zh-CN')),
         ],
         ...items.map((s) => [

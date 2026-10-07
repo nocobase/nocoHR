@@ -3,8 +3,9 @@
  * recruiting and onboarding the step leaves to the administrator — the
  * careers page, retention, reminders, extra requisition approval levels,
  * the workforce parameters, interviewer calendars, new-hire check-ins, the
- * recruiting assistant, candidate email and templates — and the ERP
- * integration key (shown once).
+ * recruiting assistant, candidate email and templates — and the
+ * business-system integration key (shown once). The workforce parameters
+ * name the unit a plan's volume counts in (`workforce.unitLabel`).
  */
 import { useTranslation } from '@nocobase/i18n/client';
 import { useState, type ReactElement, type ReactNode } from 'react';
@@ -31,7 +32,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Field, FieldLabel } from '@/components/ui/field';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
   NativeSelect,
@@ -119,6 +120,8 @@ function fromForm(value: FormValue, section: keyof FormValue): unknown {
   if (section === 'workforce')
     return {
       ...value.workforce,
+      // An empty unit is left out: the plans then show the neutral word.
+      unitLabel: value.workforce.unitLabel?.trim() || undefined,
       capacity: unkeyed(value.workforce.capacity),
       transferLimits: unkeyed(value.workforce.transferLimits),
     };
@@ -528,6 +531,7 @@ function WorkforceSection({
 }): ReactElement {
   const { t } = useTranslation();
   const lookups = useLookups();
+  const unit = w.unitLabel?.trim() || t('recruiting.workforce.defaultUnit');
   const setCapacity = (uid: string, part: Partial<CapacityRow>) =>
     set({
       capacity: w.capacity.map((r) => (r.uid === uid ? { ...r, ...part } : r)),
@@ -544,6 +548,22 @@ function WorkforceSection({
       onSave={onSave}
       busy={busy}
     >
+      <Field>
+        <FieldLabel htmlFor='rs-unit'>
+          {t('recruiting.settings.unitLabel')}
+        </FieldLabel>
+        <Input
+          id='rs-unit'
+          className='sm:max-w-48'
+          maxLength={16}
+          value={w.unitLabel ?? ''}
+          placeholder={t('recruiting.workforce.defaultUnit')}
+          onChange={(e) => set({ unitLabel: e.target.value })}
+        />
+        <FieldDescription>
+          {t('recruiting.settings.unitLabelHint')}
+        </FieldDescription>
+      </Field>
       <p className='text-sm font-medium'>{t('recruiting.settings.capacity')}</p>
       {w.capacity.map((row) => (
         <div
@@ -582,6 +602,7 @@ function WorkforceSection({
                 <FieldLabel htmlFor={`rs-${key}-${row.uid}`}>
                   {t(
                     `recruiting.workforce.${key === 'outputPerShift' ? 'perShift' : key}`,
+                    { unit },
                   )}
                 </FieldLabel>
                 <Input

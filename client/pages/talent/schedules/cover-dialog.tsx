@@ -91,7 +91,10 @@ function CoverDialogBody({
   const [inviting, setInviting] = useState(false);
   const busyRef = useRef(false);
   const { t } = useTranslation();
-  const candidates = useRemote<{ candidates: Candidate[] }>(
+  const candidates = useRemote<{
+    candidates: Candidate[];
+    nightShifts?: boolean;
+  }>(
     cell ? `talent/schedules/${encodeURIComponent(cell.id)}/candidates` : null,
   );
   const name = (id: string) =>
@@ -287,10 +290,14 @@ function CoverDialogBody({
                         </Badge>
                       ) : null}
                       <Badge variant='outline'>
-                        {t('attendance.scheduling.cover.load', {
-                          hours: candidate.monthOvertimeHours,
-                          nights: candidate.monthNightShifts,
-                        })}
+                        {candidates.data?.nightShifts === false
+                          ? t('attendance.scheduling.cover.overtime', {
+                              hours: candidate.monthOvertimeHours,
+                            })
+                          : t('attendance.scheduling.cover.load', {
+                              hours: candidate.monthOvertimeHours,
+                              nights: candidate.monthNightShifts,
+                            })}
                       </Badge>
                     </div>
                   </div>

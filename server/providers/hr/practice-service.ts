@@ -200,7 +200,7 @@ export function coachPrompt(
     `角色与语气：${str(scenario.persona)}`,
     `情境（员工也看得到）：${str(scenario.situation)}`,
     `你要考察的要点（不要告诉员工）：${rubric.map((r) => r.point).join('；')}`,
-    '事实标准只有下面这份依据文档；不要引入文档之外的规定和数字。员工说错时像真实的班组长或审核员那样追问。',
+    '事实标准只有下面这份依据文档；不要引入文档之外的规定和数字。员工说错时像真实的主管或审核员那样追问。',
     sourceText,
     earlier.length
       ? `到目前为止的对话：\n${earlier.join('\n')}`
@@ -621,7 +621,7 @@ export function createPracticeService(
           `${i + 1}. ${r.point}（满分 ${r.weight} 分）${r.sourceExcerpt ? `；依据原文：${r.sourceExcerpt}` : ''}`,
       ),
       '规则：每条要点给 0 到满分之间的整数分；得分大于 0 的要点必须在 quote 中逐字引用员工的原话；员工没有说到的要点记 0 分、quote 为 null，并在 suggestion 中说明。',
-      'suggestion 写具体的改进建议；clause 写对应的依据文档条款（如“WI-MC-0231 5.2”）。feedback 先说做得好的地方，再给最多 3 条改进建议。',
+      'suggestion 写具体的改进建议；clause 写对应的依据文档条款（如“《交接班规程》5.2”）。feedback 先说做得好的地方，再给最多 3 条改进建议。',
       '只以下面的依据文档为事实标准：',
       await documentText(str(scenario.sourceDocumentId)),
       '对话记录：',

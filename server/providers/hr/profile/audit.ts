@@ -1170,7 +1170,7 @@ export function createAuditService(deps: ProfileDeps, reads: ProfileReads) {
             kind: 'muted',
             text: forCustomer
               ? '本审核包只包含所请求的资料，不含手机号、证件号、住址与薪资。'
-              : '本审核包只包含生成人有权查看的数据，不含手机号、证件号、住址与薪资。是否向审核方说明风险由质量部决定。',
+              : '本审核包只包含生成人有权查看的数据，不含手机号、证件号、住址与薪资。是否向审核方说明风险由负责对接审核的部门决定。',
           },
         ],
         { title: '客户审核包', footer: 'NocoHR 客户审核包' },

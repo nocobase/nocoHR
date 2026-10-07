@@ -2,8 +2,8 @@
  * V4-14 审计导出 (extends V3-11; talent.audit, hr.admin and hr.auditor,
  * read-only). Each export writes `auditExports` like the V3-11 ones.
  *
- * - 工单人员追溯 (Excel, `exportStartTrace`): per operation of a demonstration
- *   work order, who registered, when, the certificate number and status at
+ * - 持证操作追溯 (Excel, `exportStartTrace`): per step of a business document
+ *   (the demo's work order or dispatch note), who registered, when, the certificate number and status at
  *   registration, the certificate's status now, and when the registrant
  *   completed the certification's required courses. Offered only where the
  *   demo start logs exist.
@@ -343,9 +343,12 @@ export function createLicensedExports(deps: {
       if (!input.workOrderNo || input.workOrderNo.length > 32)
         throw new HrError('INVALID_INPUT', 400);
       const trace = await startTrace(ctx, input);
+      // Industry-neutral headers (业务单号 / 步骤 / 资产编号): a work order's operation and machine are
+      // one industry's names for these; the data and the export's name in routes and permissions stay.
       const header = [
-        '工序',
-        '设备',
+        '业务单号',
+        '步骤',
+        '资产编号',
         '登记人',
         '登记时间',
         '登记时证书编号',
@@ -356,6 +359,7 @@ export function createLicensedExports(deps: {
         '依据记录',
       ];
       const body = trace.map((entry) => [
+        input.workOrderNo,
         entry.step,
         entry.machineNo ?? '',
         entry.employeeName,
@@ -378,10 +382,10 @@ export function createLicensedExports(deps: {
         kind: 'startTrace',
         scope: input,
         fileName,
-        summary: `${input.workOrderNo}${input.step ? ` 工序 ${input.step}` : ''}：${trace.length} 条登记`,
+        summary: `${input.workOrderNo}${input.step ? ` 步骤 ${input.step}` : ''}：${trace.length} 条登记`,
       });
       return {
-        bytes: workbook([header, ...body], '工单人员追溯'),
+        bytes: workbook([header, ...body], '持证操作追溯'),
         fileName,
         count: trace.length,
       };

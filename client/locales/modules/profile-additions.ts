@@ -80,7 +80,7 @@ const en = {
           items: 'Training content',
           noItems: 'No content yet: an instructor needs to add some.',
           dueDate: 'Complete by',
-          refs: '8D reports',
+          refs: 'Related corrective actions',
           approve: 'Confirm and assign',
           approveTitle: 'Confirm the targeted training',
           approveHint:
@@ -140,7 +140,7 @@ const en = {
         description:
           'Describe who you need in one sentence. The conditions read from it are shown and can be changed before searching again.',
         placeholder:
-          'Such as: 苏州工厂持 CNC 岗位上岗证、近半年没有质量问题、CNC 设备操作 4 级以上的人',
+          'Such as: people in the Shanghai branch who hold a valid certificate, rate level 3 or above in customer communication and had no quality issue in the last six months',
         search: 'Search',
         conditions: 'Conditions',
         departments: 'Departments',
@@ -181,7 +181,7 @@ const en = {
         },
         types: {
           qualityIssue: 'Quality issue',
-          correctiveAction: '8D corrective action',
+          correctiveAction: 'Corrective action',
           ticketResolved: 'Ticket resolved',
           ticketReopened: 'Ticket reopened',
           ticketEscalated: 'Ticket escalated',
@@ -304,7 +304,8 @@ const en = {
           log: 'Export log',
         },
         scope: 'Audit scope',
-        scopePlaceholder: 'Such as: 苏州和成都机加工车间的 CNC 操作工',
+        scopePlaceholder:
+          'Such as: the store managers of every store in East China',
         checkRisks: 'Check risks',
         risks: 'Handle before the audit',
         noRisks: 'No risks to handle before the audit.',
@@ -322,7 +323,7 @@ const en = {
           qualificationLedger: 'Qualification ledger',
           auditPack: 'Customer audit pack',
           // V4-14
-          startTrace: 'Work order operator trace',
+          startTrace: 'Certified operation trace',
           permissionChanges: 'Permission changes',
           // V3-11 客户审核问询
           auditPackShare: 'Audit pack downloaded by share link',
@@ -494,7 +495,7 @@ const en = {
       title: 'Targeted training',
       approve: 'Confirm',
       reject: 'Reject',
-      retryWriteback: 'Retry 8D write-back',
+      retryWriteback: 'Retry the corrective action write-back',
     },
     teamDashboard: { title: 'Team dashboard', export: 'Export' },
     findPeople: { title: 'Find people', use: 'Use' },
@@ -612,7 +613,7 @@ const zh: Shape<typeof en> = {
           items: '培训内容',
           noItems: '还没有培训内容，需要讲师补充。',
           dueDate: '建议完成日期',
-          refs: '8D 报告',
+          refs: '相关纠正措施',
           approve: '确认并指派',
           approveTitle: '确认专项培训',
           approveHint: '为保留的每个人按培训内容生成任务，指派人为你。',
@@ -669,7 +670,7 @@ const zh: Shape<typeof en> = {
         description:
           '用一句话描述你要找的人，页面会显示解析出的条件，可以修改后重新查询。',
         placeholder:
-          '例如：苏州工厂持 CNC 岗位上岗证、近半年没有质量问题、CNC 设备操作 4 级以上的人',
+          '例如：上海分公司持有效资格证书、客户沟通能力 3 级以上、近半年没有质量问题的人',
         search: '查找',
         conditions: '解析出的条件',
         departments: '部门',
@@ -705,7 +706,7 @@ const zh: Shape<typeof en> = {
         },
         types: {
           qualityIssue: '质量问题',
-          correctiveAction: '8D 纠正措施',
+          correctiveAction: '纠正措施',
           ticketResolved: '工单解决',
           ticketReopened: '工单重开',
           ticketEscalated: '工单升级',
@@ -826,7 +827,7 @@ const zh: Shape<typeof en> = {
           log: '导出记录',
         },
         scope: '审核范围',
-        scopePlaceholder: '例如：苏州和成都机加工车间的 CNC 操作工',
+        scopePlaceholder: '例如：华东区各门店的店长',
         checkRisks: '检查风险',
         risks: '审核前应处理',
         noRisks: '没有需要在审核前处理的风险。',
@@ -844,7 +845,7 @@ const zh: Shape<typeof en> = {
           qualificationLedger: '培训与资格台账',
           auditPack: '客户审核包',
           // V4-14
-          startTrace: '工单人员追溯',
+          startTrace: '持证操作追溯',
           permissionChanges: '权限变化记录',
           // V3-11 客户审核问询
           auditPackShare: '客户通过分享链接下载审核包',
@@ -1009,7 +1010,7 @@ const zh: Shape<typeof en> = {
       title: '专项培训建议',
       approve: '确认',
       reject: '驳回',
-      retryWriteback: '重试 8D 回写',
+      retryWriteback: '重试纠正措施回写',
     },
     teamDashboard: { title: '团队看板', export: '导出' },
     findPeople: { title: '找人', use: '使用' },

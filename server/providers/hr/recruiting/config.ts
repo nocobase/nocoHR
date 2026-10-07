@@ -167,6 +167,14 @@ export const recruitingSettingsSchema = z
          * a settings row saved before it existed still reads.
          */
         transferHousingRisk: z.boolean().optional(),
+        /**
+         * 业务量单位: what a workforce plan's quantities count (件, 单, 床日,
+         * 客流, 工时 …), shown with every planned, current and per-shift
+         * number. Unset for a new install, which reads as the neutral
+         * DEFAULT_WORKFORCE_UNIT; the demo seed 202610220101 sets 件. Optional
+         * so a settings row saved before it existed still reads.
+         */
+        unitLabel: z.string().trim().min(1).max(16).optional(),
         recruitingCycleDays: z.number().int().min(0).max(365),
         /** A shortfall the people on duty absorb with at most this much overtime each (hours/month) is noGap. */
         absorbOvertimeHours: z.number().min(0).max(100),
@@ -225,6 +233,7 @@ export const RECRUITING_SETTINGS_DEFAULTS: RecruitingSettings = {
     transferLimits: [],
     // transferHousingRisk is left out: unset means off (the demo seed
     // 202610210111 turns it on only while it was never saved).
+    // unitLabel is left out too: unset reads as DEFAULT_WORKFORCE_UNIT.
     recruitingCycleDays: 14,
     absorbOvertimeHours: 8,
     onboardingDays: 14,
@@ -254,6 +263,19 @@ export const RECRUITING_SETTINGS_DEFAULTS: RecruitingSettings = {
   email: { channel: 'recruiting-email', redirectTo: null },
   templates: {},
 };
+
+/**
+ * The unit of a workforce plan's quantities when 招聘设置 names none: 单位, a
+ * word every industry can read (件 would be a factory's). The client shows its
+ * own locale's word for an unset unit; this one is for the server's Chinese
+ * explanations.
+ */
+export const DEFAULT_WORKFORCE_UNIT = '单位';
+
+/** The configured unit of a workforce plan's quantities, else the neutral default. */
+export function workforceUnit(workforce: { unitLabel?: string }): string {
+  return workforce.unitLabel?.trim() || DEFAULT_WORKFORCE_UNIT;
+}
 
 export async function readRecruitingSettings(
   database: DatabaseManager,

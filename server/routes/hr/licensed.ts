@@ -6,7 +6,7 @@
  * - /api/talent/licensed/settings — 设置 / 持证上岗 (talent.licensedOperationSettings · manage)
  * - /api/talent/licensed/my-grants — what the caller's own certificates let them do
  * - /api/talent/licensed/shifts — 班次 · 要求的认证 (talent.shift · manageRequiredCertifications)
- * - /api/talent/licensed/audit/* — 工单人员追溯 and 权限变化记录 (talent.audit)
+ * - /api/talent/licensed/audit/* — 持证操作追溯 and 权限变化记录 (talent.audit)
  * - /api/talent/licensed/demo/prepare — the step's acceptance certificates (development and demo only)
  * - /api/demo/forklift-dispatch — 叉车出库登记 (demo.forklift, granted through a certificate)
  */
