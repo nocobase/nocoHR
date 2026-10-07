@@ -33,9 +33,14 @@ export function SourceClauses({
       ),
     )
     .join(' · ');
+  const line = t('talent.framework.sourceBasis', { clauses: text });
+  // Two lines at most in the table; the whole basis on hover.
   return (
-    <p className='mt-1 text-xs font-normal text-muted-foreground'>
-      {t('talent.framework.sourceBasis', { clauses: text })}
+    <p
+      className='mt-1 line-clamp-2 text-xs font-normal break-words whitespace-normal text-muted-foreground'
+      title={line}
+    >
+      {line}
     </p>
   );
 }

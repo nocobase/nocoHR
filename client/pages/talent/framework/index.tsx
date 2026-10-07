@@ -673,7 +673,8 @@ export default function FrameworkPage(): ReactElement {
                                       ) : null}
                                     </TableCell>
                                   ) : null}
-                                  <TableCell className='font-medium'>
+                                  {/* The cell wraps (TableCell is nowrap) so a long source line keeps the row inside the page. */}
+                                  <TableCell className='max-w-md min-w-48 font-medium whitespace-normal'>
                                     {competency?.title ?? r.competencyId}
                                     {competency?.reviewStatus === 'draft' ? (
                                       <span className='ml-2 text-xs text-muted-foreground'>
