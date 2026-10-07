@@ -288,7 +288,7 @@ ${JSON.stringify(
       .filter((m) => m.employeeId !== plan.incumbentEmployeeId)
       .filter((m) => !plan.candidates.some((c) => c.employeeId === m.employeeId))
       .slice(0, settings.successorCount);
-    run.summarize(`继任候选推荐：计划 ${planId}，${matches.length} 人`);
+    run.summarize(`继任候选推荐：${department}${position}，${matches.length} 人`);
     run.reference({ planId, candidates: matches.length });
     if (!matches.length) return { status: 'skipped' as const, output: { planId, reason: 'noMatch' } };
     const answer = await guardedAnswer(
@@ -355,7 +355,9 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
       .where('reminderKey', 'like', `succession:risk:${planId}:${reason}:%`)
       .where('sentAt', '>=', since)
       .executeTakeFirst();
-    run.summarize(`继任风险提醒：计划 ${planId}，${reason}`);
+    run.summarize(
+      `继任风险提醒：${department}${position}，${RISK_REASON_LABELS[reason] ?? '有风险'}`,
+    );
     run.reference({ planId, reason });
     if (recent) return { status: 'skipped' as const, output: { planId, reason, cooldown: true } };
     const matches = (await succession.match(plan.positionId, plan.departmentId)).slice(0, 3);
@@ -489,7 +491,7 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
     const content = (await ctx.plans().searchContent({ competencyIds }))
       .sort((a, b) => (a.type === 'course' ? 0 : 1) - (b.type === 'course' ? 0 : 1))
       .slice(0, 3);
-    run.summarize(`盘点发展计划：落位 ${placementId}`);
+    run.summarize(`盘点发展计划：${employee.name}`);
     run.reference({ placementId });
     if (!content.length)
       return { output: { placementId, plan: null, reason: 'noContent' } };

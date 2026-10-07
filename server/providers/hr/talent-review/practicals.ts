@@ -480,7 +480,7 @@ export function createPracticalService(
         .executeTakeFirst();
       if (!doc) throw new HrError('DOCUMENT_NOT_FOUND', 404);
       const text = str(doc.contentText ?? '');
-      run?.summarize(`起草实操考核表：文档 ${input.documentId}`);
+      run?.summarize(`起草实操考核表：${str(doc.docNo ?? '')} ${str(doc.title ?? '')}`.trim());
       run?.reference({ documentId: input.documentId });
       let drafted: z.infer<typeof draftChecklistSchema> | null = null;
       try {

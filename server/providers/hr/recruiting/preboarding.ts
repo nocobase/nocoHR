@@ -24,6 +24,13 @@ import type { OfferService, Preboarding } from './offers.js';
 import { extractResumeText } from './resume-text.js';
 import type { Templates } from './templates.js';
 
+/** How a run summary names an uploaded onboarding document. */
+const UPLOAD_KIND_TEXT: Record<string, string> = {
+  idCard: '身份证',
+  bankCard: '银行卡',
+  diploma: '学历证书',
+};
+
 export const PREBOARDING_TASK = 'hrAssistant.preboarding';
 export const PREBOARDING_EXTRACT = 'hrAssistant.preboardingExtract';
 
@@ -149,7 +156,7 @@ export function createPreboarding(
           escalated.push(offer.id);
         }
       }
-      run?.summarize(`${asOf}: ${reminded.length} reminders, ${escalated.length} escalations`);
+      run?.summarize(`${asOf} 入职前材料：提醒 ${reminded.length} 人，升级 ${escalated.length} 人`);
       return { reminded, escalated };
     },
 
@@ -197,8 +204,8 @@ export function createPreboarding(
       }
       const suggestion = { id: newId(), fileId, kind: upload.kind, fields, status, reason };
       await write(offerId, (p) => ({ ...p, suggestions: [...p.suggestions, suggestion] }));
-      // Fields and values stay off the run record: the offer id and the kind only.
-      run.summarize(`offer ${offerId}: ${upload.kind}`);
+      // Fields, values and the candidate's name stay off the run record: the kind of document only.
+      run.summarize(`入职材料识别：${UPLOAD_KIND_TEXT[upload.kind] ?? '其他材料'}`);
       const hr = await ctx.hrAdministrators();
       if (status === 'pending')
         await platform.notify({

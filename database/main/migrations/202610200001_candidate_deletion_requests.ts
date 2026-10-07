@@ -19,8 +19,13 @@ const migration: MigrationDefinition = defineMigration({
     });
   },
   async down({ builder }) {
+    // The index `up` creates is unnamed, so the builder named it idx_candidates_deletion_token_hash. Corrected
+    // 2026-10-07 with the user's approval: this `down` dropped a name that never existed. The index goes in its
+    // own step: SQLite rebuilds the table to drop the columns, so in the same step the index is already gone.
     await builder.alterCollection('candidates', (c) => {
-      c.dropIndex('candidates_deletion_token_hash_index');
+      c.dropIndex('idx_candidates_deletion_token_hash');
+    });
+    await builder.alterCollection('candidates', (c) => {
       c.dropFields('deletionTokenHash', 'deletionRequestedAt');
     });
   },

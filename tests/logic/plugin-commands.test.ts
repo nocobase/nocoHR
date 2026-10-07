@@ -32,7 +32,10 @@ const scripts = appPackage.scripts ?? {};
 const LIFECYCLE_SCRIPTS: Readonly<Record<string, string>> = {
   postinstall: 'nocobase skills sync',
   dev: 'nocobase dev',
-  build: 'nocobase build',
+  // NocoHR: pnpm 11 refuses the protobufjs build script in the dist/ install app-cli runs, because the generated
+  // dist/pnpm-workspace.yaml drops the application's allowBuilds (see AGENTS.md, "Packing the build"). Back to
+  // 'nocobase build' once app-cli carries them over.
+  build: 'pnpm_config_strict_dep_builds=false nocobase build',
   start: 'nocobase start',
 };
 
