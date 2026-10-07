@@ -17,6 +17,7 @@ import {
   createStandaloneServer,
   type StandaloneServer,
 } from '../../server/standalone.ts';
+import { eventually } from '../helpers/eventually.ts';
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -211,14 +212,14 @@ async function notification(key: string) {
 async function inboxText(key: string): Promise<string> {
   const sent = await notification(key);
   if (!sent) return '';
-  const rows = await (
-    await db()
-  )
-    .query()
-    .selectFrom('notificationInAppItems')
-    .select(['title', 'body'])
-    .where('notificationId', '=', sent.notificationId)
-    .execute();
+  const rows = await eventually(async () =>
+    (await db())
+      .query()
+      .selectFrom('notificationInAppItems')
+      .select(['title', 'body'])
+      .where('notificationId', '=', sent.notificationId)
+      .execute(),
+  );
   return rows.map((r) => `${String(r.title)} ${String(r.body)}`).join('\n');
 }
 

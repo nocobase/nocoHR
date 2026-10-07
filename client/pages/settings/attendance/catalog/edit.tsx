@@ -46,6 +46,7 @@ import {
   type SettingsData,
   type CatalogContext,
 } from '../types.js';
+import { responseCode } from '@/components/talent/errors';
 
 export default function CatalogEditor() {
   const { kind, recordId } = useParams();
@@ -375,7 +376,7 @@ function CatalogForm({
     } catch (cause) {
       if (
         cause instanceof ApiClientError &&
-        cause.code === 'SHIFT_CODE_CONFLICT'
+        responseCode(cause) === 'SHIFT_CODE_CONFLICT'
       )
         form.setError(
           'code',
@@ -384,12 +385,12 @@ function CatalogForm({
         );
       else if (
         cause instanceof ApiClientError &&
-        (cause.code === 'ATTENDANCE_RULE_CONFLICT' ||
-          cause.code === 'INVALID_DEPARTMENT')
+        (responseCode(cause) === 'ATTENDANCE_RULE_CONFLICT' ||
+          responseCode(cause) === 'INVALID_DEPARTMENT')
       ) {
         form.setError(
           'departmentIds',
-          { message: t(`attendance.settings.errors.${cause.code}`) },
+          { message: t(`attendance.settings.errors.${responseCode(cause)}`) },
           { shouldFocus: true },
         );
       } else {

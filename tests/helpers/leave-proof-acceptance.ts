@@ -36,7 +36,7 @@ export function registerLeaveProofAcceptance(
       form.append('file', file);
       // Attempted ownership injection must be ignored by the native uploader.
       form.append('uploadedByUserId', 'someone-else');
-      return raw(user, 'POST', '/api/leaveProofFiles:uploadOne', form);
+      return raw(user, 'POST', '/api/leaveProofFiles/uploadOne', form);
     };
     const draft = (
       attachmentFileId: string | null,
@@ -114,7 +114,7 @@ export function registerLeaveProofAcceptance(
     });
     it('uploads, queries and downloads identical bytes with server-stamped ownership', async () => {
       const result = await upload('emp_njl_1');
-      expect(result.status).toBe(200);
+      expect(result.status).toBe(201);
       proof = (await result.json()).data.record;
       expect(proof.contentUrl).toContain('/uploads/leave-proofs/');
       const owner = await call('emp_njl_1', 'GET', '/api/auth/get-session');
@@ -125,7 +125,7 @@ export function registerLeaveProofAcceptance(
       const metadata = await call(
         'emp_njl_1',
         'POST',
-        '/api/leaveProofFiles:findOne',
+        '/api/leaveProofFiles/findOne',
         { filter: { id: proof.id } },
       );
       expect(metadata.status).toBe(200);
@@ -155,12 +155,12 @@ export function registerLeaveProofAcceptance(
         const metadata = await call(
           user,
           'POST',
-          '/api/leaveProofFiles:findOne',
+          '/api/leaveProofFiles/findOne',
           { filter: { id: proof.id } },
         );
         expect(metadata.status).not.toBe(200);
       }
-      const generic = await call('hr01', 'POST', '/api/hrFiles:findOne', {
+      const generic = await call('hr01', 'POST', '/api/hrFiles/findOne', {
         filter: { id: proof.id },
       });
       expect(generic.json.data ?? null).toBeNull();
@@ -174,7 +174,7 @@ export function registerLeaveProofAcceptance(
         'uploadMany',
       ])
         expect(
-          (await raw('emp_njl_1', 'POST', `/api/leaveProofFiles:${action}`))
+          (await raw('emp_njl_1', 'POST', `/api/leaveProofFiles/${action}`))
             .status,
         ).toBe(404);
     });

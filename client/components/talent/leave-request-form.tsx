@@ -34,7 +34,7 @@ import { useRemote } from '@/components/talent/use-remote';
 import { BlockSkeleton } from '@/components/talent/states';
 import { LeaveProofButton } from '@/components/talent/leave-proof-button';
 import { CustomFieldInputs } from '@/components/talent/custom-fields';
-import { errorCode, errorDetails } from '@/components/talent/errors';
+import { errorDetails, responseCode } from '@/components/talent/errors';
 import {
   asText,
   compactValues,
@@ -271,7 +271,7 @@ export function LeaveRequestForm({
           !(cause instanceof ApiClientError) ||
           cause.status >= 500 ||
           ['FILE_COMMIT_UNCERTAIN', 'FILE_CLEANUP_FAILED'].includes(
-            cause.code ?? '',
+            responseCode(cause) ?? '',
           )
         ) {
           uncertainRef.current = true;
@@ -427,7 +427,7 @@ export function LeaveRequestForm({
     } catch (cause) {
       setError(cause);
       // A missing or invalid added field is marked on its input; the values stay.
-      if (errorCode(cause) === 'CUSTOM_FIELD_INVALID')
+      if (responseCode(cause) === 'CUSTOM_FIELD_INVALID')
         setCustomErrors(customFieldErrors(errorDetails(cause)));
       if (cause instanceof ApiClientError && cause.status === 409)
         setConflict(true);

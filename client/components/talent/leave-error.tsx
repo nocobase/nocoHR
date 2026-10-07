@@ -3,6 +3,7 @@ import { useTranslation } from '@nocobase/i18n/client';
 import { AlertCircleIcon } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { responseCode } from '@/components/talent/errors';
 
 export function LeaveError({
   error,
@@ -12,7 +13,7 @@ export function LeaveError({
   retry?: () => void;
 }) {
   const { t } = useTranslation();
-  const code = error instanceof ApiClientError ? error.code : undefined;
+  const code = responseCode(error);
   const status = error instanceof ApiClientError ? error.status : undefined;
   const codes = [
     'ATTACHMENT_REQUIRED',

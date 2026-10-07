@@ -28,10 +28,10 @@ strictDepBuilds: false
 
 minimumReleaseAgeExclude:
   - '@asamuzakjp/css-color@7.1.2'
-  # The Mail plugin (Pro): 0.1.0-beta.5 is the release matching this application's framework
-  # (app-server 1.0.0-beta.30); 1.0.0-beta.6+ needs a newer template. Pinned here because it is
-  # younger than the release-age window.
-  - '@nocobase/app-plugin-mail@0.1.0-beta.5'
+  # The Mail plugin (Pro): 1.0.0-beta.6 is the release matching this application's framework
+  # (app-server 1.0.0-beta.33, template 1.0.0-beta.54); 1.0.0-beta.7+ needs app-server 2. Pinned
+  # here because it is younger than the release-age window.
+  - '@nocobase/app-plugin-mail@1.0.0-beta.6'
   - '@asamuzakjp/dom-selector@9.2.2'
   - '@nocobase/app-cli@1.0.0-beta.7'
   - '@nocobase/app-plugin-authorization@0.2.0-beta.21'

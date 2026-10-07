@@ -106,25 +106,6 @@ const enUS = {
       noEmployeesDescription:
         'Choose another department or adjust the date range.',
       errors: {
-        DOCUMENT_NO_ACTIVE_EXISTS:
-          'An enabled document already uses this number. Upload a new version of it instead.',
-        DOCUMENT_VERSION_EXISTS:
-          'This version already exists for the document number.',
-        DOCUMENT_SUPERSEDED:
-          'This version has been replaced; open the current version.',
-        DOCUMENT_VERSION_PENDING:
-          'A new version is still being processed. Wait for it to finish, or retry it if it failed.',
-        DOCUMENT_VERSION_REQUIRED: 'Enter the version.',
-        DOCUMENT_NO_REQUIRED: 'Enter the document number.',
-        CONFLICT_NOTE_REQUIRED: 'Enter why the conflict is ignored.',
-        CONFLICT_NOT_FOUND:
-          'The conflict does not exist or you cannot open it.',
-        AI_ENTRY_EMPLOYEE_UNKNOWN:
-          'A row names an AI employee that does not exist.',
-        AI_ENTRY_NO_FALLBACK:
-          'Keep at least one enabled row available to everyone, for questions no other row takes.',
-        AI_ENTRY_NO_ROUTE: 'No AI employee is available to you. Contact HR.',
-        IM_BAD_SIGNATURE: 'The message signature is invalid.',
         SETTINGS_CONFLICT: 'Someone else saved first. Reload and try again.',
         INVALID_DATE_RANGE: 'Enter a valid date range of at most 31 days.',
         SCHEDULE_BLOCKED: 'Blocking schedule conflicts must be fixed first.',
@@ -1400,11 +1381,11 @@ const enUS = {
   'auth.identifier': 'Username or email',
   'auth.password': 'Password',
   'auth.signIn': 'Sign in',
-  'auth.signInLink': 'sign in',
   'auth.signingIn': 'Signing in…',
   'auth.hidePassword': 'Hide password',
   'auth.showPassword': 'Show password',
   'auth.forgotLink': 'Forgot password?',
+  'auth.noAccount': "Don't have an account?",
   'auth.signUp': 'Sign up',
   'auth.createAccount': 'Create account',
   'auth.creatingAccount': 'Creating account…',
@@ -1418,13 +1399,14 @@ const enUS = {
   'auth.confirmNewPassword': 'Confirm new password',
   'auth.invalidResetLink':
     'This password reset link is invalid or has expired.',
-  'auth.returnTo': 'Return to',
+  'auth.backToSignIn': 'Back to sign in',
   'auth.sendResetLink': 'Send reset link',
   'auth.sending': 'Sending…',
   'auth.resetSent': 'If the account exists, a reset link has been sent.',
   'auth.rememberPassword': 'Remember your password?',
-  'auth.methods': 'Authentication methods',
-  'auth.continueWith': 'Or continue with',
+  'auth.methods': 'Sign-in methods',
+  'auth.or': 'Or continue with',
+  'auth.continueWith': 'Continue with {provider}',
   'auth.about': 'About this application',
   'auth.marketingDescription':
     'Give AI a flexible frontend framework to shape each experience, while NocoBase secures the data, permissions, workflows and governance underneath.',
@@ -1502,6 +1484,7 @@ const enUS = {
     cancel: 'Cancel',
     confirm: 'Confirm',
     language: 'Language',
+    loading: 'Loading',
   },
   notices: {
     serverLocaleFallback:
@@ -1580,8 +1563,11 @@ const enUS = {
     close: 'Close navigation',
     expand: 'Expand navigation',
     collapse: 'Collapse navigation',
+    toggle: 'Expand or collapse navigation',
     label: 'Application navigation',
+    description: 'Go to a page of this application.',
     breadcrumb: 'Breadcrumb',
+    back: 'Back',
   },
   dataTable: {
     noResults: 'No results.',
@@ -3516,6 +3502,24 @@ const enUS = {
       DOCUMENT_TITLE_REQUIRED: 'Enter a title.',
       DOCUMENT_CATEGORY_INVALID: 'Choose a category.',
       DOCUMENT_FILE_REQUIRED: 'Choose a file.',
+      DOCUMENT_NO_ACTIVE_EXISTS:
+        'An enabled document already uses this number. Upload a new version of it instead.',
+      DOCUMENT_VERSION_EXISTS:
+        'This version already exists for the document number.',
+      DOCUMENT_SUPERSEDED:
+        'This version has been replaced; open the current version.',
+      DOCUMENT_VERSION_PENDING:
+        'A new version is still being processed. Wait for it to finish, or retry it if it failed.',
+      DOCUMENT_VERSION_REQUIRED: 'Enter the version.',
+      DOCUMENT_NO_REQUIRED: 'Enter the document number.',
+      CONFLICT_NOTE_REQUIRED: 'Enter why the conflict is ignored.',
+      CONFLICT_NOT_FOUND: 'The conflict does not exist or you cannot open it.',
+      AI_ENTRY_EMPLOYEE_UNKNOWN:
+        'A row names an AI employee that does not exist.',
+      AI_ENTRY_NO_FALLBACK:
+        'Keep at least one enabled row available to everyone, for questions no other row takes.',
+      AI_ENTRY_NO_ROUTE: 'No AI employee is available to you. Contact HR.',
+      IM_BAD_SIGNATURE: 'The message signature is invalid.',
       DOCUMENT_VISIBILITY_INVALID: 'Choose who can see the document.',
       DOCUMENT_TYPE_UNSUPPORTED:
         'Only PDF, Word (.docx), Markdown and TXT files are supported.',

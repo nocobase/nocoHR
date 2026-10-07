@@ -696,7 +696,7 @@ describe('V3-08 new position: job description, candidates and 对标差距', () 
     const upload = await raw(
       'hr01',
       'POST',
-      '/api/hrFiles:uploadOne?purpose=jobDescription',
+      '/api/hrFiles/uploadOne?purpose=jobDescription',
       data,
     );
     expect(upload.status).toBeLessThan(300);

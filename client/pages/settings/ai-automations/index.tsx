@@ -749,7 +749,7 @@ function RunSheet({
       }>({ path, method: 'POST' });
       toast.add({
         type: outcome.status === 'failed' ? 'error' : 'success',
-        title: t('aiAutomations.runFinished', {
+        title: t('aiAutomations.runResult', {
           status: t(`aiAutomations.status.${outcome.status}`),
         }),
       });

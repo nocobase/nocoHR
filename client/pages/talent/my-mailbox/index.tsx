@@ -11,6 +11,8 @@ import { useTranslation } from '@nocobase/i18n/client';
 import {
   MailAccountCard,
   MailAccountConnector,
+} from '@nocobase/app-plugin-mail/client/components';
+import {
   mailErrorMessage,
   useMailClient,
   type MailAccountView,

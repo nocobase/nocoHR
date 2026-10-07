@@ -121,7 +121,7 @@ export const certificateScanRoutes: readonly AppRouteContribution<Application>[]
       if (contribution.scope === 'api') {
         for (const action of ['findOne', 'uploadOne']) {
           router.use(
-            `/certificateScanFiles:${action}`,
+            `/certificateScanFiles/${action}`,
             privateResponse,
             ...authenticated,
             async (c, next) => {
@@ -135,10 +135,10 @@ export const certificateScanRoutes: readonly AppRouteContribution<Application>[]
           );
         }
         router.use(
-          '/certificateScanFiles:findOne',
+          '/certificateScanFiles/findOne',
           bodyLimit({ maxSize: 16384 }),
         );
-        router.use('/certificateScanFiles:findOne', async (c, next) => {
+        router.use('/certificateScanFiles/findOne', async (c, next) => {
           const input: unknown = await c.req.raw
             .clone()
             .json()
@@ -152,7 +152,7 @@ export const certificateScanRoutes: readonly AppRouteContribution<Application>[]
           await next();
         });
         router.use(
-          '/certificateScanFiles:uploadOne',
+          '/certificateScanFiles/uploadOne',
           bodyLimit({ maxSize: BODY_LIMIT }),
           validateUpload,
         );

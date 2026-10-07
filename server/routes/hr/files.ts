@@ -213,9 +213,9 @@ export const hrFileRoutes: readonly AppRouteContribution<Application>[] =
     createRouter: async (app: Application) => {
       const router = new Hono<HrEnv>();
       if (contribution.scope === 'api') {
-        router.use('/hrFiles:findOne', ...guard(app, 'api'));
+        router.use('/hrFiles/findOne', ...guard(app, 'api'));
         router.use(
-          '/hrFiles:uploadOne',
+          '/hrFiles/uploadOne',
           ...guard(app, 'api'),
           uploadCheck(app),
         );

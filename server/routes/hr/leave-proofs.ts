@@ -115,7 +115,7 @@ export const leaveProofRoutes: readonly AppRouteContribution<Application>[] =
       if (contribution.scope === 'api') {
         for (const action of ['findOne', 'uploadOne']) {
           router.use(
-            `/leaveProofFiles:${action}`,
+            `/leaveProofFiles/${action}`,
             privateResponse,
             ...authenticated,
             async (c, next) => {
@@ -128,8 +128,8 @@ export const leaveProofRoutes: readonly AppRouteContribution<Application>[] =
             },
           );
         }
-        router.use('/leaveProofFiles:findOne', bodyLimit({ maxSize: 16384 }));
-        router.use('/leaveProofFiles:findOne', async (c, next) => {
+        router.use('/leaveProofFiles/findOne', bodyLimit({ maxSize: 16384 }));
+        router.use('/leaveProofFiles/findOne', async (c, next) => {
           const input: unknown = await c.req.raw
             .clone()
             .json()
@@ -143,7 +143,7 @@ export const leaveProofRoutes: readonly AppRouteContribution<Application>[] =
           await next();
         });
         router.use(
-          '/leaveProofFiles:uploadOne',
+          '/leaveProofFiles/uploadOne',
           bodyLimit({ maxSize: BODY_LIMIT }),
           validateUpload,
         );

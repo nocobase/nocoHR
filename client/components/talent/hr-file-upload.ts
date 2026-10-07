@@ -23,7 +23,7 @@ export async function uploadHrFile(
   const body = new FormData();
   body.append('file', file);
   const { data } = await api.request<{ data: { record: FileRecord } }>({
-    path: '/hrFiles:uploadOne',
+    path: '/hrFiles/uploadOne',
     method: 'POST',
     query: { purpose },
     body,

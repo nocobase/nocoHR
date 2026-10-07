@@ -10,12 +10,22 @@ function payloadOf(error: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-/** The stable code an endpoint answered with, if any. */
-export function errorCode(error: unknown): string | undefined {
+/**
+ * The code the response body carries: NocoHR endpoints answer `{ code }`, the
+ * framework and plugins `{ error: { reason } }` (the client's `reason`).
+ */
+export function responseCode(error: unknown): string | undefined {
   if (!(error instanceof ApiClientError)) return undefined;
   const payload = payloadOf(error);
   if (payload && typeof payload.code === 'string') return payload.code;
-  if (error.code) return error.code;
+  return error.reason;
+}
+
+/** The stable code an endpoint answered with, if any. */
+export function errorCode(error: unknown): string | undefined {
+  if (!(error instanceof ApiClientError)) return undefined;
+  const code = responseCode(error);
+  if (code) return code;
   if (error.status === 403) return 'FORBIDDEN';
   if (error.status === 404) return 'NOT_FOUND';
   return undefined;

@@ -75,13 +75,19 @@ function ClientPageDenied(inputProps: ClientRouteProps): ReactElement {
   const { t } = useTranslation();
   const { route } = inputProps;
   // Application change: name the page by its menu or breadcrumb title, never the internal route name
-  // (demo-batch-record leaked onto a phone screen); a page with neither is "this page".
-  const { t: tPage } = useTranslation(route.packageName);
+  // (demo-batch-record leaked onto a phone screen); a page with neither is "this page". A title that is not a key
+  // is checked first, because the strict test runtime throws on a missing key even with a default.
+  const { t: tPage, i18n } = useTranslation(route.packageName);
   const titleKey = route.navigation?.title ?? route.breadcrumb?.title;
-  const label = titleKey
-    ? tPage(titleKey, { defaultValue: '' }) ||
-      t('status.thisPage', { defaultValue: 'this page' })
-    : t('status.thisPage', { defaultValue: 'this page' });
+  const title =
+    titleKey &&
+    i18n.exists(
+      titleKey,
+      route.packageName ? { ns: route.packageName } : undefined,
+    )
+      ? tPage(titleKey)
+      : '';
+  const label = title || t('status.thisPage', { defaultValue: 'this page' });
 
   return (
     <section className='grid min-h-[calc(100svh-4rem)] place-items-center px-6'>

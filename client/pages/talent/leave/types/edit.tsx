@@ -39,6 +39,7 @@ import { LeaveError } from '../feedback.js';
 import { LeaveFormOverlay } from '../form-overlay.js';
 import { LEAVE_FORM_ID, useLeaveForm } from '../form-context.js';
 import type { LeaveListContext, LeaveType } from '../types.js';
+import { responseCode } from '@/components/talent/errors';
 
 export default function LeaveTypeEditor() {
   const { typeId } = useParams();
@@ -170,7 +171,7 @@ function TypeForm({ record }: { record?: LeaveType }) {
     } catch (cause) {
       if (
         cause instanceof ApiClientError &&
-        cause.code === 'LEAVE_TYPE_CODE_CONFLICT'
+        responseCode(cause) === 'LEAVE_TYPE_CODE_CONFLICT'
       )
         form.setError(
           'code',

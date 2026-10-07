@@ -412,7 +412,9 @@ describe('documented HR entry for employees without accounts', () => {
         stored.canEditHr = false;
         throw new ApiClientError('HR_ENTRY_REQUIRES_NO_ACCOUNT', {
           status: 409,
-          code: 'HR_ENTRY_REQUIRES_NO_ACCOUNT',
+          payload: { code: 'HR_ENTRY_REQUIRES_NO_ACCOUNT' },
+          method: 'POST',
+          url: '/api/talent/leave/hr-entries/submit',
         });
       }
       return respond(options);

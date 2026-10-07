@@ -214,12 +214,17 @@ async function notification(key: string): Promise<unknown> {
 async function inboxBody(key: string): Promise<string> {
   const sent = (await notification(key)) as { notificationId?: string } | null;
   if (!sent?.notificationId) return '';
-  const items = await db()
-    .query()
-    .selectFrom('notificationInAppItems')
-    .select(['body'])
-    .where('notificationId', '=', sent.notificationId)
-    .execute();
+  const notificationId = sent.notificationId;
+  // In-app delivery runs on the notification queue, after the send returns.
+  const items = await waitFor(async () => {
+    const rows = await db()
+      .query()
+      .selectFrom('notificationInAppItems')
+      .select(['body'])
+      .where('notificationId', '=', notificationId)
+      .execute();
+    return rows.length > 0 ? rows : undefined;
+  }, `in-app message ${key}`);
   return items.map((i) => String(i.body)).join('\n');
 }
 
@@ -1010,7 +1015,7 @@ describe('certificate lifecycle, renewal and external certificates', () => {
     const form = new FormData();
     form.append('file', new File([png], 'forklift.png', { type: 'image/png' }));
     const upload = await server.fetch(
-      new Request(`${base}/api/certificateScanFiles:uploadOne`, {
+      new Request(`${base}/api/certificateScanFiles/uploadOne`, {
         method: 'POST',
         headers: {
           cookie: await signIn('emp_njl_1'),

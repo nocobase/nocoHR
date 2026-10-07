@@ -64,7 +64,7 @@ async function upload(
 const uploadHrFile = (username: string, purpose: string | null, file: File) =>
   upload(
     username,
-    `/api/hrFiles:uploadOne${purpose ? `?purpose=${purpose}` : ''}`,
+    `/api/hrFiles/uploadOne${purpose ? `?purpose=${purpose}` : ''}`,
     file,
   );
 
@@ -145,7 +145,7 @@ describe('hrFiles uploads', () => {
       .execute();
     expect(kept).toEqual([]);
     const ok = await uploadHrFile('hr01', 'courseVideo', video);
-    expect(ok.status).toBe(200);
+    expect(ok.status).toBe(201);
     const row = await (
       await h.db()
     )
@@ -168,7 +168,7 @@ describe('hrFiles uploads', () => {
     );
     const findOne = async (username: string) => {
       const response = await h.server.fetch(
-        new Request(`${h.base}/api/hrFiles:findOne`, {
+        new Request(`${h.base}/api/hrFiles/findOne`, {
           method: 'POST',
           headers: {
             cookie: await cookieOf(username),

@@ -3,7 +3,7 @@ import type { DatabaseManager } from '@nocobase/db';
 import { HrError } from './shared.js';
 
 /**
- * What an `hrFiles:uploadOne` upload is for. The purpose is chosen by the
+ * What an `hrFiles/uploadOne` upload is for. The purpose is chosen by the
  * caller (`?purpose=`), checked against the caller's permission, and stamped on
  * the row with the uploader (`hrFiles.purpose` / `uploadedByUserId`, migration
  * 202610250001). A record accepts only a file the caller uploaded for its

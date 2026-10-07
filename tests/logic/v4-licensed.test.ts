@@ -202,12 +202,17 @@ async function notification(key: string): Promise<unknown> {
 async function inboxBody(key: string): Promise<string> {
   const sent = (await notification(key)) as { notificationId?: string } | null;
   if (!sent?.notificationId) return '';
-  const items = await db()
-    .query()
-    .selectFrom('notificationInAppItems')
-    .select(['body'])
-    .where('notificationId', '=', sent.notificationId)
-    .execute();
+  const notificationId = sent.notificationId;
+  // In-app delivery runs on the notification queue, after the send returns.
+  const items = await waitFor(async () => {
+    const rows = await db()
+      .query()
+      .selectFrom('notificationInAppItems')
+      .select(['body'])
+      .where('notificationId', '=', notificationId)
+      .execute();
+    return rows.length > 0 ? rows : undefined;
+  }, `in-app message ${key}`);
   return items.map((i) => String(i.body)).join('\n');
 }
 

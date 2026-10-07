@@ -11,6 +11,7 @@ import {
   createStandaloneServer,
   type StandaloneServer,
 } from '../../server/standalone.ts';
+import { eventually } from '../helpers/eventually.ts';
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -102,7 +103,10 @@ export async function startHarness(name: string): Promise<Harness> {
       database: {
         default: 'main',
         connections: {
-          main: { dialect: 'sqlite', filename: path.join(directory, 'database.sqlite') },
+          main: {
+            dialect: 'sqlite',
+            filename: path.join(directory, 'database.sqlite'),
+          },
         },
         migrations: { autoRun: true },
         seeds: { autoRun: true },
@@ -112,7 +116,10 @@ export async function startHarness(name: string): Promise<Harness> {
   );
   process.env.HR_DEMO_PASSWORD = PASSWORD;
   process.env.HR_RECRUITING_DEMO = 'false';
-  process.env.ATTENDANCE_PUNCH_MOCK_FILE = path.join(directory, 'feishu-punches.json');
+  process.env.ATTENDANCE_PUNCH_MOCK_FILE = path.join(
+    directory,
+    'feishu-punches.json',
+  );
   const root = path.resolve(import.meta.dirname, '../..');
   const server = await createStandaloneServer({
     viteDevUrl: false,
@@ -126,7 +133,10 @@ export async function startHarness(name: string): Promise<Harness> {
     paths: {
       rootDir: root,
       serverDir: path.join(root, 'server'),
-      databaseDir: path.join(root, process.env.HR_TEST_DATABASE_DIR ?? 'database'),
+      databaseDir: path.join(
+        root,
+        process.env.HR_TEST_DATABASE_DIR ?? 'database',
+      ),
       clientDir: path.join(root, 'dist/client'),
       storageDir: path.join(directory, 'storage'),
     },
@@ -162,11 +172,14 @@ export async function startHarness(name: string): Promise<Harness> {
       if (body !== undefined) headers['content-type'] = 'application/json';
       if (method !== 'GET') headers.origin = 'http://localhost';
       const response = await server.fetch(
-        new Request(`${base}${url.startsWith('/api/') ? url : `/api/talent${url}`}`, {
-          method,
-          headers,
-          body: body === undefined ? undefined : JSON.stringify(body),
-        }),
+        new Request(
+          `${base}${url.startsWith('/api/') ? url : `/api/talent${url}`}`,
+          {
+            method,
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
+          },
+        ),
       );
       const text = await response.text();
       let json: Json;
@@ -182,11 +195,14 @@ export async function startHarness(name: string): Promise<Harness> {
       return server.application.container.resolve(databaseManagerToken);
     },
     async services() {
-      const { talentReviewServicesToken } = await import('../../server/providers/hr/tokens.ts');
+      const { talentReviewServicesToken } =
+        await import('../../server/providers/hr/tokens.ts');
       return server.application.container.resolve(talentReviewServicesToken);
     },
     async userId(username) {
-      const row = await (await harness.db())
+      const row = await (
+        await harness.db()
+      )
         .query()
         .selectFrom('user')
         .select(['id'])
@@ -195,27 +211,32 @@ export async function startHarness(name: string): Promise<Harness> {
       return String(row!.id);
     },
     async inboxText(key) {
-      const { notificationServiceToken } = await import('@nocobase/app-plugin-notification');
+      const { notificationServiceToken } =
+        await import('@nocobase/app-plugin-notification');
       const sent = await server.application.container
         .resolve(notificationServiceToken)
         .getByIdempotencyKey(`hr:${key}`);
       if (!sent) return '';
-      const rows = await (await harness.db())
-        .query()
-        .selectFrom('notificationInAppItems')
-        .select(['title', 'body'])
-        .where('notificationId', '=', sent.notificationId)
-        .execute();
+      const rows = await eventually(async () =>
+        (await harness.db())
+          .query()
+          .selectFrom('notificationInAppItems')
+          .select(['title', 'body'])
+          .where('notificationId', '=', sent.notificationId)
+          .execute(),
+      );
       return rows.map((r) => `${String(r.title)} ${String(r.body)}`).join('\n');
     },
     async inboxOf(username, like) {
       const userId = await harness.userId(username);
-      const rows = await (await harness.db())
-        .query()
-        .selectFrom('notificationInAppItems')
-        .selectAll()
-        .where('title', 'like', `%${like}%`)
-        .execute();
+      const rows = await eventually(async () =>
+        (await harness.db())
+          .query()
+          .selectFrom('notificationInAppItems')
+          .selectAll()
+          .where('title', 'like', `%${like}%`)
+          .execute(),
+      );
       return rows
         .filter((r) => JSON.stringify(r).includes(userId))
         .map((r) => `${String(r.title)} ${String(r.body)}`);
