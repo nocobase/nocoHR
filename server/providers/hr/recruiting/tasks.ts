@@ -148,7 +148,7 @@ export function createRecruitingTasks(
       if (!employee?.userId) return 'notBound';
       return ctx.im().sendText(employee.userId, await deps.checkIns.questionText(checkInId));
     });
-    run.summarize(`${asOf}: ${result.created.length} check-ins, ${result.closed} closed`);
+    run.summarize(`${asOf} 新员工回访：新建 ${result.created.length} 次，关闭 ${result.closed} 次`);
     return { output: result };
   }
 

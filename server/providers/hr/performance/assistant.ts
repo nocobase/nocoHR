@@ -572,7 +572,10 @@ export function createPerformanceAssistant(deps: {
       await anomalies(review.cycleId, { resultIds: new Set([review.resultId]) })
     )[0];
     const list: RatingAnomaly[] = found?.anomalies ?? [];
-    run.summarize(`偏差检查：评价 ${reviewId} 第 ${submission} 次提交`);
+    const reviewee = await platform.employee(review.employeeId);
+    run.summarize(
+      `偏差检查：${reviewee?.name ?? '员工'}的评价第 ${submission} 次提交${list.length ? `，${list.length} 项提示` : '，无提示'}`,
+    );
     run.reference({ reviewId, hintTypes: list.map((a) => a.type) });
     if (!list.length)
       return { status: 'skipped' as const, output: { reviewId, hints: 0 } };

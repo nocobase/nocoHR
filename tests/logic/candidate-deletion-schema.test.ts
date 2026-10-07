@@ -1,10 +1,8 @@
 // @vitest-environment node
-// 2026-10-07 readiness review: 202610200001 adds `candidates.deletionTokenHash` (indexed) and
-// `deletionRequestedAt`. Its `up` leaves the index unnamed, so the builder calls it
-// `idx_candidates_deletion_token_hash`, while its `down` drops `candidates_deletion_token_hash_index`:
-// rolling the migration back fails and leaves both columns in place. The migration is merged, so it is
-// not edited and no corrective migration can repair its `down` (AGENTS.md, “Migrations”); this test
-// pins what the database holds so the documented workaround stays true.
+// 202610200001 adds `candidates.deletionTokenHash` (indexed) and `deletionRequestedAt`. Its `up` leaves the
+// index unnamed, so the builder calls it `idx_candidates_deletion_token_hash`. Its `down` used to drop
+// `candidates_deletion_token_hash_index`, which never existed, so rolling back failed; the `down` was corrected
+// on 2026-10-07 with the user's approval. This test keeps up and down symmetric.
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -26,7 +24,7 @@ interface SqliteMaster {
   selectFrom(table: string): { select(columns: string[]): IndexQuery };
 }
 
-it('names the deletion-token index idx_candidates_deletion_token_hash, which its down does not drop', async () => {
+it('creates idx_candidates_deletion_token_hash and drops it again on down', async () => {
   const directory = mkdtempSync(
     path.join(tmpdir(), 'candidate-deletion-schema-'),
   );
@@ -68,18 +66,19 @@ it('names the deletion-token index idx_candidates_deletion_token_hash, which its
     expect(await indexes()).not.toContain(
       'candidates_deletion_token_hash_index',
     );
-    // The down names an index that does not exist: the rollback fails and changes nothing.
-    await expect(migrator.rollback()).rejects.toThrow(
-      /candidates_deletion_token_hash_index/u,
-    );
+    // The down drops the index and both columns, and the migration applies again afterwards.
+    expect((await migrator.rollback()).rolledBack).toContain(MIGRATION);
+    expect(await indexes()).not.toContain('idx_candidates_deletion_token_hash');
+    await expect(
+      db
+        .query()
+        .selectFrom('candidates')
+        .select(['deletionTokenHash'])
+        .limit(1)
+        .execute(),
+    ).rejects.toThrow();
+    expect((await migrator.upTo(MIGRATION)).executed).toEqual([MIGRATION]);
     expect(await indexes()).toContain('idx_candidates_deletion_token_hash');
-    const columns = await db
-      .query()
-      .selectFrom('candidates')
-      .select(['deletionTokenHash', 'deletionRequestedAt'])
-      .limit(1)
-      .execute();
-    expect(columns).toEqual([]);
   } finally {
     await db.destroy();
     rmSync(directory, { recursive: true, force: true });

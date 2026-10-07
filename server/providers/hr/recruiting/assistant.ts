@@ -57,6 +57,9 @@ import {
 } from './resume-text.js';
 import type { WorkforcePlanView, WorkforceService } from './workforce.js';
 
+/** How a run summary names a match level. */
+const MATCH_LEVEL_TEXT = { high: '高', medium: '中', low: '低' } as const;
+
 /**
  * The words a talent-pool candidate's parsed resume is searched for: the
  * requisition's checklist and the position title only. It used to append
@@ -393,7 +396,7 @@ export function createRecruitingAssistant(
     const settings = await ctx.settings();
     const bulk = requisition.headcount >= settings.assistant.bulkHeadcount;
     run.summarize(
-      `requisition ${requisitionId}, headcount ${requisition.headcount}`,
+      `职位草稿：${position.title || '招聘需求'}，招 ${requisition.headcount} 人`,
     );
     let draft = ruleDraft(requisition, position, bulk);
     try {
@@ -570,9 +573,7 @@ export function createRecruitingAssistant(
       return { status: 'skipped' as const, output: { reason: 'NO_RECRUITER' } };
     const settings = await ctx.settings();
     const found = await findPool(requisition, settings.assistant.poolLimit);
-    run.summarize(
-      `requisition ${requisitionId}: ${found.length} pool candidates`,
-    );
+    run.summarize(`人才库找回：${found.length} 位候选人`);
     const ruleReason = (f: (typeof found)[number]) =>
       [
         f.samePosition ? '曾应聘同一岗位' : null,
@@ -836,8 +837,11 @@ export function createRecruitingAssistant(
     await run.recordItems('screeningSuggestion', [
       { id: applicationId, hash: suggestion.matchLevel },
     ]);
-    // 运行记录中不保存简历内容和联系方式: the application id and the level only.
-    run.summarize(`application ${applicationId}`);
+    // 运行记录中不保存简历内容和联系方式, nor the candidate's name, which must go when the candidate is
+    // anonymized: the posting, the level and how many requirements need verifying.
+    run.summarize(
+      `${posting.title} 投递初筛：匹配度${MATCH_LEVEL_TEXT[suggestion.matchLevel]}${suggestion.toVerify.length ? `，${suggestion.toVerify.length} 项待核实` : ''}`,
+    );
     return { output: { applicationId, matchLevel: suggestion.matchLevel } };
   }
 
@@ -917,7 +921,7 @@ export function createRecruitingAssistant(
       params: { time: new Date(interview.scheduledAt).toISOString() },
       path: `/talent/interviews/${interviewId}`,
     });
-    run.summarize(`interview ${interviewId}`);
+    run.summarize(`${posting.title} 面试题：已备 ${plan.length} 道`);
     return { output: { interviewId, questions: plan.length } };
   }
 
@@ -1053,7 +1057,9 @@ export function createRecruitingAssistant(
       params: { position: posting.title },
       path: `/talent/interviews/${interviewId}`,
     });
-    run.summarize(`interview ${interviewId}`);
+    run.summarize(
+      `${posting.title} 面试评分汇总：${interview.scorecards.length} 份评分`,
+    );
     return {
       output: {
         interviewId,
@@ -1145,7 +1151,7 @@ export function createRecruitingAssistant(
         },
         path: '/talent/candidates',
       });
-    run.summarize(`${date}: ${byRecruiter.size} recruiters`);
+    run.summarize(`${date} 招聘日报：${byRecruiter.size} 位招聘专员`);
     return {
       output: { date, recruiters: byRecruiter.size, applications: rows.length },
     };
@@ -1217,7 +1223,9 @@ export function createRecruitingAssistant(
         },
         path: `/talent/workforce-plans/${planId}`,
       });
-    run.summarize(`plan ${planId}`);
+    run.summarize(
+      `${plan.month} ${plan.departmentTitle} ${plan.positionTitle} 用工测算说明：缺口 ${plan.calculation.gapHeadcount} 人`,
+    );
     return { output: { planId, gap: plan.calculation.gapHeadcount } };
   }
 

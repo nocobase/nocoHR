@@ -2224,3 +2224,27 @@ describe('V2-07 可选 AI 初面', () => {
     expect(stale.json.code).toBe('AI_INTERVIEW_LINK_INVALID');
   });
 });
+
+describe('运行记录摘要', () => {
+  it('names what each recruiting run did in words, never by a record id', async () => {
+    const runs = await (
+      await db()
+    )
+      .query()
+      .selectFrom('aiTaskRuns')
+      .select(['task', 'inputSummary'])
+      .where('task', 'like', 'recruitingAssistant.%')
+      .execute();
+    const summaries = runs
+      .map((r) => String(r.inputSummary ?? ''))
+      .filter(Boolean);
+    expect(summaries.length).toBeGreaterThan(0);
+    for (const summary of summaries) {
+      expect(summary).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
+      expect(summary).not.toMatch(
+        /^(application|interview|plan|offer|requisition) /u,
+      );
+    }
+    expect(summaries.some((s) => s.includes('投递初筛：匹配度'))).toBe(true);
+  });
+});
