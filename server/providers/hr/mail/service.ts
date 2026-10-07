@@ -275,6 +275,8 @@ export function createMailService(deps: MailServiceDeps) {
     accountId: string,
   ): Promise<IncomingMail[]> {
     const mail = deps.mail();
+    const bound = (await deps.settings.read()).value.mailboxes[purpose].boundAt;
+    const boundAt = bound ? new Date(bound) : null;
     const inbox = (await mail.listFolders(ctx, accountId)).filter(
       (f) => f.type === 'inbox',
     );
@@ -294,7 +296,11 @@ export function createMailService(deps: MailServiceDeps) {
         .filter(
           (m) =>
             !m.draft &&
-            (!inboxIds.size || m.folderIds.some((id) => inboxIds.has(id))),
+            (!inboxIds.size || m.folderIds.some((id) => inboxIds.has(id))) &&
+            // Only mail received after the account was bound to this purpose.
+            (!boundAt ||
+              !(m.receivedAt ?? m.sentAt) ||
+              new Date(m.receivedAt ?? m.sentAt!) >= boundAt),
         )
         .map((m) => m.id);
       const known = refs.length
