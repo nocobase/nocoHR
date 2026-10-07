@@ -1,10 +1,10 @@
-import { resolveAppUrl, useService } from '@nocobase/app-client';
-import { clientFileRepositoryManagerToken } from '@nocobase/app-plugin-file/client';
+import { resolveAppUrl, useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { UploadIcon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 
 import { errorMessage } from '@/components/talent/errors';
+import { uploadHrFile } from '@/components/talent/hr-file-upload';
 import { Button } from '@/components/ui/button';
 import {
   Field,
@@ -58,7 +58,7 @@ export function VideoLessonFields({
   }) => void;
 }): ReactElement {
   const { t } = useTranslation();
-  const files = useService(clientFileRepositoryManagerToken);
+  const api = useApiClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [filename, setFilename] = useState<string | null>(null);
@@ -73,11 +73,11 @@ export function VideoLessonFields({
     try {
       const [seconds, uploaded] = await Promise.all([
         readDuration(file),
-        files.repository('hrFiles').uploadOne({ file }),
+        uploadHrFile(api, file, 'courseVideo'),
       ]);
       setFilename(file.name);
       onChange({
-        videoFileId: String(uploaded.record.id),
+        videoFileId: String(uploaded.id),
         ...(seconds ? { videoSeconds: String(seconds) } : {}),
       });
     } catch (cause) {

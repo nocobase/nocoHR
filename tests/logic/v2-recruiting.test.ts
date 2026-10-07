@@ -730,7 +730,7 @@ describe('V2-07 公开页投递与初筛', () => {
     state.qiuApplication = row.id;
   });
 
-  it('周迪 applies on the page, books the single-seat slot; the full slot is gone; resubmitting merges', async () => {
+  it('周迪 applies on the page, books the single-seat slot; the full slot is gone for the next applicant', async () => {
     const { resumeDocx, ZHOU_DI_RESUME } = state.demo;
     const apply = () =>
       multipart(
@@ -770,11 +770,6 @@ describe('V2-07 公开页投递与初筛', () => {
       status: 200,
     });
     state.zhouBookingToken = first.json.data.bookingToken;
-    const again = await apply();
-    expect(again.json.data.merged).toBe(true);
-    expect(again.json.data.slots.map((s: Json) => s.start)).not.toContain(
-      new Date(state.slots[0].start).toISOString(),
-    );
     const list = await call(
       'recruit01',
       'GET',
@@ -782,7 +777,7 @@ describe('V2-07 公开页投递与初筛', () => {
     );
     const row = list.json.data.items.find((i: Json) => i.name === '周迪');
     state.zhouApplication = row.id;
-    expect(row.submitCount).toBe(2);
+    expect(row.submitCount).toBe(1);
     const detail = await until(
       async () =>
         (await call('recruit01', 'GET', `/candidates/${row.id}`)).json.data,
@@ -806,6 +801,104 @@ describe('V2-07 公开页投递与初筛', () => {
       expect(`${r.inputSummary ?? ''}${r.output ?? ''}`).not.toMatch(
         /1390000|@demo\.test|数控车床操作工/u,
       );
+  });
+
+  it('an application typed with someone else’s mobile changes nothing of theirs and does not reveal them', async () => {
+    const { resumeDocx, ZHOU_DI_RESUME, DEMO_RESUMES } = state.demo;
+    const database = await db();
+    const original = await database
+      .query()
+      .selectFrom('candidates')
+      .select([
+        'id',
+        'name',
+        'email',
+        'resumeFileId',
+        'consentAt',
+        'consentBy',
+        'retentionUntil',
+        'customFields',
+      ])
+      .where('phone', '=', ZHOU_DI_RESUME.phone)
+      .orderBy('createdAt', 'asc')
+      .executeTakeFirstOrThrow();
+    const impostor = await multipart(
+      null,
+      `/api/public/recruiting/jobs/${state.slug}/apply`,
+      {
+        name: '冒名者',
+        phone: ZHOU_DI_RESUME.phone,
+        email: 'someone-else@qiheng.test',
+        consent: 'true',
+        answers: JSON.stringify(answers('yes')),
+      },
+      [
+        {
+          field: 'file',
+          name: 'other.docx',
+          bytes: resumeDocx(DEMO_RESUMES[18]),
+        },
+      ],
+      { 'x-forwarded-for': '10.1.1.3' },
+    );
+    expect(impostor.status).toBe(201);
+    // The same answer as for anyone new: nothing says the mobile was known.
+    expect(Object.keys(impostor.json.data).sort()).toEqual([
+      'bookingToken',
+      'received',
+      'slots',
+    ]);
+    // The booked single-seat slot is not offered again.
+    expect(impostor.json.data.slots.map((s: Json) => s.start)).not.toContain(
+      new Date(state.slots[0].start).toISOString(),
+    );
+    const after = await database
+      .query()
+      .selectFrom('candidates')
+      .select([
+        'id',
+        'name',
+        'email',
+        'resumeFileId',
+        'consentAt',
+        'consentBy',
+        'retentionUntil',
+        'customFields',
+      ])
+      .where('id', '=', original.id)
+      .executeTakeFirstOrThrow();
+    expect(after).toEqual(original);
+    const applications = await database
+      .query()
+      .selectFrom('applications')
+      .select(['id', 'submitCount'])
+      .where('candidateId', '=', original.id)
+      .execute();
+    expect(applications.map((a) => Number(a.submitCount))).toEqual([1]);
+    // The recruiter sees the submission as its own candidate, flagged as a possible duplicate.
+    const list = await call(
+      'recruit01',
+      'GET',
+      `/candidates?postingId=${state.postingId}`,
+    );
+    const row = list.json.data.items.find((i: Json) => i.name === '冒名者');
+    expect(row).toBeTruthy();
+    const detail = await call('recruit01', 'GET', `/candidates/${row.id}`);
+    expect(detail.json.data.possibleDuplicates).toEqual([
+      expect.objectContaining({
+        id: original.id,
+        name: '周迪',
+        matchedBy: ['phone'],
+      }),
+    ]);
+    const zhou = await call(
+      'recruit01',
+      'GET',
+      `/candidates/${state.zhouApplication}`,
+    );
+    expect(
+      (zhou.json.data.possibleDuplicates as Json[]).map((d) => d.name),
+    ).toEqual(['冒名者']);
   });
 
   it('the page is rate-limited per address and asks for verification on the 11th application', async () => {

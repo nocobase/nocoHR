@@ -715,6 +715,14 @@ ${text.slice(0, 12_000)}`,
       const keys = new Set(template.checklist.map((c) => c.key));
       if (parsed.data.results?.some((r) => !keys.has(r.key)))
         throw new HrError('PRACTICAL_RESULT_UNKNOWN_ITEM', 400);
+      // S5: photos are added only through POST /records/:id/attachments, which stores them for
+      // this record; an edit may keep or remove them, never name another file.
+      if (
+        parsed.data.attachments?.some(
+          (fileId) => !record.attachments.includes(fileId),
+        )
+      )
+        throw new HrError('PRACTICAL_ATTACHMENT_INVALID', 400);
       if (parsed.data.witnessUserId) {
         const employee = await ctx.employee(record.employeeId);
         if (

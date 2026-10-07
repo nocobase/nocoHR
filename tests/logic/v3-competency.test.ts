@@ -693,7 +693,12 @@ describe('V3-08 new position: job description, candidates and 对标差距', () 
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       }),
     );
-    const upload = await raw('hr01', 'POST', '/api/hrFiles:uploadOne', data);
+    const upload = await raw(
+      'hr01',
+      'POST',
+      '/api/hrFiles:uploadOne?purpose=jobDescription',
+      data,
+    );
     expect(upload.status).toBeLessThan(300);
     const fileId = String(upload.json.data.record.id);
     expect(

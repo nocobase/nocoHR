@@ -1144,9 +1144,10 @@ export default class HrProvider extends ServiceProvider<Application> {
 
   private mailConfig(): MailConfig {
     const raw = this.app.config.get<Partial<MailConfig>>('businessMail') ?? {};
-    const fallback = (purpose: string) => ({
+    const fallback = (_purpose: string) => ({
       adapter: 'mock' as const,
-      address: `${purpose}@qiheng.test`,
+      // The section's defaults (server/config/business-mail.ts) decide the demo's addresses; none here.
+      address: '',
       imapHost: '',
       imapPort: 993,
       imapSecure: true,

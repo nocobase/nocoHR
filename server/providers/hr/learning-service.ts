@@ -17,6 +17,7 @@ import {
   type CollectionPolicies,
 } from './authorize.js';
 import { recordDraftOutcome } from './draft-snapshots.js';
+import { assertUsableHrFile } from './hr-files.js';
 import type { ActorContext } from './framework-service.js';
 import type { KnowledgeService } from './knowledge-service.js';
 import type { LearningRules } from './learning-settings.js';
@@ -272,7 +273,13 @@ export interface LearningService {
   lessonVideo(
     ctx: ActorContext,
     lessonId: string,
-  ): Promise<{ disk: string; key: string; mimeType: string; size: number }>;
+  ): Promise<{
+    disk: string;
+    key: string;
+    filename: string;
+    mimeType: string;
+    size: number;
+  }>;
   learningSummary(
     ctx: ActorContext,
     employeeId: string,
@@ -650,6 +657,48 @@ export function createLearningService(
       .execute();
     if (rows.length !== competencyIds.length)
       throw new HrError('COMPETENCY_NOT_FOUND', 404);
+  }
+
+  /**
+   * S3: a lesson takes only a video the caller uploaded for course content
+   * (purpose courseVideo, MP4), or one a lesson of this course already shows.
+   * Any other `hrFiles` id — a contract scan, a mail attachment, an HTML page
+   * declared as a video — is refused, so it can never be served to learners.
+   */
+  async function assertLessonVideos(
+    ctx: ActorContext,
+    courseId: string | null,
+    lessons: readonly LessonInput[] | undefined,
+  ): Promise<void> {
+    const fileIds = [
+      ...new Set(
+        (lessons ?? [])
+          .map((lesson) => lesson.videoFileId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (!fileIds.length) return;
+    const current = courseId
+      ? new Set(
+          (
+            await database
+              .query()
+              .selectFrom('lessons')
+              .select(['videoFileId'])
+              .where('courseId', '=', courseId)
+              .where('videoFileId', 'in', fileIds)
+              .execute()
+          ).map((row) => str(row.videoFileId)),
+        )
+      : new Set<string>();
+    for (const fileId of fileIds)
+      await assertUsableHrFile(database, {
+        fileId,
+        userId: ctx.userId,
+        purpose: 'courseVideo',
+        referencedHere: current.has(fileId),
+        code: 'LESSON_VIDEO_INVALID',
+      });
   }
 
   async function writeCourseContent(
@@ -1298,6 +1347,7 @@ export function createLearningService(
               (await ruleSet()).minWatchPercent,
             );
       if (competencyIds) await assertCompetencies(competencyIds);
+      await assertLessonVideos(ctx, existing ? id : null, lessons);
       if (
         sourceDocumentId &&
         !(await database
@@ -1385,6 +1435,7 @@ export function createLearningService(
       );
       if (lessons.length < 1) throw new HrError('COURSE_LESSONS_INVALID', 400);
       await assertCompetencies(competencyIds);
+      await assertLessonVideos(ctx, null, lessons);
       // A retried call returns the draft it already wrote instead of creating a second one.
       const existing = await database
         .query()
@@ -2125,14 +2176,16 @@ export function createLearningService(
       const file = await database
         .query()
         .selectFrom('hrFiles')
-        .select(['disk', 'key', 'mimeType', 'size'])
+        .select(['disk', 'key', 'filename', 'mimeType', 'size'])
         .where('id', '=', str(lesson.videoFileId))
         .executeTakeFirst();
       if (!file) throw new HrError('LESSON_NOT_FOUND', 404);
       return {
         disk: str(file.disk),
         key: str(file.key),
-        mimeType: str(file.mimeType) || 'video/mp4',
+        filename: str(file.filename) || 'video',
+        // The route serves only a video type; a stored file of any other type is not found.
+        mimeType: str(file.mimeType),
         size: Number(file.size) || 0,
       };
     },

@@ -715,12 +715,27 @@ export const talentApiRoutes: AppApiRouteContribution<Application> =
         search: c.req.query('search') || undefined,
         status: 'enabled',
       });
+      // For the link picker (?for=link): accounts the caller may not take over through
+      // linking and a password reset (root, or holding sets the caller does not) are marked.
+      const blocked =
+        c.req.query('for') === 'link' && allowed.effect !== 'deny'
+          ? await talent.unmanageableAccounts(
+              ctx,
+              page.items.map((u) => u.id),
+            )
+          : undefined;
       return c.json({
         data: page.items.map((u) => ({
           id: u.id,
           name: u.name,
           email: u.email,
           username: u.username ?? null,
+          ...(blocked
+            ? {
+                linkable: !blocked.has(u.id),
+                ...(blocked.has(u.id) ? { reason: blocked.get(u.id) } : {}),
+              }
+            : {}),
         })),
       });
     });

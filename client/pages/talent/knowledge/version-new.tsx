@@ -1,11 +1,11 @@
-import { useApiClient, useService } from '@nocobase/app-client';
-import { clientFileRepositoryManagerToken } from '@nocobase/app-plugin-file/client';
+import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useRef, useState, type ReactElement } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 
 import { RouteDialog } from '@/components/route-dialog';
 import { errorCode, errorMessage } from '@/components/talent/errors';
+import { uploadHrFile } from '@/components/talent/hr-file-upload';
 import type { KbDocument } from '@/components/talent/learning-types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -78,7 +78,6 @@ function VersionForm({
 }): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
-  const files = useService(clientFileRepositoryManagerToken);
   const navigate = useNavigate();
   const { document, reload } = context;
   const needsDocNo = !document.docNo;
@@ -107,10 +106,7 @@ function VersionForm({
     onSubmittingChange(true);
     setError(undefined);
     try {
-      const fileId = String(
-        (await files.repository('hrFiles').uploadOne({ file: file! })).record
-          .id,
-      );
+      const fileId = String((await uploadHrFile(api, file!, 'kbDocument')).id);
       const { data } = await api.request<{ data: KbDocument }>({
         path: `talent/kb/documents/${encodeURIComponent(document.id)}/versions`,
         method: 'POST',

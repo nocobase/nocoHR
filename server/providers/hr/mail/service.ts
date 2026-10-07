@@ -203,6 +203,24 @@ export function createMailService(deps: MailServiceDeps) {
     };
   }
 
+  /**
+   * The address a purpose's mail is recorded as sent from: its bound account's, else the configured address, which
+   * production leaves empty (server/config/business-mail.ts) rather than naming the demo's mailbox.
+   */
+  async function fromAddressOf(purpose: MailPurpose): Promise<string> {
+    const bound = await binding(purpose);
+    if (bound) {
+      const account = (
+        await deps
+          .mail()
+          .listAccounts(bound.ctx)
+          .catch(() => [])
+      ).find((a) => a.id === bound.accountId);
+      if (account?.address) return account.address.toLowerCase();
+    }
+    return mailboxConfig(purpose).address;
+  }
+
   /** Development, tests and the demo: each purpose gets a 本地文件邮箱 account of its own, once. */
   async function ensureLocalAccounts(): Promise<void> {
     if (!deps.localProvider || deps.production) return;
@@ -1085,7 +1103,7 @@ export function createMailService(deps: MailServiceDeps) {
           messageId: null,
           inReplyTo: null,
           threadKey: original.threadKey,
-          fromAddress: mailboxConfig(original.mailbox).address,
+          fromAddress: await fromAddressOf(original.mailbox),
           fromName: null,
           toAddresses: [original.from.address],
           ccAddresses: [],
@@ -1157,7 +1175,7 @@ export function createMailService(deps: MailServiceDeps) {
           messageId: null,
           inReplyTo: null,
           threadKey: thread ? str(thread.threadKey) : newThreadKey(),
-          fromAddress: mailboxConfig(input.purpose).address,
+          fromAddress: await fromAddressOf(input.purpose),
           fromName: null,
           toAddresses: [input.to.toLowerCase()],
           ccAddresses: [],
@@ -1373,7 +1391,7 @@ export function createMailService(deps: MailServiceDeps) {
             messageId,
             inReplyTo: null,
             threadKey,
-            fromAddress: mailboxConfig(input.purpose).address,
+            fromAddress: await fromAddressOf(input.purpose),
             fromName: settings.senderName || null,
             toAddresses: [input.to],
             ccAddresses: [],

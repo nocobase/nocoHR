@@ -1017,3 +1017,201 @@ describe('部门选择的范围', () => {
     expect(await scope('emp_njl_1')).toBeUndefined();
   });
 });
+
+// Runs last: it resets payroll01's password, which ends payroll01's sessions.
+describe('账号接管防护', () => {
+  async function authz() {
+    const { authorizationToken } =
+      await import('@nocobase/app-plugin-authorization/server');
+    return server.application.container.resolve(authorizationToken);
+  }
+  async function database() {
+    const { databaseManagerToken } = await import('@nocobase/db');
+    return server.application.container.resolve(databaseManagerToken);
+  }
+  /** A login account linked to no employee, holding only what `sets` names. */
+  async function plainUser(username: string, sets: string[] = []) {
+    const id = `user-${username}`;
+    const now = new Date();
+    await (
+      await database()
+    )
+      .query()
+      .insertInto('user')
+      .values({
+        id,
+        name: username,
+        username,
+        email: `${username}@example.test`,
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .execute();
+    for (const permissionSet of sets)
+      await (
+        await authz()
+      ).permissionSets.assign({
+        permissionSet,
+        subject: { type: 'user', id },
+      });
+    return id;
+  }
+  async function linkedUserOf(employeeId: string) {
+    const row = await (
+      await database()
+    )
+      .query()
+      .selectFrom('employees')
+      .select(['userId'])
+      .where('id', '=', employeeId)
+      .executeTakeFirstOrThrow();
+    return row.userId == null ? null : String(row.userId);
+  }
+
+  it('refuses to reset an account holding a set the HR administrator lacks, and a caller holding it may', async () => {
+    const refused = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-payroll01/reset-password',
+    );
+    expect(refused.status).toBe(403);
+    expect(refused.json.code).toBe('ACCOUNT_PRIVILEGED');
+    const missing = refused.json.details.permissionSets as string[];
+    expect(missing).toContain('hr.payroll');
+    expect(refused.json.data).toBeUndefined();
+    // hr01 given exactly those sets holds everything payroll01 holds.
+    const hr01 = await userIdOf('hr01');
+    const granted: string[] = [];
+    for (const permissionSet of missing) {
+      const assignment = await (
+        await authz()
+      ).permissionSets.assign({
+        permissionSet,
+        subject: { type: 'user', id: hr01 },
+      });
+      granted.push(String((assignment as { id: string }).id));
+    }
+    try {
+      const allowed = await call(
+        'hr01',
+        'POST',
+        '/employees/emp-payroll01/reset-password',
+      );
+      expect(allowed.status).toBe(200);
+      expect(allowed.json.data.login).toBe('payroll01');
+    } finally {
+      for (const id of granted) await (await authz()).permissionSets.revoke(id);
+    }
+  });
+
+  it('refuses to link a root account, marks it in the picker, and still links an ordinary user', async () => {
+    const root = await plainUser('takeover-root', ['root']);
+    const plain = await plainUser('takeover-plain');
+    const picker = await call(
+      'hr01',
+      'GET',
+      '/users?search=takeover-&for=link',
+    );
+    expect(picker.status).toBe(200);
+    const items = picker.json.data as Json[];
+    expect(items.find((u) => u.id === root)).toMatchObject({
+      linkable: false,
+      reason: 'ACCOUNT_PRIVILEGED_ROOT',
+    });
+    expect(items.find((u) => u.id === plain)).toMatchObject({
+      linkable: true,
+    });
+    // Other pickers are unchanged.
+    const other = await call('hr01', 'GET', '/users?search=takeover-');
+    expect((other.json.data as Json[]).every((u) => !('linkable' in u))).toBe(
+      true,
+    );
+
+    const refused = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-sunli/link-user',
+      {
+        userId: root,
+      },
+    );
+    expect(refused.status).toBe(403);
+    expect(refused.json.code).toBe('ACCOUNT_PRIVILEGED_ROOT');
+    expect(await linkedUserOf('emp-sunli')).toBeNull();
+
+    const linked = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-sunli/link-user',
+      {
+        userId: plain,
+      },
+    );
+    expect(linked.status).toBe(200);
+    expect(await linkedUserOf('emp-sunli')).toBe(plain);
+    const unlinked = await call(
+      'hr01',
+      'POST',
+      '/employees/emp-sunli/link-user',
+      { userId: null },
+    );
+    expect(unlinked.status).toBe(200);
+    expect(await linkedUserOf('emp-sunli')).toBeNull();
+  });
+});
+
+describe('按范围读写员工档案', () => {
+  it('an update outside the caller’s update scope is 404 and returns nothing of the record', async () => {
+    const { employeeResource, MANAGED_DEPARTMENTS_SCOPE } =
+      await import('../../server/providers/hr/authz-resources.ts');
+    const { authorizationToken } =
+      await import('@nocobase/app-plugin-authorization/server');
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const container = server.application.container;
+    const authz = container.resolve(authorizationToken);
+    const database = container.resolve(databaseManagerToken);
+    await authz.permissionSets.create({
+      key: 'test-managed-employee-editor',
+      title: 'Test managed employee editor',
+      grants: [
+        employeeResource.reference().grant({
+          update: { employees: MANAGED_DEPARTMENTS_SCOPE },
+        }),
+      ],
+    });
+    const assignment = await authz.permissionSets.assign({
+      permissionSet: 'test-managed-employee-editor',
+      subject: { type: 'user', id: await userIdOf('mgr_njl') },
+    });
+    try {
+      const outside = await call('mgr_njl', 'PATCH', '/employees/emp-hr01', {
+        workLocation: '越权写入',
+      });
+      expect(outside.status).toBe(404);
+      expect(outside.json.code).toBe('EMPLOYEE_NOT_FOUND');
+      expect(JSON.stringify(outside.json)).not.toMatch(/mobile|idNumber/u);
+      const stored = await database
+        .query()
+        .selectFrom('employees')
+        .select(['workLocation'])
+        .where('id', '=', 'emp-hr01')
+        .executeTakeFirstOrThrow();
+      expect(stored.workLocation).not.toBe('越权写入');
+
+      const inside = await call('mgr_njl', 'PATCH', '/employees/emp-liuyang', {
+        workLocation: '二号车间',
+      });
+      expect(inside.status).toBe(200);
+      expect(inside.json.data.workLocation).toBe('二号车间');
+      // The manager reads subordinates without their sensitive fields.
+      expect(inside.json.data.idNumber).toBeUndefined();
+      expect(inside.json.data.mobile).toBeUndefined();
+    } finally {
+      await authz.permissionSets.revoke(
+        String((assignment as { id: string }).id),
+      );
+      await authz.permissionSets.delete('test-managed-employee-editor');
+    }
+  });
+});

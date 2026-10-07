@@ -158,6 +158,22 @@ export default function CandidateDetail(): ReactElement {
                 </AlertDescription>
               </Alert>
             ) : null}
+            {/* 疑似重复: a careers-page submission never merges into an existing candidate. */}
+            {data.possibleDuplicates?.length ? (
+              <Alert>
+                <AlertDescription>
+                  {t('recruiting.candidates.possibleDuplicates', {
+                    names: data.possibleDuplicates
+                      .map((d) =>
+                        d.createdAt
+                          ? `${d.name} (${formatDateTime(d.createdAt)})`
+                          : d.name,
+                      )
+                      .join(', '),
+                  })}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {scheduling ? (
               <ScheduleCard
                 applicationId={applicationId}

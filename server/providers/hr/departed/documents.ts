@@ -47,6 +47,14 @@ export function fill(template: string, facts: Record<string, string>): string {
   );
 }
 
+/** The closing line: the company and the date, or the date alone where `talent.companyName` is unset (outside production). */
+function signOff(
+  facts: { readonly company: string; readonly today: string },
+  separator: string,
+): string {
+  return [facts.company, facts.today].filter(Boolean).join(separator);
+}
+
 function certificate(
   title: string,
   body: string,
@@ -57,7 +65,7 @@ function certificate(
     { kind: 'space' },
     { kind: 'text', text: body },
     { kind: 'space' },
-    { kind: 'text', text: `${facts.company}\n${facts.today}` },
+    { kind: 'text', text: signOff(facts, '\n') },
   ];
   return renderPdf(blocks, { title, footer: facts.company });
 }
@@ -111,7 +119,7 @@ export function incomeCertificate(
       ],
     },
     { kind: 'space' },
-    { kind: 'text', text: `${facts.company}\n${facts.today}` },
+    { kind: 'text', text: signOff(facts, '\n') },
   ];
   return renderPdf(blocks, {
     title: DOCUMENT_TITLES.incomeCertificate,
@@ -144,7 +152,7 @@ export function payslip(facts: PersonFacts, slip: PayslipFacts): Uint8Array {
       ],
     },
     { kind: 'space' },
-    { kind: 'muted', text: `${facts.company} · ${facts.today}` },
+    { kind: 'muted', text: signOff(facts, ' · ') },
   ];
   return renderPdf(blocks, {
     title: `${slip.month} ${DOCUMENT_TITLES.payslip}`,

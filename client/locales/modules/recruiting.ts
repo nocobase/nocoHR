@@ -418,6 +418,8 @@ export const recruitingEn = {
     empty: 'No applications yet.',
     knockoutUnmet: 'Knockout not met',
     submitCount: 'Submitted {{count}} times',
+    possibleDuplicates:
+      'Possible duplicate: {{names}} used the same mobile or email. A careers-page submission is kept as its own record; compare them before contacting.',
     profile: 'Parsed resume',
     education: 'Education',
     experiences: 'Experience',
@@ -662,7 +664,6 @@ export const recruitingEn = {
       'I agree to the processing of my personal information as described',
     verify: 'Please answer to continue: {{question}}',
     submitted: 'Application received. We will contact you soon.',
-    merged: 'We already had your application; it has been updated.',
     pickSlot: 'Pick an interview time',
     noSlots: 'No time is open right now; we will contact you.',
     booked: 'Your interview: {{time}}',
@@ -1158,6 +1159,8 @@ export const recruitingZh: typeof recruitingEn = {
     empty: '还没有投递。',
     knockoutUnmet: '门槛未满足',
     submitCount: '已投递 {{count}} 次',
+    possibleDuplicates:
+      '疑似重复：{{names}} 使用了相同的手机号或邮箱。招聘页投递不会覆盖已有候选人，请核对后再联系。',
     profile: '简历解析',
     education: '教育经历',
     experiences: '工作经历',
@@ -1387,7 +1390,6 @@ export const recruitingZh: typeof recruitingEn = {
     consent: '我同意按说明处理我的个人信息',
     verify: '请回答后继续：{{question}}',
     submitted: '投递成功，我们会尽快联系你。',
-    merged: '我们已有你的投递，已为你更新。',
     pickSlot: '选择面试时间',
     noSlots: '暂时没有可选时间，我们会联系你。',
     booked: '你的面试时间：{{time}}',

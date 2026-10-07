@@ -8,6 +8,7 @@ import {
 } from '@nocobase/app-server/router';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import type { Readable } from 'node:stream';
 
 import { HrError, isRecord } from '../../providers/hr/shared.js';
 import {
@@ -32,6 +33,52 @@ function contentDisposition(filename: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
+/** The most an open-ended range (`bytes=N-`) of a lesson video returns at once. */
+const VIDEO_CHUNK = 4 * 1024 * 1024;
+
+/**
+ * Bytes `start`..`end` (inclusive) of a stored file as a web stream, holding
+ * one chunk at a time: what comes before the range is skipped, and the source
+ * is closed once the range is sent or the client goes away.
+ */
+async function rangeStream(
+  source: Readable,
+  start: number,
+  end: number,
+): Promise<ReadableStream<Uint8Array>> {
+  const iterator = (source as AsyncIterable<Buffer>)[Symbol.asyncIterator]();
+  let offset = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      for (;;) {
+        if (offset > end) {
+          source.destroy();
+          controller.close();
+          return;
+        }
+        const next = await iterator.next();
+        if (next.done) {
+          controller.close();
+          return;
+        }
+        const chunk = next.value;
+        const from = offset;
+        offset += chunk.length;
+        if (offset <= start) continue;
+        const slice = chunk.subarray(
+          Math.max(start - from, 0),
+          Math.min(end + 1 - from, chunk.length),
+        );
+        controller.enqueue(new Uint8Array(slice));
+        return;
+      }
+    },
+    cancel() {
+      source.destroy();
+    },
+  });
+}
+
 /**
  * Knowledge and learning under `/api/talent`: the knowledge base and its gaps,
  * course management, learning assignments, and a learner's own study. Every
@@ -47,6 +94,19 @@ export const learningApiRoutes: AppApiRouteContribution<Application> =
     const paths = app.container.resolve(pathServiceToken);
     const sessions = app.container.resolve(sessionServiceToken);
     const practice = app.container.resolve(practiceServiceToken);
+    const videoStream = async (
+      file: { readonly disk: string; readonly key: string },
+      start: number,
+      end: number,
+    ) =>
+      rangeStream(
+        await app.container
+          .resolve(driveManagerToken)
+          .use(file.disk)
+          .getStream(file.key),
+        start,
+        end,
+      );
 
     const routes = new Hono<HrEnv>();
     for (const prefix of [
@@ -350,33 +410,49 @@ export const learningApiRoutes: AppApiRouteContribution<Application> =
       }),
     );
     // Streams a lesson video with byte ranges, so the player can seek within what was watched.
+    // Only a video is served, and never as a page: nosniff and a sandbox CSP keep a stored file
+    // from running in this origin. The drive has no ranged read, so the stream skips to the
+    // range and stops after it; an open-ended range is capped so a seek reads one chunk.
     routes.get('/learning/lessons/:id/video', async (c) => {
       const file = await learning.lessonVideo(actor(c), c.req.param('id'));
-      const bytes = new Uint8Array(
-        await app.container
-          .resolve(driveManagerToken)
-          .use(file.disk)
-          .getBytes(file.key),
-      );
-      const size = bytes.byteLength;
-      const range = /^bytes=(\d*)-(\d*)$/u.exec(c.req.header('range') ?? '');
+      const mimeType = file.mimeType.toLowerCase();
+      if (!/^video\/[a-z0-9.+-]+$/u.test(mimeType))
+        throw new HrError('LESSON_NOT_FOUND', 404);
+      const size = file.size;
       const headers: Record<string, string> = {
-        'content-type': file.mimeType,
+        'content-type': mimeType,
         'accept-ranges': 'bytes',
         'cache-control': 'private, max-age=3600',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "sandbox; default-src 'none'",
+        'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
       };
-      if (!range) return new Response(bytes, { headers });
+      const header = c.req.header('range');
+      const range = /^bytes=(\d*)-(\d*)$/u.exec(header ?? '');
+      if (header && (!range || (!range[1] && !range[2])))
+        return new Response(null, {
+          status: 416,
+          headers: { ...headers, 'content-range': `bytes */${size}` },
+        });
+      if (!range)
+        return new Response(await videoStream(file, 0, size - 1), {
+          headers: { ...headers, 'content-length': String(size) },
+        });
       const start = range[1]
         ? Number(range[1])
-        : Math.max(size - Number(range[2] || 0), 0);
-      const end =
-        range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+        : Math.max(size - Number(range[2]), 0);
+      const end = range[1]
+        ? Math.min(
+            range[2] ? Number(range[2]) : start + VIDEO_CHUNK - 1,
+            size - 1,
+          )
+        : size - 1;
       if (start >= size || start > end)
         return new Response(null, {
           status: 416,
           headers: { ...headers, 'content-range': `bytes */${size}` },
         });
-      return new Response(bytes.slice(start, end + 1), {
+      return new Response(await videoStream(file, start, end), {
         status: 206,
         headers: {
           ...headers,

@@ -133,8 +133,11 @@ export const aiEntryRoutes: AppApiRouteContribution<Application> =
         ),
       });
     });
-    // 模拟渠道（仅开发环境）: the mock chat page sends a message as a directory member.
-    if (process.env.NODE_ENV !== 'production')
+    // 模拟渠道（仅开发环境）: all three mock routes act as any IM-bound member, so none of them may exist in
+    // production. They used to sit under a brace-less `if` that guarded only the first one. Production is
+    // `NODE_ENV=production`, which a compiled build defaults to (server/production-default.ts).
+    if (process.env.NODE_ENV !== 'production') {
+      // The mock chat page sends a message as a directory member.
       routes.post('/dev/im-mock', async (c) => {
         await authorizeAction(
           actor(c).authz,
@@ -151,36 +154,47 @@ export const aiEntryRoutes: AppApiRouteContribution<Application> =
           ),
         });
       });
-    // What the bot sent to one member: pushed messages and cards, each card in its latest state.
-    routes.get('/dev/im-mock/outbox', async (c) => {
-      await authorizeAction(actor(c).authz, 'talent.aiAssistant', 'configure');
-      const senderId = (c.req.query('senderId') ?? '').slice(0, 128);
-      if (!senderId) throw new HrError('INVALID_INPUT', 400);
-      const channel = app.container.resolve(imChannelToken);
-      return c.json({
-        data: {
-          messages: (channel.mockOutbox?.(senderId) ?? [])
-            .filter((m) => m.type === 'text')
-            .slice(-50)
-            .reverse(),
-          cards: await channel.cards.listFor('feishu', senderId),
-        },
+      // What the bot sent to one member: pushed messages and cards, each card in its latest state.
+      routes.get('/dev/im-mock/outbox', async (c) => {
+        await authorizeAction(
+          actor(c).authz,
+          'talent.aiAssistant',
+          'configure',
+        );
+        const senderId = (c.req.query('senderId') ?? '').slice(0, 128);
+        if (!senderId) throw new HrError('INVALID_INPUT', 400);
+        const channel = app.container.resolve(imChannelToken);
+        return c.json({
+          data: {
+            messages: (channel.mockOutbox?.(senderId) ?? [])
+              .filter((m) => m.type === 'text')
+              .slice(-50)
+              .reverse(),
+            cards: await channel.cards.listFor('feishu', senderId),
+          },
+        });
       });
-    });
-    // A button press as the member, through the same handler a signed callback reaches.
-    routes.post('/dev/im-mock/card', async (c) => {
-      await authorizeAction(actor(c).authz, 'talent.aiAssistant', 'configure');
-      const body = await readJson(c);
-      return c.json({
-        data: await app.container.resolve(imChannelToken).cards.handleCallback(
-          parseCardAction('feishu', {
-            ...(isRecord(body) ? body : {}),
-            operatorId: isRecord(body) ? body.senderId : undefined,
-            callbackId: mockId(),
-          }),
-        ),
+      // A button press as the member, through the same handler a signed callback reaches.
+      routes.post('/dev/im-mock/card', async (c) => {
+        await authorizeAction(
+          actor(c).authz,
+          'talent.aiAssistant',
+          'configure',
+        );
+        const body = await readJson(c);
+        return c.json({
+          data: await app.container
+            .resolve(imChannelToken)
+            .cards.handleCallback(
+              parseCardAction('feishu', {
+                ...(isRecord(body) ? body : {}),
+                operatorId: isRecord(body) ? body.senderId : undefined,
+                callbackId: mockId(),
+              }),
+            ),
+        });
       });
-    });
+    }
 
     // Public: the office suite's message callbacks, accepted only with a valid signature.
     const callbacks = new Hono<HrEnv>();

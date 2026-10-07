@@ -1027,3 +1027,40 @@ describe('招聘衔接 (V2-07)', () => {
     await call('hr01', 'POST', `/actions/${action.json.data.id}/cancel`, {});
   });
 });
+
+describe('花名册导出的敏感列', () => {
+  it('fills mobile and ID number only for the rows inside the caller’s viewSensitive scope', async () => {
+    const { databaseManagerToken } = await import('@nocobase/db');
+    const database = server.application.container.resolve(databaseManagerToken);
+    const own = await database
+      .query()
+      .selectFrom('employees')
+      .select(['employeeNo'])
+      .where('userId', '=', await userIdOf('mgr_njl'))
+      .executeTakeFirst();
+    const sheet = await workbookFrom(await raw('mgr_njl', '/employees/export'));
+    const mobile = sheet[0]!.indexOf('手机');
+    const idNumber = sheet[0]!.indexOf('证件号');
+    expect(mobile).toBeGreaterThan(0);
+    expect(idNumber).toBeGreaterThan(0);
+    const others = sheet
+      .slice(1)
+      .filter((row) => row[0] !== String(own?.employeeNo ?? ''));
+    // 陈 manages a workshop: the export lists their people, without their contact or ID data.
+    expect(others.length).toBeGreaterThan(1);
+    for (const row of others) {
+      expect(row[mobile]).toBe('');
+      expect(row[idNumber]).toBe('');
+    }
+
+    const hr = await workbookFrom(await raw('hr01', '/employees/export'));
+    const hrMobile = hr[0]!.indexOf('手机');
+    const hrId = hr[0]!.indexOf('证件号');
+    const filled = hr.slice(1).filter((row) => row[hrMobile] !== '');
+    expect(filled.length).toBeGreaterThan(others.length);
+    // The ID number stays masked in the file.
+    expect(
+      filled.some((row) => /^\d{3}\*+\w{4}$/u.test(String(row[hrId]))),
+    ).toBe(true);
+  });
+});

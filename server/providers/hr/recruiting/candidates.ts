@@ -352,8 +352,41 @@ export function createCandidateService(
       .select(['id', 'status', 'startDate'])
       .where('applicationId', '=', application.id)
       .execute();
+    // 疑似重复: other candidates with the same mobile or email (a careers-page submission
+    // never merges into them), for the recruiter who may see contact data.
+    const duplicates =
+      a.recruiter && a.contact && (candidate.phone || candidate.email)
+        ? await database
+            .query()
+            .selectFrom('candidates')
+            .select(['id', 'name', 'phone', 'email', 'createdAt'])
+            .where('anonymizedAt', 'is', null)
+            .where('id', '!=', candidate.id)
+            .where((eb) =>
+              eb.or([
+                ...(candidate.phone ? [eb('phone', '=', candidate.phone)] : []),
+                ...(candidate.email ? [eb('email', '=', candidate.email)] : []),
+              ]),
+            )
+            .orderBy('createdAt', 'asc')
+            .limit(20)
+            .execute()
+        : [];
     return {
       ...application,
+      possibleDuplicates: duplicates.map((d) => ({
+        id: str(d.id),
+        name: str(d.name),
+        createdAt: iso(d.createdAt),
+        matchedBy: [
+          ...(candidate.phone && d.phone === candidate.phone
+            ? ['phone' as const]
+            : []),
+          ...(candidate.email && d.email === candidate.email
+            ? ['email' as const]
+            : []),
+        ],
+      })),
       // Messages are the recruiter's; a hiring manager sees the stage, not the correspondence.
       messages: a.recruiter ? application.messages : [],
       candidate: {
@@ -470,6 +503,12 @@ export function createCandidateService(
      * One application from the careers page or an import. Deduplicates by
      * mobile or email; answers whether the application is new (only a new
      * one is screened).
+     *
+     * `separate` (the anonymous careers page): a submitter is not proven to
+     * own the mobile or email they type, so a match never touches the existing
+     * candidate's resume, fields, consent or retention. The submission becomes
+     * a candidate of its own, and the recruiter sees the other record as a
+     * possible duplicate (`possibleDuplicates` in the application view).
      */
     async intake(input: {
       posting: PostingView;
@@ -484,6 +523,7 @@ export function createCandidateService(
       knockoutAnswers: { key: string; answer: string }[];
       customFields: Record<string, unknown>;
       by: string;
+      separate?: boolean;
     }) {
       const settings = await ctx.settings();
       const phone = normalizePhone(input.phone);
@@ -506,8 +546,11 @@ export function createCandidateService(
             ...(email ? [eb('email', '=', email)] : []),
           ]),
         )
+        // The earliest record is the person's: later separate submissions never become the merge target.
+        .orderBy('createdAt', 'asc')
         .execute();
-      const existing = matches[0] ? presentCandidate(matches[0]) : undefined;
+      const matched = matches[0] ? presentCandidate(matches[0]) : undefined;
+      const existing = input.separate ? undefined : matched;
       let resumeFileId: string | null = null;
       if (input.file)
         resumeFileId = await ctx.storeFile({
@@ -645,6 +688,7 @@ export function createCandidateService(
         applicationId,
         created: true,
         merged: Boolean(existing),
+        possibleDuplicate: Boolean(input.separate && matched),
       };
     },
 

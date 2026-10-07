@@ -1,3 +1,6 @@
+// First, so a compiled build runs as production before anything reads NODE_ENV (see the module).
+import './production-default.js';
+
 import path from 'node:path';
 
 import {

@@ -74,7 +74,6 @@ describe('PublicJobPage', () => {
           return Promise.resolve({
             data: {
               received: true,
-              merged: false,
               bookingToken: 'booking-token-aaaaaaaaaaaaaaaaaaaa',
               slots: [
                 {

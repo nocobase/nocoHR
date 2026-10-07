@@ -279,6 +279,12 @@ Combine it with `--target` when the archive is for another machine:
 pnpm build --target linux-x64 --tar
 ```
 
+The `build` script runs `nocobase build` with `pnpm_config_strict_dep_builds=false`. The build installs `dist/` from a `pnpm-workspace.yaml` that `@nocobase/app-cli` generates with its own `allowBuilds` list, which leaves out this application's `protobufjs: false` (the Feishu SDK brings protobufjs in), and pnpm 11 then stops with `ERR_PNPM_IGNORED_BUILDS`. No build hook runs between writing that file and installing, so the variable turns the undecided install script into a warning; the drivers in the generated list still build. The Dockerfile runs the same script. Afterwards the application's `afterBuild` hook (`cli/build-hooks/`) writes the application's decisions into `dist/pnpm-workspace.yaml`, before `--tar` packs it, so `pnpm install --prod` inside a deployed `dist/` works without the variable. Drop both once `@nocobase/app-cli` carries the application's `allowBuilds` into `dist/`.
+
+#### Running the build
+
+`node dist/server/standalone.js` and `node dist/cli/index.js` run as production even when `NODE_ENV` is unset (`server/production-default.ts`), so a service manager that starts the entry directly gets no demo data, secure cookies and none of the development-only routes. Set `NODE_ENV` in the process environment to run a build otherwise; a value written only in a deployment `.env` file does not count. Before the first start, set `talent.companyName` (the employer printed on certificates and documents): production refuses to start without it, and `config check` says so. Public self-registration is off (`auth.emailAndPassword.disableSignUp`).
+
 #### Building a Docker image
 
 `Dockerfile` builds this application from its sources into a production image. From the project root:

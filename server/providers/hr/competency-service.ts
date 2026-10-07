@@ -37,6 +37,7 @@ import {
   type ActorContext,
   type CompetencyLevel,
 } from './framework-service.js';
+import { assertUsableHrFile } from './hr-files.js';
 import type { JobEvent } from './job-events.js';
 import type { Platform } from './platform.js';
 import { bool } from './platform.js';
@@ -1210,6 +1211,21 @@ export function createCompetencyService(deps: CompetencyServiceDeps) {
       const fileId = requireString(input.fileId, 'JD_FILE_REQUIRED', {
         max: 64,
       })!;
+      const position = await database
+        .query()
+        .selectFrom('positions')
+        .select(['jdFileId'])
+        .where('id', '=', positionId)
+        .executeTakeFirst();
+      // S5: only a file the caller uploaded as a job description, or the position's own.
+      await assertUsableHrFile(database, {
+        fileId,
+        userId: ctx.userId,
+        purpose: 'jobDescription',
+        referencedHere:
+          position?.jdFileId != null && str(position.jdFileId) === fileId,
+        code: 'JD_FILE_REQUIRED',
+      });
       const file = await database
         .query()
         .selectFrom('hrFiles')

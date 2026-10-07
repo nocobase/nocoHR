@@ -186,6 +186,13 @@ export interface ApplicationDetail {
   id: string;
   stage: string;
   submitCount: number;
+  /** Other candidates with the same mobile or email (shown to the recruiter with contact access). */
+  possibleDuplicates?: {
+    id: string;
+    name: string;
+    createdAt: string | null;
+    matchedBy: ('phone' | 'email')[];
+  }[];
   knockoutUnmet: boolean;
   knockoutAnswers: {
     key: string;
@@ -404,7 +411,6 @@ export interface PublicSlot {
 }
 
 export interface ApplyResult {
-  merged: boolean;
   bookingToken: string | null;
   slots: PublicSlot[];
 }

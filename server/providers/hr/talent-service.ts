@@ -320,6 +320,14 @@ export interface TalentService extends FrameworkService {
     ctx: ActorContext,
     id: string,
   ): Promise<{ password: string; login: string }>;
+  /**
+   * The accounts among `userIds` the caller may not link or reset (root, or
+   * holding a permission set the caller does not hold), with the reason code.
+   */
+  unmanageableAccounts(
+    ctx: ActorContext,
+    userIds: readonly string[],
+  ): Promise<Map<string, string>>;
   markLeave(
     ctx: ActorContext,
     id: string,
@@ -537,6 +545,66 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
     return (
       (await tryAuthorizeAction(ctx.authz, resource, action)) !== undefined
     );
+  }
+
+  /**
+   * Why the caller may not take over this login account through linking or a
+   * password reset, or `undefined` when they may. Resetting a password and
+   * then signing in hands the caller everything the account holds, so an
+   * account with unrestricted access (root) is never managed here, and one
+   * holding a permission set the caller does not hold themselves (payroll,
+   * settings administration, …) is refused: an HR administrator must not gain
+   * access they were never given. Such accounts are managed on the Users page.
+   * Reads go through the default connection: call this outside a transaction.
+   */
+  async function callerPermissionSets(
+    ctx: ActorContext,
+  ): Promise<ReadonlySet<string>> {
+    const sets = await authz.permissionSets.getEffective({
+      principal: ctx.authz.identity.principal,
+      subjects: ctx.authz.identity.subjects,
+    });
+    return new Set(sets.map((set) => set.key));
+  }
+
+  function isUnrestrictedSet(key: string): boolean {
+    return Boolean(authz.permissionSets.protection(key)?.unrestricted);
+  }
+
+  async function accountTakeoverRisk(
+    ctx: ActorContext,
+    userId: string,
+    callerSets?: ReadonlySet<string>,
+  ): Promise<{ code: string; permissionSets: string[] } | undefined> {
+    const principal = { type: 'user', id: userId } as const;
+    const target = await authz.permissionSets.getEffective({
+      principal,
+      subjects: [
+        { type: 'authenticated', id: '*' },
+        ...(await authz.subjects.resolveFor(principal)),
+      ],
+    });
+    if (target.some((set) => isUnrestrictedSet(set.key)))
+      return { code: 'ACCOUNT_PRIVILEGED_ROOT', permissionSets: [] };
+    const held = callerSets ?? (await callerPermissionSets(ctx));
+    if ([...held].some(isUnrestrictedSet)) return undefined;
+    const missing = [
+      ...new Set(target.map((set) => set.key).filter((key) => !held.has(key))),
+    ].sort();
+    return missing.length
+      ? { code: 'ACCOUNT_PRIVILEGED', permissionSets: missing }
+      : undefined;
+  }
+
+  async function assertAccountManageable(
+    ctx: ActorContext,
+    userId: string,
+  ): Promise<void> {
+    const risk = await accountTakeoverRisk(ctx, userId);
+    if (risk)
+      throw new HrError(risk.code, 403, {
+        permissionSets: risk.permissionSets,
+      });
   }
 
   async function userName(
@@ -1699,6 +1767,13 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         master === 'external' && Boolean(bound?.externalUserId);
       const { record, affected } = await database.transaction(
         async (connection) => {
+          const repo = connection
+            .repository('employees')
+            .withPolicy(policyOf(policies, 'employees'));
+          // Scoped first: an employee outside the caller's update scope is not found,
+          // and nothing below runs for it.
+          if (!(await repo.findOne({ filter: { id } })))
+            throw new HrError('EMPLOYEE_NOT_FOUND', 404);
           const currentRow = await connection.query
             .selectFrom('employees')
             .select([...BASE_FIELDS])
@@ -1736,18 +1811,13 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
             status: _s,
             ...rest
           } = values;
-          const repo = connection
-            .repository('employees')
-            .withPolicy(policyOf(policies, 'employees'));
           if (Object.keys(rest).length)
             await repo.updateOne({
               filter: { id },
               values: { ...rest, updatedAt: new Date() },
             });
           if (isRecord(input) && input.customFields !== undefined) {
-            // The scoped read proves the caller may update this record before the added fields are written.
-            if (!(await repo.findOne({ filter: { id } })))
-              throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+            // The scoped read at the start proved the caller may update this record.
             await writeCustom(
               customDefinitions,
               connection,
@@ -1762,40 +1832,37 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
                 ? values.positionSince
                 : undefined,
           });
-          const updated = await connection.query
-            .selectFrom('employees')
-            .select([...BASE_FIELDS])
-            .where('id', '=', id)
-            .executeTakeFirst();
-          return {
-            record: toEmployee(updated as Record<string, unknown>),
-            affected,
-          };
+          // Through the policy: only the columns the update grant may read, never the sensitive ones.
+          const updated = await repo.findOne({ filter: { id } });
+          if (!updated) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+          return { record: toEmployee(updated), affected };
         },
       );
       await notifyUsers(affected);
-      const visible = await readEmployee(ctx, id);
+      // The caller's own view of the record; without view, only what the update grant reads.
+      const visible = (await can(ctx, EMPLOYEE, 'view'))
+        ? await readEmployee(ctx, id)
+        : undefined;
       return visible ?? record;
     },
 
     async linkUser(ctx, id, userId) {
       const policies = await authorizeAction(ctx.authz, EMPLOYEE, 'linkUser');
+      // Linking an account the caller may not reset would hand it to them through the reset that follows.
+      if (userId) await assertAccountManageable(ctx, userId);
       const affected = await database.transaction(async (connection) => {
-        const row = await connection.query
-          .selectFrom('employees')
-          .select([...BASE_FIELDS])
-          .where('id', '=', id)
-          .executeTakeFirst();
+        const repository = connection
+          .repository('employees')
+          .withPolicy(policyOf(policies, 'employees'));
+        // Scoped: an employee outside the caller's linkUser scope is not found.
+        const row = await repository.findOne({ filter: { id } });
         if (!row) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
         const current = toEmployee(row);
         if (userId) await assertReferences({ userId }, connection, id);
-        await connection
-          .repository('employees')
-          .withPolicy(policyOf(policies, 'employees'))
-          .updateOne({
-            filter: { id },
-            values: { userId, updatedAt: new Date() },
-          });
+        await repository.updateOne({
+          filter: { id },
+          values: { userId, updatedAt: new Date() },
+        });
         const affected: string[] = [];
         if (current.userId && current.userId !== userId) {
           await organization.deactivateMemberships(current.userId, connection);
@@ -1817,12 +1884,18 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
 
     async resetLoginPassword(ctx, id) {
       // Same permission as linking the account: HR who manage employee accounts.
-      await authorizeAction(ctx.authz, EMPLOYEE, 'linkUser');
-      const employee = await readEmployee(ctx, id);
-      if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+      const policies = await authorizeAction(ctx.authz, EMPLOYEE, 'linkUser');
+      // Read under the linkUser scope, not the (possibly wider) view scope.
+      const row = await database
+        .repository('employees')
+        .withPolicy(policyOf(policies, 'employees'))
+        .findOne({ filter: { id } });
+      if (!row) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+      const employee = toEmployee(row);
       if (!employee.userId) throw new HrError('EMPLOYEE_NO_ACCOUNT', 409);
       if (employee.userId === ctx.userId)
         throw new HrError('RESET_OWN_PASSWORD', 409);
+      await assertAccountManageable(ctx, employee.userId);
       const user = await users.get(employee.userId);
       if (!user) throw new HrError('EMPLOYEE_NO_ACCOUNT', 409);
       // Readable and unambiguous: no 0/O or 1/l/I.
@@ -1840,6 +1913,17 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         password,
         login: String(record.username || record.email || ''),
       };
+    },
+
+    async unmanageableAccounts(ctx, userIds) {
+      const result = new Map<string, string>();
+      if (!userIds.length) return result;
+      const held = await callerPermissionSets(ctx);
+      for (const userId of new Set(userIds)) {
+        const risk = await accountTakeoverRisk(ctx, userId, held);
+        if (risk) result.set(userId, risk.code);
+      }
+      return result;
     },
 
     async markLeave(ctx, id, input) {
@@ -2684,7 +2768,14 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
 
     async exportRoster(ctx, filters, locale) {
       const employees = await listWithPolicy(ctx, 'export', filters);
-      const sensitive = await can(ctx, EMPLOYEE, 'viewSensitive');
+      // viewSensitive may be scoped (the person's own record for every employee), so the
+      // sensitive columns are read through its policy and filled only for rows inside it.
+      const sensitivePolicies = await tryAuthorizeAction(
+        ctx.authz,
+        EMPLOYEE,
+        'viewSensitive',
+      );
+      const sensitive = sensitivePolicies !== undefined;
       const exported = await customFieldsFor(ctx, 'export');
       const exportedValues = exported.length
         ? await storedCustomFields(employees.map((e) => e.id))
@@ -2696,20 +2787,19 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         ),
         positionTitles(employees.map((e) => e.positionId)),
       ]);
-      const sensitiveRows = sensitive
-        ? await database
-            .query()
-            .selectFrom('employees')
-            .select(['id', 'mobile', 'idNumber'])
-            .where(
-              'id',
-              'in',
-              employees.length ? employees.map((e) => e.id) : ['-'],
-            )
-            .execute()
-        : [];
+      const sensitiveRows =
+        sensitivePolicies && employees.length
+          ? // Every row the sensitive scope reaches (only its own columns); exported rows outside it stay blank.
+            await database
+              .repository('employees')
+              .withPolicy(policyOf(sensitivePolicies, 'employees'))
+              .findMany()
+          : [];
       const sensitiveById = new Map(
-        sensitiveRows.map((r) => [String(r.id), r]),
+        (sensitiveRows as Record<string, unknown>[]).map((r) => [
+          String(r.id),
+          r,
+        ]),
       );
       const zh = locale.startsWith('zh');
       const header = zh

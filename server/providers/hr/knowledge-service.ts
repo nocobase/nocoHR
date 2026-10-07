@@ -25,6 +25,7 @@ import {
   type DocumentSection,
 } from './document-text.js';
 import type { ActorContext } from './framework-service.js';
+import { assertUsableHrFile } from './hr-files.js';
 import { bool, json, type Platform } from './platform.js';
 import {
   HrError,
@@ -574,6 +575,8 @@ export function createKnowledgeService(
 
   async function assertReferences(
     values: Partial<DocumentInput>,
+    ctx: ActorContext,
+    currentFileId?: unknown,
   ): Promise<void> {
     const query = database.query();
     const check = async (
@@ -593,6 +596,15 @@ export function createKnowledgeService(
     await check('departments', values.departmentIds, 'DEPARTMENT_NOT_FOUND');
     await check('positions', values.positionIds, 'POSITION_NOT_FOUND');
     if (values.fileId) {
+      // S5: only a file the caller uploaded for the knowledge base, or the document's own file.
+      await assertUsableHrFile(database, {
+        fileId: values.fileId,
+        userId: ctx.userId,
+        purpose: 'kbDocument',
+        referencedHere:
+          currentFileId != null && str(currentFileId) === values.fileId,
+        code: 'DOCUMENT_FILE_REQUIRED',
+      });
       const file = await query
         .selectFrom('hrFiles')
         .select(['id', 'filename', 'mimeType'])
@@ -757,7 +769,7 @@ export function createKnowledgeService(
     async createDocument(ctx, input) {
       const policies = await authorizeAction(ctx.authz, DOCUMENT, 'manage');
       const values = parseInput(input, false) as DocumentInput;
-      await assertReferences(values);
+      await assertReferences(values, ctx);
       // 版本规则: one enabled, current version per number; (docNo, version) unique.
       if (values.docNo) {
         const sameNo = await database
@@ -827,13 +839,13 @@ export function createKnowledgeService(
     async updateDocument(ctx, id, input) {
       const policies = await authorizeAction(ctx.authz, DOCUMENT, 'manage');
       const values = parseInput(input, true);
-      await assertReferences(values);
       const repo = database
         .repository('kbDocuments')
         .withPolicy(policyOf(policies, 'kbDocuments'));
       const current = (await repo.findOne({ filter: { id } })) as
         Record<string, unknown> | undefined;
       if (!current) throw new HrError('DOCUMENT_NOT_FOUND', 404);
+      await assertReferences(values, ctx, current.fileId);
       const fileChanged =
         values.fileId !== undefined && values.fileId !== current.fileId;
       await database.transaction(async (connection) => {
@@ -1303,7 +1315,7 @@ export function createKnowledgeService(
         .where('supersededById', 'is', null)
         .executeTakeFirst();
       if (pending) throw new HrError('DOCUMENT_VERSION_PENDING', 409);
-      await assertReferences({ fileId });
+      await assertReferences({ fileId }, ctx);
       const links = await linksOf([id]);
       const newIdValue = newId();
       const stamp = new Date();

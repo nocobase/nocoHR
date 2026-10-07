@@ -1,3 +1,6 @@
+// First: the CLI loads this module without the standalone entry, so it sets the production default too.
+import './production-default.js';
+
 import defaultConfigs from './config/index.js';
 import {
   defineAppRuntime,

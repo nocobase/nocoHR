@@ -3583,6 +3583,10 @@ const enUS = {
       EMPLOYEE_NO_ACCOUNT:
         'This employee has no sign-in account yet. Link one first.',
       RESET_OWN_PASSWORD: 'Change your own password from your account menu.',
+      ACCOUNT_PRIVILEGED:
+        'This account holds permissions you do not have. An administrator manages it on the Users page.',
+      ACCOUNT_PRIVILEGED_ROOT:
+        'This is a system administrator account. It cannot be linked or reset here.',
       EMPLOYEE_NOT_LINKED: 'Your account is not linked to an employee record.',
       EMPLOYEE_NO_TAKEN: 'This employee number is already used.',
       EMPLOYEE_POSITION_NOT_FOUND:
@@ -3643,6 +3647,15 @@ const enUS = {
       PROFILE_CHANGE_NOT_PENDING: 'This request was already reviewed.',
       PROFILE_CHANGE_PENDING: 'You already have a request under review.',
       PROFILE_FILE_NOT_FOUND: 'The uploaded file was not found.',
+      CONTRACT_FILE_NOT_FOUND:
+        'The scan was not found. Upload it again from this contract.',
+      HR_FILE_PURPOSE_REQUIRED: 'The upload does not say what the file is for.',
+      HR_FILE_TYPE_INVALID:
+        'This file type is not accepted here. Check the format and try again.',
+      LESSON_VIDEO_INVALID:
+        'The video was not found. Upload an MP4 file from this lesson again.',
+      PRACTICAL_ATTACHMENT_INVALID:
+        'Photos can only be added by taking or uploading them on this record.',
       IMPORT_DEPARTMENT_NOT_FOUND: 'Department code not found',
       IMPORT_DEPARTMENT_REQUIRED: 'Department code missing',
       IMPORT_EMPLOYEE_NO_DUPLICATE: 'Employee number repeated in the file',
@@ -3970,6 +3983,7 @@ const enUS = {
       noUser: 'No login user is linked yet.',
       searchUser: 'Search users',
       searchUserPlaceholder: 'Name, username or email',
+      notLinkable: '{{name}} (managed by an administrator)',
       user: 'User',
       unlink: 'Unlink',
       linked: 'User linked',

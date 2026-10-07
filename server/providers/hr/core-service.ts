@@ -36,6 +36,7 @@ import {
   today,
   str,
 } from './shared.js';
+import { assertUsableHrFile } from './hr-files.js';
 import { closeWorkItems } from './work-item-store.js';
 import {
   EMPLOYMENT_TYPES,
@@ -1718,6 +1719,23 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
     return true;
   }
 
+  /** Whether an employee attachment or a contract already holds the file. */
+  async function fileReferenced(fileId: string): Promise<boolean> {
+    const query = database.query();
+    return Boolean(
+      (await query
+        .selectFrom('employeeAttachments')
+        .select(['id'])
+        .where('fileId', '=', fileId)
+        .executeTakeFirst()) ??
+      (await query
+        .selectFrom('employmentContracts')
+        .select(['id'])
+        .where('fileId', '=', fileId)
+        .executeTakeFirst()),
+    );
+  }
+
   const service: HrCoreService = {
     async listActions(ctx, view) {
       const policies = await authorizeAction(ctx.authz, ACTION, 'view');
@@ -2410,6 +2428,20 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       const repo = database
         .repository('employmentContracts')
         .withPolicy(policyOf(policies, 'employmentContracts'));
+      const current = (await repo.findOne({ filter: { id } })) as
+        Record<string, unknown> | undefined;
+      if (!current) throw new HrError('CONTRACT_NOT_FOUND', 404);
+      // S5: only a scan the caller uploaded for a contract that no other record holds.
+      if (fileId)
+        await assertUsableHrFile(database, {
+          fileId,
+          userId: ctx.userId,
+          purpose: 'contract',
+          referencedHere:
+            current.fileId != null && str(current.fileId) === fileId,
+          referencedElsewhere: () => fileReferenced(fileId),
+          code: 'CONTRACT_FILE_NOT_FOUND',
+        });
       const { record } = await repo.updateOne({
         filter: { id },
         values: { fileId, updatedAt: now() },
@@ -2485,13 +2517,25 @@ export function createHrCoreService(deps: HrCoreServiceDeps): HrCoreService {
       if (!(await loadEmployee(employeeId)))
         throw new HrError('EMPLOYEE_NOT_FOUND', 404);
       if (kind === 'attachments') {
-        const file = await database
-          .query()
-          .selectFrom('hrFiles')
-          .select(['id'])
-          .where('id', '=', String(values.fileId))
-          .executeTakeFirst();
-        if (!file) throw new HrError('PROFILE_FILE_NOT_FOUND', 404);
+        const fileId = String(values.fileId);
+        const current = id
+          ? await database
+              .query()
+              .selectFrom('employeeAttachments')
+              .select(['fileId'])
+              .where('id', '=', id)
+              .where('employeeId', '=', employeeId)
+              .executeTakeFirst()
+          : undefined;
+        // S5: only a file the caller uploaded as an attachment that no other record holds.
+        await assertUsableHrFile(database, {
+          fileId,
+          userId: ctx.userId,
+          purpose: 'profileAttachment',
+          referencedHere: current != null && str(current.fileId) === fileId,
+          referencedElsewhere: () => fileReferenced(fileId),
+          code: 'PROFILE_FILE_NOT_FOUND',
+        });
       }
       const repo = database
         .repository(collection)

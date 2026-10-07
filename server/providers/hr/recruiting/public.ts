@@ -322,15 +322,17 @@ export function createPublicService(
         })),
         customFields,
         by: 'candidate',
+        // Anonymous: never overwrite a candidate whose mobile or email was typed in.
+        separate: true,
       });
       let bookingToken: string | null = null;
       if (posting.selfBookingEnabled)
         bookingToken = await deps.candidates.issueBookingToken(
           outcome.applicationId,
         );
+      // Nothing here says whether the mobile or email was already known.
       return {
         received: true,
-        merged: !outcome.created,
         bookingToken,
         slots: bookingToken ? await openSlots(posting) : [],
       };

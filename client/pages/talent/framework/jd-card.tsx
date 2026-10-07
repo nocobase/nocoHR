@@ -1,10 +1,10 @@
-import { useApiClient, useService } from '@nocobase/app-client';
-import { clientFileRepositoryManagerToken } from '@nocobase/app-plugin-file/client';
+import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { FileTextIcon, UploadIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { errorMessage } from '@/components/talent/errors';
+import { uploadHrFile } from '@/components/talent/hr-file-upload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -41,7 +41,6 @@ export function JobDescriptionCard({
 }): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
-  const files = useService(clientFileRepositoryManagerToken);
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -58,7 +57,7 @@ export function JobDescriptionCard({
     setBusy(true);
     try {
       const fileId = String(
-        (await files.repository('hrFiles').uploadOne({ file })).record.id,
+        (await uploadHrFile(api, file, 'jobDescription')).id,
       );
       await api.request({
         path: `talent/competency/positions/${encodeURIComponent(position.id)}/jd`,

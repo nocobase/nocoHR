@@ -31,12 +31,35 @@ auth:
   emailAndPassword:
     enabled: true
     autoSignIn: false
+    # Accounts come from the initial administrator, the directory sync and HR's 开通账号; nobody registers
+    # themselves. Set to false only to reopen the public /register page.
+    disableSignUp: true
   session:
     storeSessionInDatabase: true
 
 session:
   # Use the same generated value as auth.secret, or another unique secret.
   secret: replace-with-a-unique-secret
+
+# The employer named on certificates, offer letters, departed employees' documents and the mails that carry them.
+# Required in production: the server refuses to start, and `pnpm nocobase config check` fails, while it is empty.
+# Left unset outside production it is the demo company (启衡精密科技), or empty with HR_DEMO_SEED=false.
+# Also settable with TALENT_COMPANY_NAME.
+# talent:
+#   companyName: 示例科技有限公司
+
+# The address of each business mailbox purpose (对账 / 招聘 / 审核 / 人事邮箱). A purpose is off until 设置 / 邮件
+# binds a Mail plugin account to it; the address is shown there and recorded on drafts until then. Unset in
+# production, and <purpose>@qiheng.test in the demo. Also settable with BUSINESS_MAIL_<PURPOSE>_ADDRESS.
+# businessMail:
+#   billing:
+#     address: billing@example.com
+#   recruiting:
+#     address: jobs@example.com
+#   audit:
+#     address: audit@example.com
+#   hr:
+#     address: hr@example.com
 
 notification:
   channels:

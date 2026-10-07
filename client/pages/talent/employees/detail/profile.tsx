@@ -1,5 +1,4 @@
-import { useApiClient, useService, resolveAppUrl } from '@nocobase/app-client';
-import { clientFileRepositoryManagerToken } from '@nocobase/app-plugin-file/client';
+import { useApiClient, resolveAppUrl } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { FileIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
@@ -12,6 +11,7 @@ import {
 } from '@/components/talent/growth';
 import { LearningRecordsCard } from '@/components/talent/learning-records';
 import { errorMessage } from '@/components/talent/errors';
+import { uploadHrFile } from '@/components/talent/hr-file-upload';
 import { CustomFieldValues } from '@/components/talent/custom-fields';
 import {
   useCustomFieldDefinitions,
@@ -348,13 +348,12 @@ function Attachments({
 }): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
-  const files = useService(clientFileRepositoryManagerToken);
   const [category, setCategory] = useState<string>('other');
   const [uploading, setUploading] = useState(false);
   async function upload(file: File): Promise<void> {
     setUploading(true);
     try {
-      const { record } = await files.repository('hrFiles').uploadOne({ file });
+      const record = await uploadHrFile(api, file, 'profileAttachment');
       await api.request({
         path: `talent/employees/${encodeURIComponent(employeeId)}/profile/attachments`,
         method: 'POST',

@@ -1,9 +1,9 @@
-import { useApiClient, useService } from '@nocobase/app-client';
-import { clientFileRepositoryManagerToken } from '@nocobase/app-plugin-file/client';
+import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useState, type FormEvent, type ReactElement } from 'react';
 
 import { errorMessage } from '@/components/talent/errors';
+import { uploadHrFile } from '@/components/talent/hr-file-upload';
 import type { KbDocument } from '@/components/talent/learning-types';
 import { MultiCheckList } from '@/components/talent/multi-check';
 import { useLookups } from '@/components/talent/use-lookups';
@@ -62,7 +62,6 @@ export function DocumentDialog({
 }): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
-  const files = useService(clientFileRepositoryManagerToken);
   const lookups = useLookups();
   const competencies = useRemote<{ competencies: CompetencyOption[] }>(
     open ? 'talent/competencies' : null,
@@ -129,9 +128,7 @@ export function DocumentDialog({
     try {
       let fileId: string | undefined;
       if (file)
-        fileId = String(
-          (await files.repository('hrFiles').uploadOne({ file })).record.id,
-        );
+        fileId = String((await uploadHrFile(api, file, 'kbDocument')).id);
       const json = {
         title: title.trim(),
         category,

@@ -1,5 +1,4 @@
-import { resolveAppUrl, useApiClient, useService } from '@nocobase/app-client';
-import { clientFileRepositoryManagerToken } from '@nocobase/app-plugin-file/client';
+import { resolveAppUrl, useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import {
   FileIcon,
@@ -16,6 +15,7 @@ import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { ContractTable } from '@/components/talent/contract-table';
 import { errorMessage } from '@/components/talent/errors';
+import { uploadHrFile } from '@/components/talent/hr-file-upload';
 import { BlockSkeleton, LoadError } from '@/components/talent/states';
 import type { Contract, EmployeeListItem } from '@/components/talent/types';
 import { useRemote } from '@/components/talent/use-remote';
@@ -74,7 +74,6 @@ const QUICK = ['', 'expiring', 'overdue'] as const;
 export default function ContractsPage(): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
-  const files = useService(clientFileRepositoryManagerToken);
   const [params, setParams] = useSearchParams();
   const quick = (QUICK as readonly string[]).includes(params.get('quick') ?? '')
     ? (params.get('quick') ?? '')
@@ -120,7 +119,7 @@ export default function ContractsPage(): ReactElement {
     const contract = uploadTargetRef.current;
     if (!contract) return;
     try {
-      const { record } = await files.repository('hrFiles').uploadOne({ file });
+      const record = await uploadHrFile(api, file, 'contract');
       await api.request({
         path: `talent/contracts/${encodeURIComponent(contract.id)}/file`,
         method: 'POST',

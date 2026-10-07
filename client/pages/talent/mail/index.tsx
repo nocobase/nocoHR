@@ -226,7 +226,8 @@ export default function MailPage(): ReactElement {
               </ToggleGroup>
             ) : (
               <p className='text-sm font-medium'>
-                {t(`mail.purposes.${mailbox.purpose}`)} · {mailbox.address}
+                {t(`mail.purposes.${mailbox.purpose}`)}
+                {mailbox.address ? ` · ${mailbox.address}` : null}
               </p>
             )}
             <ToggleGroup

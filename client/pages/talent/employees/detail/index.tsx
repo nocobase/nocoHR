@@ -438,8 +438,18 @@ function LinkUserDialog({
   const api = useApiClient();
   const [search, setSearch] = useState('');
   const users = useRemote<
-    { id: string; name: string; email: string; username: string | null }[]
-  >(open ? 'talent/users' : null, { search: search || undefined });
+    {
+      id: string;
+      name: string;
+      email: string;
+      username: string | null;
+      /** False for an account HR may not take over: root, or one holding sets the caller lacks. */
+      linkable?: boolean;
+    }[]
+  >(open ? 'talent/users' : null, {
+    search: search || undefined,
+    for: 'link',
+  });
   const [userId, setUserId] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
@@ -513,8 +523,16 @@ function LinkUserDialog({
                 {t('talent.common.choose')}
               </NativeSelectOption>
               {(users.data ?? []).map((u) => (
-                <NativeSelectOption key={u.id} value={u.id}>
-                  {u.name} · {u.username ?? u.email}
+                <NativeSelectOption
+                  key={u.id}
+                  value={u.id}
+                  disabled={u.linkable === false && u.id !== userId}
+                >
+                  {u.linkable === false
+                    ? t('talent.detail.notLinkable', {
+                        name: `${u.name} · ${u.username ?? u.email}`,
+                      })
+                    : `${u.name} · ${u.username ?? u.email}`}
                 </NativeSelectOption>
               ))}
             </NativeSelect>

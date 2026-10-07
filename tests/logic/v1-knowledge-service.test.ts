@@ -154,8 +154,12 @@ async function userIdOf(username: string): Promise<string> {
   return String(me.json.user?.id);
 }
 
-/** Writes a text file to the drive and its hrFiles row; answers the file id. */
-async function textFile(name: string, text: string): Promise<string> {
+/** Writes a text file to the drive and its hrFiles row, as uploaded by `uploader` for the knowledge base; answers the file id. */
+async function textFile(
+  name: string,
+  text: string,
+  uploader = 'hr01',
+): Promise<string> {
   const { driveManagerToken } = await import('@nocobase/app-server/drive');
   const { databaseManagerToken } = await import('@nocobase/db');
   const container = server.application.container;
@@ -183,6 +187,8 @@ async function textFile(name: string, text: string): Promise<string> {
       size: text.length,
       createdAt: now,
       updatedAt: now,
+      purpose: 'kbDocument',
+      uploadedByUserId: await userIdOf(uploader),
     })
     .execute();
   return id;
@@ -267,7 +273,11 @@ describe('document numbers and conflicts', () => {
   });
 
   it('closes the conflict when the owner uploads V1.1', async () => {
-    const fileId = await textFile('wi-pr-0101-v1.1.md', SCHEDULE_V11);
+    const fileId = await textFile(
+      'wi-pr-0101-v1.1.md',
+      SCHEDULE_V11,
+      'mgr_njl',
+    );
     const version = await call(
       'mgr_njl',
       'POST',

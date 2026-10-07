@@ -151,11 +151,7 @@ export default function PublicJobPage(): ReactElement {
         </section>
       ) : result ? (
         <section className='space-y-3'>
-          {bubble(
-            result.merged
-              ? t('recruiting.public.merged')
-              : t('recruiting.public.submitted'),
-          )}
+          {bubble(t('recruiting.public.submitted'))}
           {result.bookingToken && !booked ? (
             <div className='space-y-2'>
               <p className='text-sm font-medium'>

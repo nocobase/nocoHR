@@ -90,7 +90,8 @@ const mailboxDefault = {
 
 export const MAIL_SETTINGS_DEFAULTS: MailSettings = {
   channel: 'system-email',
-  senderName: '启衡精密人力资源部',
+  // Neutral for every installation; the 启衡精密 demo writes its own through the gated seed 202610160102.
+  senderName: '人力资源部',
   redirectTo: '',
   pollMinutes: 5,
   allowedAttachmentTypes: ['xlsx', 'xls', 'csv', 'pdf', 'jpg', 'png', 'docx'],

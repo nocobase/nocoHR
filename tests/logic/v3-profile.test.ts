@@ -185,7 +185,11 @@ function addWorkingDays(from: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-async function textFile(name: string, text: string): Promise<string> {
+async function textFile(
+  name: string,
+  text: string,
+  uploader = 'hr01',
+): Promise<string> {
   const { driveManagerToken } = await import('@nocobase/app-server/drive');
   const container = server.application.container;
   const key = `test/${Date.now()}-${name}`;
@@ -213,6 +217,8 @@ async function textFile(name: string, text: string): Promise<string> {
       size: text.length,
       createdAt: now,
       updatedAt: now,
+      purpose: 'kbDocument',
+      uploadedByUserId: await userId(uploader),
     })
     .execute();
   return id;
@@ -1050,7 +1056,11 @@ describe('V3-11 version revisions and change training', () => {
     const v41 = DEMO_UPLOAD_MATERIALS.find((m) =>
       m.filename.includes('WI-MC-0231'),
     )!;
-    const fileId = await textFile('wi-mc-0231-v4.1.md', v41.content);
+    const fileId = await textFile(
+      'wi-mc-0231-v4.1.md',
+      v41.content,
+      'trainer01',
+    );
     const version = await call(
       'trainer01',
       'POST',
