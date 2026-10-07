@@ -16,6 +16,7 @@ import type { ServiceContainer } from '@nocobase/service-provider';
 import { z } from 'zod';
 
 import { AIUnavailableError, type AIRunner } from './ai-runner.js';
+import { guardedWording } from './ai-text-guard.js';
 import { authorizeAction, scopeForUser } from './authorize.js';
 import type {
   AutomationRunContext,
@@ -190,19 +191,20 @@ export function createAutomationTasks(
     return data;
   }
 
-  /** The AI's wording, or the rule-based text when no model is available. */
+  /**
+   * The AI's wording, or the rule-based text when no model is available. A reply that describes the
+   * instructions instead of following them (describesFormat) is asked for once more, then replaced by the
+   * rule-based text, so it never reaches a person.
+   */
   async function worded(
     run: AutomationRunContext,
     compose: () => Promise<string>,
     fallback: () => string,
   ): Promise<string> {
-    try {
-      return await compose();
-    } catch (error) {
-      if (!(error instanceof AIUnavailableError)) throw error;
-      run.markFallback();
-      return fallback();
-    }
+    return guardedWording(compose, fallback, {
+      unavailable: (error) => error instanceof AIUnavailableError,
+      onFallback: () => run.markFallback(),
+    });
   }
 
   // ---------- 体系顾问 ----------

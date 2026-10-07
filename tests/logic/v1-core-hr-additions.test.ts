@@ -667,6 +667,32 @@ describe('用工合规检查', () => {
     expect((await call('mgr_njl', 'GET', '/compliance')).status).toBe(403);
   });
 
+  it('shows the template wording for a stored note that only describes the format', async () => {
+    const list = await call('hr01', 'GET', '/compliance');
+    const chen = list.json.data.find((i: Json) => i.kind === 'probationLimit');
+    const db = server.application.container.resolve(databaseManagerToken);
+    await db
+      .query()
+      .updateTable('complianceIssues')
+      .set({
+        aiNote:
+          '已按要求输出不超过150字的HR合规提示，含事实、法条依据《劳动合同法》第十九条，并以指定句子结尾，未给法律结论。',
+      })
+      .where('id', '=', chen.id)
+      .execute();
+    const again = await call('hr01', 'GET', '/compliance');
+    const note = again.json.data.find((i: Json) => i.id === chen.id).note;
+    expect(note).not.toContain('已按要求');
+    expect(note).toContain('陈晨');
+    expect(note).toContain('提示，不是法律意见，请 HR 核对。');
+    await db
+      .query()
+      .updateTable('complianceIssues')
+      .set({ aiNote: chen.aiNote })
+      .where('id', '=', chen.id)
+      .execute();
+  });
+
   it('closes 郭凡的提示 once he has a contract', async () => {
     const contract = await call('hr01', 'POST', '/contracts', {
       employeeId: 'emp-guofan',

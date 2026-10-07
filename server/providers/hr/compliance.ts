@@ -17,6 +17,7 @@
  */
 import type { DatabaseManager } from '@nocobase/db';
 
+import { describesFormat } from './ai-text-guard.js';
 import type { ActorContext } from './framework-service.js';
 import type { PersonnelSettings } from './personnel-settings.js';
 import {
@@ -348,7 +349,11 @@ export function createComplianceService(deps: {
     };
     return {
       ...issue,
-      note: issue.aiNote ?? complianceFallback({ ...issue, note: '' }),
+      // A note stored before describesFormat existed may describe the instructions instead of the issue.
+      note:
+        issue.aiNote && !describesFormat(issue.aiNote)
+          ? issue.aiNote
+          : complianceFallback({ ...issue, note: '' }),
     };
   }
 

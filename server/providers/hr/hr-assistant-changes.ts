@@ -27,6 +27,8 @@ import {
 import type { Platform } from './platform.js';
 import { describeWorkItems } from './work-item-store.js';
 
+const COMPLIANCE_DISCLAIMER = '提示，不是法律意见，请 HR 核对。';
+
 /** A change checklist's totals, given to the HR assistant so it does not count by itself. */
 export function checklistCounts(items: readonly { status: string }[]) {
   return {
@@ -248,6 +250,14 @@ export function createHrAssistantChanges(deps: {
     return { output: { checklistId, items: checklist.items.length } };
   }
 
+  /** A compliance tip always ends with the disclaimer, whatever the model left out. */
+  function withDisclaimer(note: string): string {
+    const text = note.trim();
+    return text.includes(COMPLIANCE_DISCLAIMER)
+      ? text
+      : `${text.replace(/[。.\s]*$/u, '')}。${COMPLIANCE_DISCLAIMER}`;
+  }
+
   async function complianceCheck(
     run: AutomationRunContext,
     employeeId?: string,
@@ -264,7 +274,7 @@ export function createHrAssistantChanges(deps: {
               run,
               'hrAssistant',
               '用工合规检查',
-              `请把下面这条劳动合同合规问题写成给 HR 的一段提示（不超过 150 字）：说明事实、依据的法条（${COMPLIANCE_ARTICLES[issue.kind]}）和建议 HR 核对的事项；最后一句必须是“提示，不是法律意见，请 HR 核对。”；不要给法律结论。数据：${JSON.stringify(
+              `请把下面这条劳动合同合规问题写成给 HR 的一段提示（不超过 150 字）：说明事实、依据的法条（${COMPLIANCE_ARTICLES[issue.kind]}）和建议 HR 核对的事项；最后一句必须是“${COMPLIANCE_DISCLAIMER}”；不要给法律结论。数据：${JSON.stringify(
                 { kind: issue.kind, name: issue.employeeName, ...issue.detail },
               )}`,
               z.object({ note: z.string().min(1).max(400) }),
@@ -272,12 +282,15 @@ export function createHrAssistantChanges(deps: {
           ).note,
         () => complianceFallback(issue),
       );
-      await deps.compliance().saveNote(issue.id, note);
+      await deps.compliance().saveNote(issue.id, withDisclaimer(note));
       await platform.notify({
         key: `compliance:${issue.id}`,
         userIds: [run.owner.userId],
         message: 'hrCompliance',
-        params: { name: issue.employeeName, text: note.slice(0, 600) },
+        params: {
+          name: issue.employeeName,
+          text: withDisclaimer(note).slice(0, 600),
+        },
         path: `/talent/compliance?employeeId=${encodeURIComponent(issue.employeeId)}`,
       });
     }
