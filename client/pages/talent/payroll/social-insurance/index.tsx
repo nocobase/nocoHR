@@ -13,6 +13,7 @@ import { useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
+import { OpeningImportButton } from '@/components/talent/payroll-opening-import';
 import { downloadFile } from '@/components/talent/download';
 import { PayrollStatus } from '@/components/talent/payroll-shared';
 import { useMoney, usePayrollError } from '@/components/talent/payroll-hooks';
@@ -248,97 +249,106 @@ function EnrolmentsTab(): ReactElement {
     (e) => e.pendingAction !== 'stop' || e.status === 'pending',
   );
   return (
-    <div className='overflow-x-auto rounded-lg border'>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t('payroll.common.employeeNo')}</TableHead>
-            <TableHead>{t('payroll.common.name')}</TableHead>
-            <TableHead>{t('payroll.insurance.city')}</TableHead>
-            <TableHead className='text-right'>
-              {t('payroll.insurance.socialBase')}
-            </TableHead>
-            <TableHead className='text-right'>
-              {t('payroll.insurance.housingFundBase')}
-            </TableHead>
-            <TableHead>{t('payroll.insurance.period')}</TableHead>
-            <TableHead>{t('payroll.cycles.status')}</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell>{e.employeeNo}</TableCell>
-              <TableCell>{e.employeeName}</TableCell>
-              <TableCell>{e.planCity}</TableCell>
-              {editing?.id === e.id ? (
-                <>
-                  <TableCell>
-                    <Input
-                      aria-label={t('payroll.insurance.socialBase')}
-                      value={editing.socialBase}
-                      onChange={(ev) =>
-                        setEditing({ ...editing, socialBase: ev.target.value })
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      aria-label={t('payroll.insurance.housingFundBase')}
-                      value={editing.housingFundBase}
-                      onChange={(ev) =>
-                        setEditing({
-                          ...editing,
-                          housingFundBase: ev.target.value,
-                        })
-                      }
-                    />
-                  </TableCell>
-                </>
-              ) : (
-                <>
-                  <TableCell className='text-right tabular-nums'>
-                    {money(e.socialBase)}
-                  </TableCell>
-                  <TableCell className='text-right tabular-nums'>
-                    {money(e.housingFundBase)}
-                  </TableCell>
-                </>
-              )}
-              <TableCell>
-                {e.startMonth} ~ {e.endMonth ?? t('payroll.insurance.open')}
-              </TableCell>
-              <TableCell>
-                <PayrollStatus value={e.status} />
-              </TableCell>
-              <TableCell className='text-right'>
-                {e.status === 'active' ? (
-                  editing?.id === e.id ? (
-                    <Button size='sm' onClick={() => void save()}>
-                      {t('payroll.common.save')}
-                    </Button>
-                  ) : (
-                    <Button
-                      size='sm'
-                      variant='ghost'
-                      onClick={() =>
-                        setEditing({
-                          id: e.id,
-                          socialBase: String(e.socialBase),
-                          housingFundBase: String(e.housingFundBase),
-                        })
-                      }
-                    >
-                      {t('payroll.common.edit')}
-                    </Button>
-                  )
-                ) : null}
-              </TableCell>
+    <div className='space-y-4'>
+      {/* 上线准备: 导入参保 (talent.socialInsurance import). */}
+      <div className='flex justify-end'>
+        <OpeningImportButton kind='enrolments' onImported={data.reload} />
+      </div>
+      <div className='overflow-x-auto rounded-lg border'>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('payroll.common.employeeNo')}</TableHead>
+              <TableHead>{t('payroll.common.name')}</TableHead>
+              <TableHead>{t('payroll.insurance.city')}</TableHead>
+              <TableHead className='text-right'>
+                {t('payroll.insurance.socialBase')}
+              </TableHead>
+              <TableHead className='text-right'>
+                {t('payroll.insurance.housingFundBase')}
+              </TableHead>
+              <TableHead>{t('payroll.insurance.period')}</TableHead>
+              <TableHead>{t('payroll.cycles.status')}</TableHead>
+              <TableHead />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.map((e) => (
+              <TableRow key={e.id}>
+                <TableCell>{e.employeeNo}</TableCell>
+                <TableCell>{e.employeeName}</TableCell>
+                <TableCell>{e.planCity}</TableCell>
+                {editing?.id === e.id ? (
+                  <>
+                    <TableCell>
+                      <Input
+                        aria-label={t('payroll.insurance.socialBase')}
+                        value={editing.socialBase}
+                        onChange={(ev) =>
+                          setEditing({
+                            ...editing,
+                            socialBase: ev.target.value,
+                          })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        aria-label={t('payroll.insurance.housingFundBase')}
+                        value={editing.housingFundBase}
+                        onChange={(ev) =>
+                          setEditing({
+                            ...editing,
+                            housingFundBase: ev.target.value,
+                          })
+                        }
+                      />
+                    </TableCell>
+                  </>
+                ) : (
+                  <>
+                    <TableCell className='text-right tabular-nums'>
+                      {money(e.socialBase)}
+                    </TableCell>
+                    <TableCell className='text-right tabular-nums'>
+                      {money(e.housingFundBase)}
+                    </TableCell>
+                  </>
+                )}
+                <TableCell>
+                  {e.startMonth} ~ {e.endMonth ?? t('payroll.insurance.open')}
+                </TableCell>
+                <TableCell>
+                  <PayrollStatus value={e.status} />
+                </TableCell>
+                <TableCell className='text-right'>
+                  {e.status === 'active' ? (
+                    editing?.id === e.id ? (
+                      <Button size='sm' onClick={() => void save()}>
+                        {t('payroll.common.save')}
+                      </Button>
+                    ) : (
+                      <Button
+                        size='sm'
+                        variant='ghost'
+                        onClick={() =>
+                          setEditing({
+                            id: e.id,
+                            socialBase: String(e.socialBase),
+                            housingFundBase: String(e.housingFundBase),
+                          })
+                        }
+                      >
+                        {t('payroll.common.edit')}
+                      </Button>
+                    )
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
@@ -521,6 +531,10 @@ function DeductionsTab(): ReactElement {
   ];
   return (
     <div className='space-y-4'>
+      {/* 上线准备: 导入专项附加扣除 (talent.socialInsurance import). */}
+      <div className='flex justify-end'>
+        <OpeningImportButton kind='deductions' onImported={list.reload} />
+      </div>
       <div className='grid gap-3 sm:grid-cols-5'>
         <Field>
           <FieldLabel htmlFor='ded-employee'>

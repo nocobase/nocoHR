@@ -12,6 +12,7 @@ import { createCycleService } from './cycles.js';
 import { createPayrollEventHandler } from './events.js';
 import { createInsuranceService } from './insurance.js';
 import { createMyPayslipService } from './my-payslips.js';
+import { createOpeningImportService } from './opening-imports.js';
 import { createSalaryService } from './salaries.js';
 import { createStructureService } from './structures.js';
 import { createPayrollTasks } from './tasks.js';
@@ -31,6 +32,8 @@ export function createPayrollServices(
   const anomalies = createAnomalyCheck(ctx, cycles);
   const bills = createVendorBillService(ctx);
   const mine = createMyPayslipService(ctx);
+  // 上线准备: the opening-data importers (薪资档案, 参保, 专项附加扣除, 个税累计期初).
+  const openings = createOpeningImportService(ctx, structures);
   const assistant = createPayrollAssistant({
     ctx,
     cycles,
@@ -48,6 +51,7 @@ export function createPayrollServices(
     anomalies,
     bills,
     mine,
+    openings,
     assistant,
     onJobEvent: createPayrollEventHandler(ctx, insurance),
     runTask: createPayrollTasks(ctx, insurance),

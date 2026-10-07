@@ -169,6 +169,19 @@ export const leaveResource = defineCompositeResource(
           )
           .grant('configuration', settings),
       )
+      // 初始数据导入: 期初余额 from Excel, each written as a 期初导入 adjustment (hr.admin, seed 202610270101).
+      .action('importBalances', (a) =>
+        a
+          .title(label('dataImport.authz.importBalances'))
+          .grant('types', types)
+          .grant('employees', employees)
+          .grant(
+            'balances',
+            balances
+              .create(LEAVE_BALANCE_FIELDS)
+              .update(['adjustments', 'updatedAt']),
+          ),
+      )
       .action('request', (a) =>
         a
           .title(label('attendance.leave.request'))

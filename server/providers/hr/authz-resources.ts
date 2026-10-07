@@ -273,6 +273,8 @@ const POSITION_FIELDS = [
   'sortOrder',
   // 界面追加字段 (202610210001): the framework service hides sensitive ones from readers.
   'customFields',
+  // 初始数据导入 (202610270001): the department the position belongs to.
+  'departmentId',
   'createdAt',
   'updatedAt',
 ] as const;
@@ -350,6 +352,23 @@ export const frameworkResource = defineCompositeResource(
           .grant(
             'positionRequirements',
             requirementData.update(['reviewStatus', 'updatedAt']).delete(),
+          ),
+      )
+      // 初始数据导入: positions (and the job families they name) from Excel (hr.admin, seed 202610270101).
+      .action('import', (a) =>
+        a
+          .title(label('authz.employee.import'))
+          .grant(
+            'jobFamilies',
+            jobFamilyData
+              .create([...JOB_FAMILY_FIELDS])
+              .update([...JOB_FAMILY_FIELDS]),
+          )
+          .grant(
+            'positions',
+            positionData
+              .create([...POSITION_FIELDS])
+              .update([...POSITION_FIELDS]),
           ),
       ),
 );
@@ -674,6 +693,17 @@ export const contractResource = defineCompositeResource(
       .action('manage', (a) =>
         a
           .title(label('authz.actions.manage'))
+          .grant(
+            'employmentContracts',
+            contractData
+              .create([...CONTRACT_FIELDS])
+              .update([...CONTRACT_FIELDS]),
+          ),
+      )
+      // 初始数据导入: contracts and their history from Excel (hr.admin, seed 202610270101).
+      .action('import', (a) =>
+        a
+          .title(label('authz.employee.import'))
           .grant(
             'employmentContracts',
             contractData

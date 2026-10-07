@@ -46,6 +46,8 @@ export interface Position {
   aiDraftedAt: string | null;
   /** The employee import that created this position; null when created by hand. */
   importBatchId: string | null;
+  /** 初始数据导入 (202610270001): the department the position belongs to; null or absent when shared. */
+  departmentId?: string | null;
   /** V3-08 岗位说明书: the uploaded file (an `hrFiles` row), its name, extracted text and extraction state. */
   jdFileId: string | null;
   jdFilename: string | null;
@@ -237,6 +239,7 @@ export function toPosition(row: Record<string, unknown>): Position {
           ? row.aiDraftedAt.toISOString()
           : str(row.aiDraftedAt),
     importBatchId: row.importBatchId == null ? null : str(row.importBatchId),
+    departmentId: row.departmentId == null ? null : str(row.departmentId),
     jdFileId: row.jdFileId == null ? null : str(row.jdFileId),
     jdFilename: row.jdFilename == null ? null : str(row.jdFilename),
     jdText: row.jdText == null ? null : str(row.jdText),

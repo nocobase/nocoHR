@@ -112,6 +112,9 @@ export interface Enrolment {
   pendingAction: 'start' | 'stop' | null;
   changeLog: { at: string; by: string | null; summary: string }[];
   sourceEventId: string | null;
+  /** 上线准备: the personal account numbers (imported with the enrolment). */
+  socialAccountNo: string | null;
+  housingFundAccountNo: string | null;
   updatedAt: string | null;
 }
 
@@ -147,6 +150,10 @@ export function toEnrolment(row: Record<string, unknown>): Enrolment {
       : null,
     changeLog: json(row.changeLog, []),
     sourceEventId: row.sourceEventId ? str(row.sourceEventId) : null,
+    socialAccountNo: row.socialAccountNo ? str(row.socialAccountNo) : null,
+    housingFundAccountNo: row.housingFundAccountNo
+      ? str(row.housingFundAccountNo)
+      : null,
     updatedAt: iso(row.updatedAt),
   };
 }

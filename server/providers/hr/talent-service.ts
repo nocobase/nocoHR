@@ -330,6 +330,17 @@ export interface TalentService extends FrameworkService {
     ctx: ActorContext,
     userIds: readonly string[],
   ): Promise<Map<string, string>>;
+  /**
+   * 上线准备 · 激活链接: why this login account may not be activated through a
+   * link, or `undefined`. With `ctx` it is the HR caller's own rule
+   * (`unmanageableAccounts`); with `null` (the employee opening the link)
+   * there is no caller, so root, payroll and any settings or administer
+   * grant all refuse: privileged accounts are set up on the Users page.
+   */
+  activationRisk(
+    ctx: ActorContext | null,
+    userId: string,
+  ): Promise<string | undefined>;
   markLeave(
     ctx: ActorContext,
     id: string,
@@ -1989,6 +2000,16 @@ export function createTalentService(deps: TalentServiceDeps): TalentService {
         if (risk) result.set(userId, risk.code);
       }
       return result;
+    },
+
+    async activationRisk(ctx, userId) {
+      if (ctx) return (await accountTakeoverRisk(ctx, userId))?.code;
+      // No caller: nothing the account holds is "also held by the caller".
+      const nobody = {
+        userId: '',
+        authz: { can: async () => false },
+      } as unknown as ActorContext;
+      return (await accountTakeoverRisk(nobody, userId, false))?.code;
     },
 
     async markLeave(ctx, id, input) {

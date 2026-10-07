@@ -35,6 +35,7 @@ import { createImChannel } from './im-channel.js';
 import { createAttendanceSettingsService } from './attendance-settings.js';
 import { attendanceSettingsResource } from './attendance-settings-resource.js';
 import { createLeaveService } from './leave-service.js';
+import { createDataImportService } from './data-import/index.js';
 import { createLeaveRequestService } from './leave-request-service.js';
 import { leaveResource } from './leave-resources.js';
 import { scheduleResource } from './schedule-resources.js';
@@ -211,6 +212,7 @@ import {
   personnelSettingsToken,
   attendanceSettingsToken,
   leaveServiceToken,
+  dataImportServiceToken,
   leaveRequestServiceToken,
   scheduleServiceToken,
   attendanceEngineToken,
@@ -252,6 +254,26 @@ export default class HrProvider extends ServiceProvider<Application> {
     this.app.container.singleton(leaveServiceToken, () => {
       const platform = this.app.container.resolve(platformToken);
       return createLeaveService(platform.database, platform.currentDate);
+    });
+    // 初始数据导入 (上线准备): the Excel importers of departments, positions, contracts and opening leave balances.
+    this.app.container.singleton(dataImportServiceToken, () => {
+      const platform = this.app.container.resolve(platformToken);
+      return createDataImportService({
+        database: platform.database,
+        organization: () =>
+          this.app.container.resolve(organizationServiceToken),
+        orgMaster: async () =>
+          (await this.app.container.resolve(orgSyncServiceToken).readSettings())
+            .value.orgMaster,
+        currentDate: platform.currentDate,
+        // Once per contract import: the full 用工合规检查, instead of one run per employee.
+        onContractsImported: () =>
+          this.inBackground('hrAssistant.compliance', () =>
+            this.app.container
+              .resolve(automationTasksToken)
+              .runScheduled('hrAssistant.compliance', 'manual'),
+          ),
+      });
     });
     this.app.container.singleton(attendanceEngineToken, () => {
       const platform = this.app.container.resolve(platformToken);
@@ -2779,6 +2801,8 @@ export default class HrProvider extends ServiceProvider<Application> {
       actions: [
         { name: 'read', title: label('authz.actions.read') },
         { name: 'update', title: label('authz.actions.update') },
+        // 初始数据导入: the department tree from Excel (hr.admin, seed 202610270101).
+        { name: 'import', title: label('authz.employee.import') },
       ],
     });
     authz.ui.place(

@@ -55,6 +55,21 @@ const salaries = defineDatabasePermission((p) =>
 const salariesWrite = defineDatabasePermission((p) =>
   p.collection('employeeSalaries').read(SALARY_FIELDS).create(SALARY_FIELDS),
 );
+/** 导入期初档案: a re-import corrects the opening file of the same month in place. */
+const salariesImport = defineDatabasePermission((p) =>
+  p
+    .collection('employeeSalaries')
+    .read(SALARY_FIELDS)
+    .create(SALARY_FIELDS)
+    .update([
+      'baseSalary',
+      'fixedAllowances',
+      'salaryStructureId',
+      'bankAccount',
+      'bonusBase',
+      'updatedAt',
+    ]),
+);
 const ADJUSTMENT_FIELDS = [
   'id',
   'employeeId',
@@ -229,6 +244,9 @@ const ENROLMENT_FIELDS = [
   'pendingAction',
   'changeLog',
   'sourceEventId',
+  // 上线准备: the personal account numbers, imported with the enrolment.
+  'socialAccountNo',
+  'housingFundAccountNo',
   'createdAt',
   'updatedAt',
 ];
@@ -274,6 +292,31 @@ const deductionsWrite = defineDatabasePermission((p) =>
     .read(DEDUCTION_FIELDS)
     .create(DEDUCTION_FIELDS)
     .update(DEDUCTION_FIELDS),
+);
+// 上线准备 · 本年个税累计期初 (payroll only).
+const TAX_OPENING_FIELDS = [
+  'id',
+  'employeeId',
+  'year',
+  'startMonth',
+  'throughMonth',
+  'incomeYtd',
+  'basicDeductionYtd',
+  'insuranceYtd',
+  'specialDeductionYtd',
+  'otherDeductionYtd',
+  'withheldYtd',
+  'batchId',
+  'createdBy',
+  'createdAt',
+  'updatedAt',
+];
+const taxOpeningsWrite = defineDatabasePermission((p) =>
+  p
+    .collection('payrollTaxOpenings')
+    .read(TAX_OPENING_FIELDS)
+    .create(TAX_OPENING_FIELDS)
+    .update(TAX_OPENING_FIELDS),
 );
 const summaries = defineDatabasePermission((p) =>
   p
@@ -350,6 +393,14 @@ export const salaryResource = defineCompositeResource('talent.salary', (r) =>
         .grant('employees', employees)
         .grant('employeeSalaries', salariesWrite)
         .grant('salaryAdjustments', adjustmentsWrite),
+    )
+    // 上线准备: 导入期初档案 (opening files, without the adjustment approval).
+    .action('import', (a) =>
+      a
+        .title(label('payroll.opening.authz.salaryImport'))
+        .grant('employees', employees)
+        .grant('employeeSalaries', salariesImport)
+        .grant('salaryStructures', structures),
     ),
 );
 
@@ -406,6 +457,13 @@ export const payrollResource = defineCompositeResource('talent.payroll', (r) =>
         .grant('payrollCycles', cyclesWrite)
         .grant('payslips', payslips)
         .grant('employeeSalaries', salaries),
+    )
+    // 上线准备: 导入个税累计期初 (the cumulative tax figures before go-live).
+    .action('importOpening', (a) =>
+      a
+        .title(label('payroll.opening.authz.taxOpeningImport'))
+        .grant('employees', employees)
+        .grant('payrollTaxOpenings', taxOpeningsWrite),
     ),
 );
 
@@ -437,6 +495,15 @@ export const socialInsuranceResource = defineCompositeResource(
           .title(label('payroll.authz.payroll.export'))
           .grant('employees', employees)
           .grant('employeeSocialInsurances', enrolments),
+      )
+      // 上线准备: 导入参保 and 导入专项附加扣除.
+      .action('import', (a) =>
+        a
+          .title(label('payroll.opening.authz.insuranceImport'))
+          .grant('employees', employees)
+          .grant('socialInsurancePlans', plans)
+          .grant('employeeSocialInsurances', enrolmentsWrite)
+          .grant('employeeTaxDeductions', deductionsWrite),
       ),
 );
 
@@ -530,6 +597,11 @@ export const PAYROLL_COLLECTIONS: readonly { name: string; title: string }[] = [
   { name: 'payrollCycles', title: 'payroll.collections.payrollCycles' },
   { name: 'payslips', title: 'payroll.collections.payslips' },
   { name: 'laborVendorBills', title: 'payroll.collections.laborVendorBills' },
+  // 上线准备
+  {
+    name: 'payrollTaxOpenings',
+    title: 'payroll.opening.collections.payrollTaxOpenings',
+  },
 ];
 
 /** The pages of the step. */

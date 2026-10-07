@@ -67,6 +67,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 
+import { ActivationButton } from './activation.js';
 import { ResetPasswordButton } from './reset-password.js';
 import { SyncLockSwitch } from './sync-lock.js';
 
@@ -177,6 +178,7 @@ function EmployeeDetailView({
                     </Button>
                   ) : null}
                   <ResetPasswordButton detail={data} />
+                  <ActivationButton detail={data} />
                   {resolveSync.can &&
                   !data.employee.userId &&
                   data.employee.externalUserId &&

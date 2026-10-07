@@ -1,4 +1,5 @@
 import { useApiClient } from '@nocobase/app-client';
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
 import {
   BanIcon,
@@ -8,10 +9,11 @@ import {
   PlusIcon,
   RotateCcwIcon,
   SearchIcon,
+  UploadIcon,
   UsersIcon,
 } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, Outlet, useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
@@ -23,6 +25,7 @@ import {
   EmptyState,
   LoadError,
 } from '@/components/talent/states';
+import { useLookups } from '@/components/talent/use-lookups';
 import { useRemote } from '@/components/talent/use-remote';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -74,6 +77,12 @@ export default function PositionsPage(): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
   const remote = useRemote<PositionsData>('talent/positions');
+  // 初始数据导入: positions from Excel, a child page (./import.tsx).
+  const canImport = useCan({
+    resource: { type: 'composite', id: 'talent.framework' },
+    action: 'import',
+  }).can;
+  const { departmentTitle } = useLookups();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [entity, setEntity] = useState<EntityTarget | null>(null);
@@ -118,22 +127,38 @@ export default function PositionsPage(): ReactElement {
       title={t('talent.positions.title')}
       description={t('talent.positions.description')}
       actions={
-        data?.canManage ? (
+        data?.canManage || canImport ? (
           <>
-            <Button
-              variant='outline'
-              onClick={() => setEntity({ kind: 'family', family: null })}
-            >
-              <FolderIcon data-icon='inline-start' />
-              {t('talent.framework.newFamily')}
-            </Button>
-            <Button
-              onClick={() => setEntity({ kind: 'position', position: null })}
-              disabled={!data.jobFamilies.length}
-            >
-              <PlusIcon data-icon='inline-start' />
-              {t('talent.framework.newPosition')}
-            </Button>
+            {canImport ? (
+              <Button
+                variant='outline'
+                nativeButton={false}
+                render={<Link to='import' />}
+              >
+                <UploadIcon data-icon='inline-start' />
+                {t('dataImport.open')}
+              </Button>
+            ) : null}
+            {data?.canManage ? (
+              <>
+                <Button
+                  variant='outline'
+                  onClick={() => setEntity({ kind: 'family', family: null })}
+                >
+                  <FolderIcon data-icon='inline-start' />
+                  {t('talent.framework.newFamily')}
+                </Button>
+                <Button
+                  onClick={() =>
+                    setEntity({ kind: 'position', position: null })
+                  }
+                  disabled={!data.jobFamilies.length}
+                >
+                  <PlusIcon data-icon='inline-start' />
+                  {t('talent.framework.newPosition')}
+                </Button>
+              </>
+            ) : null}
           </>
         ) : null
       }
@@ -324,6 +349,8 @@ export default function PositionsPage(): ReactElement {
                         (f) => f.id === position.jobFamilyId,
                       )?.title,
                       position.grade,
+                      // 初始数据导入: the department the position import assigned.
+                      departmentTitle(position.departmentId),
                     ]
                       .filter(Boolean)
                       .join(' · ')}
@@ -441,6 +468,7 @@ export default function PositionsPage(): ReactElement {
           }}
         />
       ) : null}
+      <Outlet context={{ reload: remote.reload }} />
     </PageContainer>
   );
 }

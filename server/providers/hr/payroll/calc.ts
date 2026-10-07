@@ -21,8 +21,10 @@
  * - Social insurance per plan item: the enrolment's base clamped to the
  *   item's range × the rate (rates are percentages).
  * - Tax: cumulative withholding. This month = (cumulative taxable income −
- *   5,000 × months − cumulative insurance − cumulative special deductions) ×
- *   rate − quick deduction − withheld so far, never below zero.
+ *   5,000 × months − cumulative insurance − cumulative special deductions −
+ *   cumulative other deductions) × rate − quick deduction − withheld so far,
+ *   never below zero. With an imported 个税累计期初 the prior figures carry
+ *   its 累计减除费用 and 累计其他扣除 (`basicDeductionYtd`, `otherDeductionYtd`).
  * - Net (实发) = gross − personal insurance − tax.
  */
 import {
@@ -121,6 +123,14 @@ export interface PriorTax {
   withheldYtd: number;
   /** The first month of the cumulative period (YYYY-MM). */
   startMonth: string;
+  /**
+   * 累计减除费用 before this month, when known as an amount (an imported
+   * 个税累计期初 and the months after it); otherwise the monthly deduction ×
+   * `months`.
+   */
+  basicDeductionYtd?: number;
+  /** 累计其他扣除 (an imported 个税累计期初); NocoHR itself records none. */
+  otherDeductionYtd?: number;
 }
 
 export interface CalculationInput {
@@ -215,6 +225,7 @@ export interface CalculationResult {
     insuranceYtd: number;
     specialDeductionYtd: number;
     specialDeductionMonth: number;
+    otherDeductionYtd: number;
     taxableYtd: number;
     rate: number;
     quickDeduction: number;
@@ -465,7 +476,13 @@ export function calculatePayslip(input: CalculationInput): CalculationResult {
   // Cumulative withholding.
   const months = input.prior.months + 1;
   const incomeYtd = roundTo(input.prior.incomeYtd + taxableIncome, 2);
-  const basicDeductionYtd = roundTo(input.tax.monthlyDeduction * months, 2);
+  const basicDeductionYtd = roundTo(
+    input.prior.basicDeductionYtd === undefined
+      ? input.tax.monthlyDeduction * months
+      : input.prior.basicDeductionYtd + input.tax.monthlyDeduction,
+    2,
+  );
+  const otherDeductionYtd = roundTo(input.prior.otherDeductionYtd ?? 0, 2);
   const insuranceYtd = roundTo(
     input.prior.insuranceYtd + socialEmployee + housingFundEmployee,
     2,
@@ -473,7 +490,11 @@ export function calculatePayslip(input: CalculationInput): CalculationResult {
   const taxableYtd = roundTo(
     Math.max(
       0,
-      incomeYtd - basicDeductionYtd - insuranceYtd - input.specialDeductionYtd,
+      incomeYtd -
+        basicDeductionYtd -
+        insuranceYtd -
+        input.specialDeductionYtd -
+        otherDeductionYtd,
     ),
     2,
   );
@@ -502,6 +523,7 @@ export function calculatePayslip(input: CalculationInput): CalculationResult {
       insuranceYtd,
       specialDeductionYtd: roundTo(input.specialDeductionYtd, 2),
       specialDeductionMonth: roundTo(input.specialDeductionMonth, 2),
+      otherDeductionYtd,
       taxableYtd,
       rate: withholding.rate,
       quickDeduction: withholding.quickDeduction,

@@ -65,6 +65,13 @@ import {
   type StructureView,
 } from './structures.js';
 import { sourceLabels, withSourceLabels } from './source-labels.js';
+import {
+  afterOpening,
+  openingSnapshot,
+  priorFromOpening,
+  taxOpeningFor,
+  type TaxOpening,
+} from './tax-opening.js';
 
 const PAYROLL = 'talent.payroll';
 export const EDITABLE = ['draft', 'calculated', 'reviewing'] as const;
@@ -747,12 +754,23 @@ export function createCycleService(
     return { imported: valid.length, record: entry };
   }
 
-  /** The cumulative tax figures before a month, from the latest earlier payslip of the year. */
+  /**
+   * The cumulative tax figures before a month, from the latest earlier payslip
+   * of the year, or from the year's imported 个税累计期初 (the rule is in
+   * tax-opening.ts: payslips up to its throughMonth are never added to it).
+   */
   async function priorTax(
     employee: PayrollEmployee,
     month: string,
-  ): Promise<PriorTax> {
+    monthlyDeduction: number,
+  ): Promise<PriorTax & { opening: TaxOpening | null }> {
     const year = month.slice(0, 4);
+    const imported = await taxOpeningFor(
+      database.query(),
+      employee.id,
+      Number(year),
+    );
+    const opening = imported && imported.throughMonth < month ? imported : null;
     const rows = await database
       .query()
       .selectFrom('payslips')
@@ -769,7 +787,11 @@ export function createCycleService(
       .orderBy('payrollCycles.month', 'desc')
       .execute();
     const previous = rows.find(
-      (r) => COUNTED.includes(str(r.status)) && json(r.inputs, null),
+      (r) =>
+        COUNTED.includes(str(r.status)) &&
+        json(r.inputs, null) &&
+        // The opening replaces every payslip of the months it covers.
+        (!opening || str(r.month) > opening.throughMonth),
     );
     if (previous) {
       const tax = json<{
@@ -777,21 +799,39 @@ export function createCycleService(
           months?: number;
           incomeYtd?: number;
           insuranceYtd?: number;
+          basicDeductionYtd?: number;
           startMonth?: string;
         };
       }>(previous.inputs, {}).tax;
       if (tax && typeof tax.months === 'number') {
         // A month without a payslip in between still counts a basic deduction.
-        const gap = monthIndex(month) - monthIndex(str(previous.month)) - 1;
+        const gap = Math.max(
+          0,
+          monthIndex(month) - monthIndex(str(previous.month)) - 1,
+        );
         return {
-          months: tax.months + Math.max(0, gap),
+          months: tax.months + gap,
           incomeYtd: num(tax.incomeYtd),
           insuranceYtd: num(tax.insuranceYtd),
           withheldYtd: num(previous.taxWithheldYtd),
           startMonth: tax.startMonth ?? `${year}-01`,
+          // After an opening the deduction continues from the amount (its 累计减除费用 may not be 5,000 × months).
+          ...(opening
+            ? {
+                basicDeductionYtd:
+                  num(tax.basicDeductionYtd) + monthlyDeduction * gap,
+                otherDeductionYtd: opening.otherDeductionYtd,
+              }
+            : {}),
+          opening,
         };
       }
     }
+    if (opening)
+      return {
+        ...priorFromOpening(opening, month, monthlyDeduction),
+        opening,
+      };
     // No earlier payslip this year: hired this year, the period starts at the hiring month; otherwise now.
     const hired = employee.hireDate?.slice(0, 7);
     const start =
@@ -802,6 +842,7 @@ export function createCycleService(
       insuranceYtd: 0,
       withheldYtd: 0,
       startMonth: start,
+      opening: null,
     };
   }
 
@@ -1458,12 +1499,23 @@ export function createCycleService(
         const plan = enrolment
           ? planFor(plans, enrolment.planCity, cycle.month)
           : null;
-        const prior = await priorTax(employee, cycle.month);
-        const special = specialDeductions(
+        const { opening, ...prior } = await priorTax(
+          employee,
+          cycle.month,
+          settings.tax.monthlyDeduction,
+        );
+        // With an opening: its 累计专项附加扣除, then the declared deductions of the months after it only.
+        const declared = specialDeductions(
           deductions.get(employee.id) ?? [],
-          prior.startMonth,
+          opening ? afterOpening(opening) : prior.startMonth,
           cycle.month,
         );
+        const special = opening
+          ? {
+              ytd: opening.specialDeductionYtd + declared.ytd,
+              month: declared.month,
+            }
+          : declared;
         const attendance = {
           nightShiftCount: num(summary.nightShiftCount),
           absentDays: num(summary.absentDays),
@@ -1572,7 +1624,12 @@ export function createCycleService(
             ytd: special.ytd,
             month: special.month,
           },
-          tax: { ...result.taxDetail, incomeMonth: result.taxableIncome },
+          tax: {
+            ...result.taxDetail,
+            incomeMonth: result.taxableIncome,
+            // 上线准备: the imported 个税累计期初 the cumulative figures started from.
+            opening: opening ? openingSnapshot(opening) : null,
+          },
         };
         results.push({
           employeeId: employee.id,
@@ -1935,6 +1992,7 @@ export function createCycleService(
             '累计减除费用',
             '累计专项扣除',
             '累计专项附加扣除',
+            '累计其他扣除',
             '累计应纳税所得额',
             '税率(%)',
             '速算扣除数',
@@ -1970,6 +2028,7 @@ export function createCycleService(
             num(t.basicDeductionYtd).toFixed(2),
             num(t.insuranceYtd).toFixed(2),
             num(t.specialDeductionYtd).toFixed(2),
+            num(t.otherDeductionYtd).toFixed(2),
             num(t.taxableYtd).toFixed(2),
             num(t.rate),
             num(t.quickDeduction).toFixed(2),

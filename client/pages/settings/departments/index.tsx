@@ -1,9 +1,9 @@
 import { useApiClient } from '@nocobase/app-client';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { BanIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon, RotateCcwIcon, SearchIcon, StarIcon, Trash2Icon } from 'lucide-react';
+import { BanIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon, RotateCcwIcon, SearchIcon, StarIcon, Trash2Icon, UploadIcon } from 'lucide-react';
 import { useMemo, useState, type ReactElement } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, Outlet, useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
@@ -61,6 +61,8 @@ export default function DepartmentsSettingsPage(): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
   const canUpdate = useCan({ resource: { type: 'settings', id: 'talent.departments' }, action: 'update' }).can;
+  // 初始数据导入: the department tree from Excel, a child page (./import.tsx).
+  const canImport = useCan({ resource: { type: 'settings', id: 'talent.departments' }, action: 'import' }).can;
   const tree = useRemote<Department[]>('talent/org/departments');
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState('');
@@ -86,12 +88,20 @@ export default function DepartmentsSettingsPage(): ReactElement {
         title={t('talent.org.title')}
         description={t('talent.org.description')}
         actions={
-          canUpdate ? (
-            <Button onClick={() => setDialog({ mode: 'create', parentId: selected?.id ?? null, department: null })}>
-              <PlusIcon data-icon='inline-start' />
-              {selected ? t('talent.org.createChild') : t('talent.org.create')}
-            </Button>
-          ) : null
+          <>
+            {canImport ? (
+              <Button variant='outline' nativeButton={false} render={<Link to='import' />}>
+                <UploadIcon data-icon='inline-start' />
+                {t('dataImport.open')}
+              </Button>
+            ) : null}
+            {canUpdate ? (
+              <Button onClick={() => setDialog({ mode: 'create', parentId: selected?.id ?? null, department: null })}>
+                <PlusIcon data-icon='inline-start' />
+                {selected ? t('talent.org.createChild') : t('talent.org.create')}
+              </Button>
+            ) : null}
+          </>
         }
       />
       {tree.error ? (
@@ -166,6 +176,7 @@ export default function DepartmentsSettingsPage(): ReactElement {
           }}
         />
       ) : null}
+      <Outlet context={{ reload: tree.reload }} />
     </PageContainer>
   );
 }

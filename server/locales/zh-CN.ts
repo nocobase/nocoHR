@@ -5,6 +5,8 @@ import { recruitingServerZh } from './modules/recruiting.js';
 import { performanceServerZh } from './modules/performance.js';
 // V4-13
 import { talentReviewServerZh } from './modules/talent-review.js';
+// 上线准备
+import { goLiveServerZh } from './modules/go-live.js';
 // V4-14
 import { licensedServerZh } from './modules/licensed.js';
 
@@ -845,6 +847,8 @@ const zhCN: AppServerResource = {
   },
   // V4-14 行业内容包 (server/locales/modules/licensed.ts).
   industryPacks: licensedServerZh.industryPacks,
+  // 上线准备 · 激活链接 (server/locales/modules/go-live.ts).
+  goLive: goLiveServerZh,
   payroll: {
     permissionSets: {
       hrPayroll: '薪酬专员',

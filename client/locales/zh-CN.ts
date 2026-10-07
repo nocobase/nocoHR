@@ -13,7 +13,13 @@ import { performanceAdditions } from './modules/performance.js';
 import { talentReviewAdditions } from './modules/talent-review.js';
 // V4-14
 import { licensedAdditions } from './modules/licensed.js';
+// 初始数据导入 (上线准备)
+import { dataImportAdditions } from './modules/data-import.js';
+// 上线准备 · 清单与账号激活 (client/locales/modules/go-live.ts).
+import { goLiveAdditions } from './modules/go-live.js';
 import { aiToolNames } from './modules/ai-tools.js';
+// 上线准备 · 薪酬期初导入 (client/locales/modules/payroll-opening.ts).
+import { payrollOpeningAdditions } from './modules/payroll-opening.js';
 import type { AppResource } from './en-US.js';
 
 const zhCN: AppResource = {
@@ -1387,6 +1393,8 @@ const zhCN: AppResource = {
     ...talentReviewAdditions.zh.navigation,
     // V4-14
     ...licensedAdditions.zh.navigation,
+    // 上线准备 · 清单与账号激活
+    ...goLiveAdditions.zh.navigation,
     talentSelfService: '自助',
     aiEntry: 'AI 入口',
     imMock: '模拟渠道（仅开发环境）',
@@ -3137,6 +3145,10 @@ const zhCN: AppResource = {
       ...talentReviewAdditions.zh.errors,
       // V4-14
       ...licensedAdditions.zh.errors,
+      // 上线准备 · 清单与账号激活
+      ...goLiveAdditions.zh.errors,
+      // 初始数据导入
+      ...dataImportAdditions.zh.errors,
       generic: '操作失败，请重试。',
       ORG_SYNC_SOURCE_UNAVAILABLE: '无法连接办公软件，请检查连接设置后重试。',
       ORG_SYNC_ISSUE_NOT_FOUND:
@@ -5024,9 +5036,15 @@ const zhCN: AppResource = {
   talentReview: talentReviewAdditions.zh.talentReview,
   // V4-14 行业方案 · 持证上岗 (client/locales/modules/licensed.ts).
   licensed: licensedAdditions.zh.licensed,
+  // 上线准备 · 清单与账号激活 (client/locales/modules/go-live.ts).
+  goLive: goLiveAdditions.zh.goLive,
+  // 初始数据导入 (client/locales/modules/data-import.ts).
+  dataImport: dataImportAdditions.zh.dataImport,
   // V4-14: the authorization plugin's subject-type refusal names the certification-only rule.
   overrides: licensedAdditions.zh.overrides,
   payroll: {
+    // 上线准备 · 薪酬期初导入 (client/locales/modules/payroll-opening.ts).
+    opening: payrollOpeningAdditions.zh,
     navigation: {
       salaries: '薪资档案',
       payroll: '算薪',
@@ -5321,6 +5339,7 @@ const zhCN: AppResource = {
       history: '档案历史',
       sources: {
         import: '初始化',
+        opening: '期初导入',
         adjustment: '调薪',
         manual: '新入职建档',
       },

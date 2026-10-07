@@ -12,6 +12,7 @@ import { Link, Outlet, useNavigate, useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
+import { OpeningImportButton } from '@/components/talent/payroll-opening-import';
 import { PayrollStatus } from '@/components/talent/payroll-shared';
 import { useMoney, usePayrollError } from '@/components/talent/payroll-hooks';
 import {
@@ -58,6 +59,8 @@ export default function PayrollPage(): ReactElement {
         <PageHeader
           title={t('payroll.cycles.title')}
           description={t('payroll.cycles.description')}
+          // 上线准备: 导入个税累计期初 (talent.payroll importOpening).
+          actions={<OpeningImportButton kind='taxOpenings' />}
         />
         <Tabs
           value={tab}

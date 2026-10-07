@@ -13,7 +13,13 @@ import { performanceAdditions } from './modules/performance.js';
 import { talentReviewAdditions } from './modules/talent-review.js';
 // V4-14
 import { licensedAdditions } from './modules/licensed.js';
+// 初始数据导入 (上线准备)
+import { dataImportAdditions } from './modules/data-import.js';
+// 上线准备 · 清单与账号激活 (client/locales/modules/go-live.ts).
+import { goLiveAdditions } from './modules/go-live.js';
 import { aiToolNames } from './modules/ai-tools.js';
+// 上线准备 · 薪酬期初导入 (client/locales/modules/payroll-opening.ts).
+import { payrollOpeningAdditions } from './modules/payroll-opening.js';
 import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
@@ -1511,6 +1517,8 @@ const enUS = {
     ...talentReviewAdditions.en.navigation,
     // V4-14
     ...licensedAdditions.en.navigation,
+    // 上线准备 · 清单与账号激活
+    ...goLiveAdditions.en.navigation,
     talentSelfService: 'Self-service',
     aiEntry: 'AI entry',
     imMock: 'Mock channel (development only)',
@@ -3323,6 +3331,10 @@ const enUS = {
       ...talentReviewAdditions.en.errors,
       // V4-14
       ...licensedAdditions.en.errors,
+      // 上线准备 · 清单与账号激活
+      ...goLiveAdditions.en.errors,
+      // 初始数据导入
+      ...dataImportAdditions.en.errors,
       generic: 'Something went wrong. Please try again.',
       ORG_SYNC_SOURCE_UNAVAILABLE:
         'The office suite cannot be reached. Check the connection settings and try again.',
@@ -5338,9 +5350,15 @@ const enUS = {
   talentReview: talentReviewAdditions.en.talentReview,
   // V4-14 行业方案 · 持证上岗 (client/locales/modules/licensed.ts).
   licensed: licensedAdditions.en.licensed,
+  // 上线准备 · 清单与账号激活 (client/locales/modules/go-live.ts).
+  goLive: goLiveAdditions.en.goLive,
+  // 初始数据导入 (client/locales/modules/data-import.ts).
+  dataImport: dataImportAdditions.en.dataImport,
   // V4-14: the authorization plugin's subject-type refusal names the certification-only rule.
   overrides: licensedAdditions.en.overrides,
   payroll: {
+    // 上线准备 · 薪酬期初导入 (client/locales/modules/payroll-opening.ts).
+    opening: payrollOpeningAdditions.en,
     navigation: {
       salaries: 'Salary files',
       payroll: 'Payroll',
@@ -5640,6 +5658,7 @@ const enUS = {
       history: 'File history',
       sources: {
         import: 'Initial import',
+        opening: 'Opening import',
         adjustment: 'Adjustment',
         manual: 'New hire',
       },

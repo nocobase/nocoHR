@@ -1,7 +1,9 @@
 import { resolveAppUrl, useApiClient } from '@nocobase/app-client';
+import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
 import {
   FileIcon,
+  FileUpIcon,
   MoreHorizontalIcon,
   PlusIcon,
   RefreshCcwIcon,
@@ -9,7 +11,7 @@ import {
   XCircleIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, Outlet, useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
@@ -88,6 +90,11 @@ export default function ContractsPage(): ReactElement {
     contract: Contract | null;
   } | null>(null);
   const [terminating, setTerminating] = useState<Contract | null>(null);
+  // 初始数据导入: contracts and their history from Excel, a child page (./import.tsx).
+  const canImport = useCan({
+    resource: { type: 'composite', id: 'talent.contract' },
+    action: 'import',
+  }).can;
   // The HR assistant's renewal preparation links here with ?renew=<contract id>: open that renewal once.
   const renewId = params.get('renew');
   const [handledRenew, setHandledRenew] = useState<string | null>(null);
@@ -138,14 +145,26 @@ export default function ContractsPage(): ReactElement {
         title={t('talent.contracts.title')}
         description={t('talent.contracts.description')}
         actions={
-          list.data?.can.manage ? (
-            <Button
-              onClick={() => setEditing({ mode: 'create', contract: null })}
-            >
-              <PlusIcon data-icon='inline-start' />
-              {t('talent.contracts.create')}
-            </Button>
-          ) : null
+          <>
+            {canImport ? (
+              <Button
+                variant='outline'
+                nativeButton={false}
+                render={<Link to='import' />}
+              >
+                <FileUpIcon data-icon='inline-start' />
+                {t('dataImport.open')}
+              </Button>
+            ) : null}
+            {list.data?.can.manage ? (
+              <Button
+                onClick={() => setEditing({ mode: 'create', contract: null })}
+              >
+                <PlusIcon data-icon='inline-start' />
+                {t('talent.contracts.create')}
+              </Button>
+            ) : null}
+          </>
         }
       />
       {renewMissing ? (
@@ -333,6 +352,7 @@ export default function ContractsPage(): ReactElement {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Outlet context={{ reload: list.reload }} />
     </PageContainer>
   );
 }

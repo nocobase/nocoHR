@@ -80,6 +80,8 @@ import {
   Radar,
   UserSearch,
 } from 'lucide-react';
+// 上线准备
+import { Rocket } from 'lucide-react';
 import {
   defineAppRoutes,
   defineDevRoutes,
@@ -288,6 +290,15 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
         authz: page('talent.positions'),
         navigation: { title: 'navigation.talentPositions', icon: Layers },
         componentLoader: () => import('./pages/talent/positions/index.js'),
+        children: [
+          {
+            // 初始数据导入: positions from Excel (talent.framework import).
+            name: 'talent-positions-import',
+            path: 'import',
+            breadcrumb: { title: 'dataImport.positions.title' },
+            componentLoader: () => import('./pages/talent/positions/import.js'),
+          },
+        ],
       },
       {
         name: 'talent-actions',
@@ -377,6 +388,15 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
           icon: FileSignature,
         },
         componentLoader: () => import('./pages/talent/contracts/index.js'),
+        children: [
+          {
+            // 初始数据导入: contracts and their history from Excel (talent.contract import).
+            name: 'talent-contracts-import',
+            path: 'import',
+            breadcrumb: { title: 'dataImport.contracts.title' },
+            componentLoader: () => import('./pages/talent/contracts/import.js'),
+          },
+        ],
       },
       // V2-06 薪酬与社保: 薪资档案, 算薪 (with 派遣账单), 社保公积金, and every employee's 工资条.
       {
@@ -513,6 +533,14 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
                 path: 'entry/:requestId',
                 componentLoader: () =>
                   import('./pages/talent/leave/balances/hr-entry.js'),
+              },
+              {
+                // 初始数据导入: opening balances from Excel (talent.leaveRequest importBalances).
+                name: 'talent-leave-balances-import',
+                path: 'import',
+                breadcrumb: { title: 'dataImport.leaveBalances.title' },
+                componentLoader: () =>
+                  import('./pages/talent/leave/balances/import.js'),
               },
               {
                 name: 'talent-leave-initialize',
@@ -1444,6 +1472,14 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
     authz: 'skip',
     componentLoader: () => import('./pages/hr-document/index.js'),
   },
+  // 上线准备: an employee's account activation link; /api/public/activation enforces the token.
+  {
+    name: 'public-account-activation',
+    path: '/activate/:token',
+    auth: 'optional',
+    authz: 'skip',
+    componentLoader: () => import('./pages/activate/index.js'),
+  },
   {
     auth: 'guest',
     authz: 'skip',
@@ -1475,6 +1511,14 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
 ]);
 
 const settingsRoutes: AppClientRouteContribution = defineSettingsRoutes([
+  {
+    // 上线准备: the go-live steps in order with their status (hr.admin; payroll sees its own steps).
+    name: 'talent-go-live',
+    path: '/go-live',
+    navigation: { title: 'navigation.goLive', icon: Rocket },
+    authz: page('talent.goLive'),
+    componentLoader: () => import('./pages/settings/go-live/index.js'),
+  },
   {
     name: 'talent-attendance-settings',
     path: '/attendance',
@@ -1561,6 +1605,15 @@ const settingsRoutes: AppClientRouteContribution = defineSettingsRoutes([
       action: 'read',
     },
     componentLoader: () => import('./pages/settings/departments/index.js'),
+    children: [
+      {
+        // 初始数据导入: the department tree from Excel (the settings item's import).
+        name: 'talent-departments-import',
+        path: 'import',
+        breadcrumb: { title: 'dataImport.departments.title' },
+        componentLoader: () => import('./pages/settings/departments/import.js'),
+      },
+    ],
   },
   {
     // 组织同步 (V1-03): four tabs as child routes; the runs tab opens a run in a drawer, the mappings tab its dialogs.

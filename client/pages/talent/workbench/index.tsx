@@ -52,6 +52,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 
 import { AiDonePanel } from './ai-done.js';
+import { GoLiveCard } from './go-live-card.js';
 
 const groups = ['today', 'week', 'later', 'completed'] as const;
 type Group = (typeof groups)[number];
@@ -235,6 +236,8 @@ function Workbench(): ReactElement {
           </Button>
         }
       />
+      {/* 上线准备: an entry while go-live steps remain. */}
+      <GoLiveCard />
       {/* 工作台 · AI 员工已办完, then the open to-dos as 等你决定. */}
       <AiDonePanel />
       <h2 className='text-lg font-semibold'>{t('workbench.decide')}</h2>

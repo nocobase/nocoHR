@@ -14,6 +14,14 @@ export const leaveServiceToken: ServiceToken<
     'hr/leave-service',
   );
 
+// 初始数据导入 (上线准备): departments, positions, contracts and opening leave balances from Excel.
+export const dataImportServiceToken: ServiceToken<
+  import('./data-import/index.js').DataImportService
+> =
+  createServiceToken<import('./data-import/index.js').DataImportService>(
+    'hr/data-import',
+  );
+
 export const leaveRequestServiceToken: ServiceToken<
   import('./leave-request-service.js').LeaveRequestService
 > = createServiceToken<

@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   FileClockIcon,
   PlusIcon,
+  SendIcon,
   SearchIcon,
   UploadIcon,
   UsersIcon,
@@ -36,6 +37,7 @@ import { useLookups } from '@/components/talent/use-lookups';
 import { useRemote } from '@/components/talent/use-remote';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   InputGroup,
   InputGroupAddon,
@@ -49,6 +51,7 @@ import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 
+import { ActivationDialog } from './activation.js';
 import { LatestImportCard, type ImportSummary } from './latest-import.js';
 import {
   EMPLOYEE_STATUSES,
@@ -76,6 +79,15 @@ export default function EmployeesPage(): ReactElement {
     resource: { type: 'composite', id: 'talent.assessment' },
     action: 'import',
   });
+  // 上线准备 · 批量开通账号: the HR who may link and reset employee accounts.
+  const manageAccounts = useCan({
+    resource: { type: 'composite', id: 'talent.employee' },
+    action: 'linkUser',
+  });
+  const [activation, setActivation] = useState<{
+    ids: string[];
+    key: number;
+  }>();
   const lookups = useLookups();
   const [params, setParams] = useSearchParams();
   // 界面追加字段: list columns and filters, passed to the server as `cf.<key>`.
@@ -151,6 +163,36 @@ export default function EmployeesPage(): ReactElement {
 
   const columns = useMemo<ColumnDef<EmployeeListItem>[]>(
     () => [
+      ...(manageAccounts.can
+        ? [
+            {
+              id: 'select',
+              header: ({ table }) => (
+                <Checkbox
+                  checked={table.getIsAllPageRowsSelected()}
+                  indeterminate={
+                    table.getIsSomePageRowsSelected() &&
+                    !table.getIsAllPageRowsSelected()
+                  }
+                  onCheckedChange={(checked) =>
+                    table.toggleAllPageRowsSelected(checked)
+                  }
+                  aria-label={t('goLive.activation.selectAll')}
+                />
+              ),
+              cell: ({ row }) => (
+                <Checkbox
+                  checked={row.getIsSelected()}
+                  onCheckedChange={(checked) => row.toggleSelected(checked)}
+                  aria-label={t('goLive.activation.select', {
+                    name: row.original.name,
+                  })}
+                />
+              ),
+              enableSorting: false,
+            } satisfies ColumnDef<EmployeeListItem>,
+          ]
+        : []),
       {
         accessorKey: 'employeeNo',
         header: ({ column }) => (
@@ -269,7 +311,14 @@ export default function EmployeesPage(): ReactElement {
           ) || <span className='text-muted-foreground'>—</span>,
       })),
     ],
-    [t, i18n.language, location.search, lookups, listedFields],
+    [
+      t,
+      i18n.language,
+      location.search,
+      lookups,
+      listedFields,
+      manageAccounts.can,
+    ],
   );
 
   let content: ReactElement;
@@ -290,6 +339,32 @@ export default function EmployeesPage(): ReactElement {
         data={list.data.items}
         getRowId={(row) => row.id}
         emptyMessage={t('talent.employees.noResults')}
+        toolbar={
+          manageAccounts.can
+            ? (table) => {
+                const ids = table
+                  .getSelectedRowModel()
+                  .rows.map((row) => row.original.id);
+                return (
+                  <>
+                    {ids.length ? (
+                      <span className='text-sm text-muted-foreground'>
+                        {t('goLive.activation.selected', { count: ids.length })}
+                      </span>
+                    ) : null}
+                    <Button
+                      variant='outline'
+                      className='ml-auto'
+                      onClick={() => setActivation({ ids, key: Date.now() })}
+                    >
+                      <SendIcon data-icon='inline-start' />
+                      {t('goLive.activation.bulkAction')}
+                    </Button>
+                  </>
+                );
+              }
+            : undefined
+        }
       />
     );
 
@@ -552,6 +627,15 @@ export default function EmployeesPage(): ReactElement {
         />
       ) : null}
       {content}
+      {activation ? (
+        <ActivationDialog
+          key={activation.key}
+          open
+          selectedIds={activation.ids}
+          onOpenChange={(open) => (open ? null : setActivation(undefined))}
+          onDone={list.reload}
+        />
+      ) : null}
       <Outlet context={outletContext} />
     </PageContainer>
   );

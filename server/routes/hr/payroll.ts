@@ -17,6 +17,7 @@ import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
 import { authorizeAction } from '../../providers/hr/authorize.js';
+import { IMPORT_SEGMENTS } from '../../providers/hr/payroll/opening-imports.js';
 import { HrError } from '../../providers/hr/shared.js';
 import { payrollServicesToken } from '../../providers/hr/tokens.js';
 import { actor, installErrorHandler, readJson, type HrEnv } from './shared.js';
@@ -515,6 +516,53 @@ export const payrollRoutes: AppApiRouteContribution<Application> =
       });
     });
 
+    // ---- 上线准备 · 期初导入 /talent/payroll-imports/:kind ----
+    // kind: salary-files (talent.salary import), enrolments and deductions
+    // (talent.socialInsurance import), tax-openings (talent.payroll importOpening).
+    const imports = guard(new Hono<HrEnv>(), 10 * 1024 * 1024);
+    const kindOf = (c: Context<HrEnv>) => {
+      const kind = IMPORT_SEGMENTS[c.req.param('kind') ?? ''];
+      if (!kind) throw new HrError('NOT_FOUND', 404);
+      return kind;
+    };
+    imports.get('/:kind/template', async (c) => {
+      const { filename, bytes } = await services().openings.template(
+        actor(c),
+        kindOf(c),
+        c.req.query(),
+      );
+      return new Response(bytes, {
+        headers: {
+          'content-type': XLSX_TYPE,
+          'content-disposition': attachment(filename),
+        },
+      });
+    });
+    imports.post('/:kind/preview', async (c) => {
+      const kind = kindOf(c);
+      const { file } = await upload(c);
+      return c.json({
+        data: await services().openings.preview(actor(c), kind, file.bytes),
+      });
+    });
+    imports.post('/:kind/commit', async (c) => {
+      const kind = kindOf(c);
+      const { file } = await upload(c);
+      return c.json({
+        data: await services().openings.commit(actor(c), kind, file),
+      });
+    });
+    imports.get('/:kind/status', async (c) =>
+      c.json({
+        data: await services().openings.status(actor(c), kindOf(c)),
+      }),
+    );
+    imports.get('/:kind/batches', async (c) =>
+      c.json({
+        data: await services().openings.batches(actor(c), kindOf(c)),
+      }),
+    );
+
     // ---- 我的工资条 /talent/my-payslips ----
     const mine = guard(new Hono<HrEnv>());
     mine.get('/status', (c) =>
@@ -544,5 +592,6 @@ export const payrollRoutes: AppApiRouteContribution<Application> =
     router.route('/talent/social-insurance', insurance);
     router.route('/talent/payroll', payroll);
     router.route('/talent/my-payslips', mine);
+    router.route('/talent/payroll-imports', imports);
     return router;
   });

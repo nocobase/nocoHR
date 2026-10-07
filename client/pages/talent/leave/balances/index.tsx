@@ -39,6 +39,11 @@ export default function LeaveBalancesPage() {
     resource: { type: 'composite', id: 'talent.leaveRequest' },
     action: 'adjustBalance',
   });
+  // 初始数据导入: opening balances from Excel, a child page (./import.tsx).
+  const importGrant = useCan({
+    resource: { type: 'composite', id: 'talent.leaveRequest' },
+    action: 'importBalances',
+  });
   const list = useLeaveList<LeaveBalance>(
     `talent/leave/balances?year=${validYear}`,
   );
@@ -162,6 +167,17 @@ export default function LeaveBalancesPage() {
           ) : null}
           {list.loading && list.rows ? <Spinner /> : null}
         </div>
+        {importGrant.can ? (
+          <Button
+            variant='outline'
+            nativeButton={false}
+            render={
+              <Link to={{ pathname: 'import', search: location.search }} />
+            }
+          >
+            {t('dataImport.openBalances')}
+          </Button>
+        ) : null}
       </div>
       <p className='text-sm text-muted-foreground'>
         {t('attendance.leave.balanceNote')}

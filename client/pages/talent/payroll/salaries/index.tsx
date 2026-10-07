@@ -16,6 +16,7 @@ import { ReviewResultLabel } from '@/components/talent/performance-payroll';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
+import { OpeningImportButton } from '@/components/talent/payroll-opening-import';
 import {
   ApprovalSteps,
   PayrollStatus,
@@ -71,22 +72,26 @@ export default function SalariesPage(): ReactElement {
           title={t('payroll.salaries.title')}
           description={t('payroll.salaries.description')}
           actions={
-            adjust.can ? (
-              <Button
-                nativeButton={false}
-                render={
-                  <Link
-                    to={{
-                      pathname: 'adjustments/new',
-                      search: location.search,
-                    }}
-                  />
-                }
-              >
-                <PlusIcon data-icon='inline-start' />
-                {t('payroll.salaries.newAdjustment')}
-              </Button>
-            ) : null
+            <>
+              {/* 上线准备: 导入期初档案 (talent.salary import). */}
+              <OpeningImportButton kind='salaryFiles' />
+              {adjust.can ? (
+                <Button
+                  nativeButton={false}
+                  render={
+                    <Link
+                      to={{
+                        pathname: 'adjustments/new',
+                        search: location.search,
+                      }}
+                    />
+                  }
+                >
+                  <PlusIcon data-icon='inline-start' />
+                  {t('payroll.salaries.newAdjustment')}
+                </Button>
+              ) : null}
+            </>
           }
         />
         {view.isPending ? (

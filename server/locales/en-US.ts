@@ -5,6 +5,8 @@ import { recruitingServerEn } from './modules/recruiting.js';
 import { performanceServerEn } from './modules/performance.js';
 // V4-13
 import { talentReviewServerEn } from './modules/talent-review.js';
+// 上线准备
+import { goLiveServerEn } from './modules/go-live.js';
 // V4-14
 import { licensedServerEn } from './modules/licensed.js';
 
@@ -880,6 +882,8 @@ const enUS = {
   },
   // V4-14 行业内容包 (server/locales/modules/licensed.ts).
   industryPacks: licensedServerEn.industryPacks,
+  // 上线准备 · 激活链接 (server/locales/modules/go-live.ts).
+  goLive: goLiveServerEn,
   payroll: {
     permissionSets: {
       hrPayroll: 'Payroll specialist',

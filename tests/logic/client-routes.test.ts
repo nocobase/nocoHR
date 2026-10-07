@@ -89,6 +89,8 @@ describe('app client routes', () => {
       { name: 'talent-employee-portrait', authorizedAs: 'talent.employees' },
       { name: 'talent-employee-events', authorizedAs: 'talent.employees' },
       { name: 'talent-positions', authorizedAs: 'talent.positions' },
+      // 初始数据导入: the import child pages inherit their list's page.
+      { name: 'talent-positions-import', authorizedAs: 'talent.positions' },
       { name: 'talent-actions', authorizedAs: 'talent.actions' },
       { name: 'talent-action-new', authorizedAs: 'talent.actions' },
       { name: 'talent-action-detail', authorizedAs: 'talent.actions' },
@@ -101,6 +103,7 @@ describe('app client routes', () => {
       { name: 'talent-my-mailbox', authorizedAs: 'mail.workspace' },
       { name: 'talent-checklist', authorizedAs: null },
       { name: 'talent-contracts', authorizedAs: 'talent.contracts' },
+      { name: 'talent-contracts-import', authorizedAs: 'talent.contracts' },
       // V2-06 薪酬与社保
       { name: 'talent-salaries', authorizedAs: 'talent.salaries' },
       {
@@ -125,6 +128,7 @@ describe('app client routes', () => {
         'talent-leave-balances',
         'talent-leave-hr-entry',
         'talent-leave-hr-edit',
+        'talent-leave-balances-import',
         'talent-leave-initialize',
         'talent-leave-adjust',
         'talent-leave-types',

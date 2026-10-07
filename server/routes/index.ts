@@ -40,6 +40,10 @@ import { talentReviewRoutes } from './hr/talent-review.js';
 import { agentMcpRoutes } from './hr/agent-mcp.js';
 // V4-14
 import { licensedRoutes } from './hr/licensed.js';
+// 上线准备: the go-live checklist and bulk account activation.
+import { goLiveRoutes } from './hr/go-live.js';
+// 初始数据导入 (上线准备)
+import { dataImportRoutes } from './hr/data-import.js';
 import { apiNotFoundRoutes } from './hr/not-found.js';
 
 const routes: readonly AppRouteContribution<Application>[] = [
@@ -79,7 +83,11 @@ const routes: readonly AppRouteContribution<Application>[] = [
   talentReviewRoutes,
   // V4-14
   licensedRoutes,
+  // 上线准备
+  goLiveRoutes,
   automationApiRoutes,
+  // 初始数据导入 (上线准备)
+  dataImportRoutes,
   ...hrFileRoutes,
   ...leaveProofRoutes,
   // V3-10
