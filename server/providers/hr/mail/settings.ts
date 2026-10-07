@@ -25,6 +25,13 @@ const mailboxSchema = z
     /** The Mail plugin account that is this mailbox, and the user it belongs to (who reads and sends as it). */
     accountId: z.string().trim().max(64).default(''),
     ownerUserId: z.string().trim().max(64).default(''),
+    /**
+     * When an administrator bound the account (ISO time, set by the server):
+     * the mailbox takes only mail received after it, so a mailbox already in
+     * use does not bring its old mail into the business. Empty for the demo's
+     * automatically bound local mailboxes, which take all their mail.
+     */
+    boundAt: z.string().trim().max(40).default(''),
     /** Empty: any sender; otherwise mail from other domains goes to 待归类 without being recognised. */
     allowedSenderDomains: z.array(domain).max(50),
     /** Days an unlinked message keeps its body and attachments. */
@@ -75,6 +82,7 @@ const mailboxDefault = {
   enabled: true,
   accountId: '',
   ownerUserId: '',
+  boundAt: '',
   allowedSenderDomains: [],
   retentionDays: 90,
   vendors: [],
@@ -168,6 +176,17 @@ export function createMailSettingsService(database: DatabaseManager) {
         if (revision !== body.data.revision)
           throw new HrError('SETTINGS_CONFLICT', 409);
         const stamp = new Date();
+        // The binding time is the server's: a newly bound account starts now, an unchanged one keeps its time.
+        const before = mailSettingsSchema.safeParse(previous?.value);
+        for (const purpose of MAIL_PURPOSES) {
+          const next = body.data.value.mailboxes[purpose];
+          const old = before.success ? before.data.mailboxes[purpose] : null;
+          next.boundAt = !next.accountId
+            ? ''
+            : old?.accountId === next.accountId
+              ? old.boundAt
+              : stamp.toISOString();
+        }
         if (previous)
           await repo.updateOne({
             filter: { id: ROW_ID, revision },

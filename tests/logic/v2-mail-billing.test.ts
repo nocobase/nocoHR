@@ -12,6 +12,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { registerHooks } from 'node:module';
@@ -670,6 +671,68 @@ describe('Mail plugin accounts behind the business mailboxes', () => {
     expect(wrongOwner.json.error?.code ?? wrongOwner.json.code).toBe(
       'MAIL_ACCOUNT_INVALID',
     );
+  });
+
+  it('takes only mail received after an administrator binds the account', async () => {
+    const save = async (mailbox: Json) => {
+      const current = await call('hr01', 'GET', '/mail/settings');
+      const value = current.json.data.value as Json;
+      const saved = await call('hr01', 'PUT', '/mail/settings', {
+        revision: current.json.data.revision,
+        value: {
+          ...value,
+          mailboxes: {
+            ...value.mailboxes,
+            billing: { ...value.mailboxes.billing, ...mailbox },
+          },
+        },
+      });
+      expect(saved.status).toBe(200);
+      return saved.json.data.value.mailboxes.billing as Json;
+    };
+    const before = (await call('hr01', 'GET', '/mail/settings')).json.data.value
+      .mailboxes.billing as Json;
+    // Unbind, then bind the same account again: from now on.
+    expect((await save({ accountId: '', ownerUserId: '' })).boundAt).toBe('');
+    const rebound = await save({
+      accountId: before.accountId,
+      ownerUserId: before.ownerUserId,
+    });
+    expect(Date.parse(rebound.boundAt)).toBeGreaterThan(Date.now() - 60_000);
+    // Saving again without a change keeps the time; a client cannot set it.
+    expect((await save({ boundAt: '2000-01-01T00:00:00.000Z' })).boundAt).toBe(
+      rebound.boundAt,
+    );
+
+    const old = new Date(Date.now() - 86_400_000);
+    drop(
+      '07-old.eml',
+      composeMail({
+        from: { name: '旧邮件', address: 'old@shunan-labor.test' },
+        to: 'billing@qiheng.test',
+        subject: '绑定之前的来信',
+        text: '这封信在邮箱绑定之前就在收件箱里了。',
+        date: old,
+      }),
+    );
+    utimesSync(path.join(inbox(), '07-old.eml'), old, old);
+    drop(
+      '08-new.eml',
+      composeMail({
+        from: { name: '新邮件', address: 'new@shunan-labor.test' },
+        to: 'billing@qiheng.test',
+        subject: '绑定之后的来信',
+        text: '这封信是绑定之后才到的。',
+        date: new Date(),
+      }),
+    );
+    await call('payroll01', 'POST', '/mail/poll?mailbox=billing');
+    const subjects = (
+      (await call('payroll01', 'GET', '/mail/messages?mailbox=billing')).json
+        .data as Json[]
+    ).map((m) => m.subject as string);
+    expect(subjects).toContain('绑定之后的来信');
+    expect(subjects).not.toContain('绑定之前的来信');
   });
 
   it('shows each user only the correspondence in their own mailboxes', async () => {

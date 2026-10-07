@@ -24,6 +24,7 @@ import { composeMail } from '../../database/seed-data/demo-mail.ts';
 import { pdfText } from '../../server/providers/hr/profile/pdf.ts';
 import {
   addWorkdays,
+  customerOf,
   readAuditRequest,
   SHARE_LINK_PLACEHOLDER,
 } from '../../server/providers/hr/mail/audit.ts';
@@ -224,6 +225,28 @@ afterAll(async () => {
 });
 
 describe('审核邮箱 rules', () => {
+  it('names the customer from the sender, never from a public mailbox domain', () => {
+    const vendors = [{ domain: 'yuanhang-auto.test', vendorName: '远航汽车' }];
+    expect(
+      customerOf({ name: '何嘉', address: 'sqe@yuanhang-auto.test' }, vendors),
+    ).toBe('远航汽车');
+    expect(
+      customerOf(
+        { name: '华驰汽车 质量部 赵工', address: 'zhao@huachi-auto.test' },
+        vendors,
+      ),
+    ).toBe('华驰汽车');
+    expect(
+      customerOf({ name: null, address: 'qa@nordwerk.test' }, vendors),
+    ).toBe('nordwerk.test');
+    // A public mailbox says nothing about the company: a person fills it in.
+    expect(
+      customerOf({ name: 'Catherine', address: 'someone@gmail.com' }, vendors),
+    ).toBeNull();
+    expect(
+      customerOf({ name: null, address: 'someone@163.com' }, vendors),
+    ).toBeNull();
+  });
   it('reads material, refused items and the due date', () => {
     const read = readAuditRequest(
       '请在 3 个工作日内提供 CNC 操作工的持证清单与近 12 个月的培训记录，并提供操作工的联系方式。',

@@ -172,6 +172,40 @@ const matchesDomain = (address: string, domain: string): boolean => {
 };
 
 /** 远航汽车质量部 蒋涛 → 远航汽车. */
+/** Mail services anyone can use: their domain names no company. */
+const PUBLIC_MAIL_DOMAINS = new Set([
+  'gmail.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'yahoo.com',
+  'icloud.com',
+  'me.com',
+  'qq.com',
+  'foxmail.com',
+  '163.com',
+  '126.com',
+  'yeah.net',
+  'sina.com',
+  'sina.cn',
+  'sohu.com',
+  'aliyun.com',
+  '139.com',
+]);
+
+/** The customer a request comes from, or null when it cannot be told (a public mailbox with no company in the name). */
+export function customerOf(
+  from: { name: string | null; address: string },
+  vendors: readonly { domain: string; vendorName: string }[],
+): string | null {
+  const known = vendors.find((v) => matchesDomain(from.address, v.domain));
+  if (known) return known.vendorName;
+  const named = organisationOf(from.name);
+  if (named) return named;
+  const domain = domainOf(from.address);
+  return domain && !PUBLIC_MAIL_DOMAINS.has(domain) ? domain : null;
+}
+
 function organisationOf(name: string | null): string | null {
   if (!name) return null;
   const org =
@@ -459,16 +493,14 @@ export function createAuditMail(deps: {
         const scope = await deps
           .audit()
           .resolveScope({ text: requestSentences(text) });
+        // From a public mailbox (gmail, 163…) the domain names no company: a person fills it in.
+        const customer = customerOf(message.from, settings.vendors);
         const unmatched = [
+          ...(customer ? [] : ['客户']),
           ...(scope.departmentIds.length ? [] : ['部门']),
           ...(scope.positionIds.length ? [] : ['岗位']),
         ];
-        const customerName =
-          settings.vendors.find((v) =>
-            matchesDomain(message.from.address, v.domain),
-          )?.vendorName ??
-          organisationOf(message.from.name) ??
-          domainOf(message.from.address);
+        const customerName = customer ?? '待确认客户';
         const risks =
           scope.departmentIds.length || scope.positionIds.length
             ? await deps
