@@ -29,6 +29,7 @@ import {
   candidateReplyIntent,
   forwardingSite,
   answerFromPosting,
+  tidyAnswer,
   postingForSubject,
 } from '../../server/providers/hr/mail/recruiting.ts';
 import {
@@ -245,6 +246,17 @@ afterAll(async () => {
 });
 
 describe('招聘邮箱 rules', () => {
+  it('keeps the model to the answer: no greeting, no promise about who answers the rest', () => {
+    expect(
+      tidyAnswer(
+        '周迪你好，感谢你的关注。上班地点在成都机加工车间。宿舍和薪资方面，我这边暂未掌握相关信息，已记录你的问题，稍后由招聘负责人答复。',
+      ),
+    ).toBe('感谢你的关注。上班地点在成都机加工车间。');
+    expect(tidyAnswer('您好！工作地点在苏州工厂。')).toBe(
+      '工作地点在苏州工厂。',
+    );
+    expect(tidyAnswer('岗位需要会看图纸。')).toBe('岗位需要会看图纸。');
+  });
   it('answers from the posting only', () => {
     const facts = {
       title: 'CNC 操作工',

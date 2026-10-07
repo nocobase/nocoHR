@@ -255,6 +255,24 @@ export function forwardingSite(input: {
   );
 }
 
+/**
+ * The model's answer as the body of a reply the system frames: no greeting
+ * (the draft has one), and no sentence about who answers the rest (the draft
+ * says that once, for the topics the letter asked about).
+ */
+export function tidyAnswer(answer: string): string {
+  return answer
+    .trim()
+    .replace(/^[^，,。！!\n]{0,12}(?:你好|您好)[，,：:！!。]?\s*/u, '')
+    .split(/(?<=[。！？!?])/u)
+    .filter(
+      (sentence) =>
+        !/招聘负责人|另行答复|稍后.*答复|再.*回复你/u.test(sentence),
+    )
+    .join('')
+    .trim();
+}
+
 /** What a posting tells a candidate (V2-07: 询问时按职位信息起草回复). */
 export interface PostingFacts {
   readonly title: string;
@@ -630,7 +648,10 @@ export function createRecruitingMailHandler(deps: {
         run,
         '候选人询问回复',
         [
-          '候选人来信提问。只根据下面的职位信息作答，语气礼貌简短；职位信息里没有的内容（如薪资、住宿、班车）不要编造或承诺，把这些话题列入 open。不要提及其他候选人或公司内部信息。',
+          '候选人来信提问。只回答来信里问到、而且下面的职位信息能回答的问题，一两句话，语气礼貌。',
+          '不要写称呼、问候或落款，不要复述来信没问到的职位内容。',
+          '职位信息里没有的内容（如薪资、住宿、班车）一个字也不要写，也不要说会由谁答复——系统会另外说明；把这些来信真正问到的话题用两到四个字列入 open。',
+          '不要提及其他候选人或公司内部信息。',
           `职位信息：${JSON.stringify(facts)}`,
           `来信：${question}`,
         ].join('\n'),
@@ -639,9 +660,15 @@ export function createRecruitingMailHandler(deps: {
           open: z.array(z.string().max(20)).max(6),
         }),
       );
-      const text = data.answer.trim();
+      const text = tidyAnswer(data.answer);
       if (text) {
-        const open = [...new Set([...data.open, ...ruled.open])];
+        // The rules read the topics from the letter itself; the model's list only when they find none.
+        const open = ruled.open.length
+          ? ruled.open
+          : [...new Set(data.open.map((t) => t.trim()).filter(Boolean))].slice(
+              0,
+              3,
+            );
         return {
           text: [text, openText(open)].filter(Boolean).join('\n\n'),
           open,
