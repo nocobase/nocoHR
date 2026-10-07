@@ -434,7 +434,8 @@ describe('13A 关键岗位与继任', () => {
           .where('title', 'like', '%继任风险提醒%')
           .execute()
       ).length;
-    const first = await until(count, (n) => n > 0);
+    // One message per recipient (hr01 and the superior), delivered on the notification queue.
+    const first = await until(count, (n) => n >= 2);
     expect(first).toBeGreaterThan(0);
     const updated = await (await h.services()).succession.planRow(planId);
     expect(updated.candidates.find((c) => c.employeeId === leaving)!.left).toBe(
