@@ -31,17 +31,24 @@ export function AppBrand(inputProps: AppBrandProps): ReactElement {
           />
         </span>
       ) : (
-        <span className='h-8 min-w-0 overflow-hidden'>
-          <img
-            src={resolveAppUrl('/assets/logo.png')}
-            alt='NocoBase'
-            className='h-full w-auto object-contain dark:hidden'
-          />
-          <img
-            src={resolveAppUrl('/assets/logo-dark.png')}
-            alt='NocoBase'
-            className='hidden h-full w-auto object-contain dark:block'
-          />
+        // Application change: the mark and the application's name as text (`app.title`, NocoHR), not the
+        // template's NocoBase wordmark image, whose name cannot be changed. The sign-in pages do the same.
+        <span className='flex h-8 min-w-0 items-center gap-2'>
+          <span className='size-7 shrink-0 overflow-hidden'>
+            <img
+              src={resolveAppUrl('/assets/logo-mark.png')}
+              alt=''
+              className='size-full object-contain dark:hidden'
+            />
+            <img
+              src={resolveAppUrl('/assets/logo-mark-dark.png')}
+              alt=''
+              className='hidden size-full object-contain dark:block'
+            />
+          </span>
+          <span className='truncate text-lg font-semibold tracking-tight'>
+            {t('app.title')}
+          </span>
         </span>
       )}
     </Link>

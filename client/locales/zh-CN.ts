@@ -1309,7 +1309,7 @@ const zhCN: AppResource = {
   'status.denied': '无权访问',
   'status.pageFailed': '无法加载页面',
   'status.retry': '重试',
-  'navigation.brandHome': 'NocoBase 首页',
+  'navigation.brandHome': 'NocoHR 首页',
   'navigation.brandApps': 'NocoBase 应用',
   'auth.passwordMismatch': '两次输入的密码不一致。',
   'routeOverlay.close': '关闭',
@@ -1354,7 +1354,7 @@ const zhCN: AppResource = {
     themes: { default: '宽松', compact: '紧凑' },
   },
   app: {
-    title: 'NocoBase',
+    title: 'NocoHR',
   },
   actions: {
     close: '关闭',

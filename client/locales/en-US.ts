@@ -1428,7 +1428,7 @@ const enUS = {
   'status.denied': 'Access denied',
   'status.pageFailed': 'Unable to load page',
   'status.retry': 'Retry',
-  'navigation.brandHome': 'NocoBase home',
+  'navigation.brandHome': 'NocoHR home',
   'navigation.brandApps': 'NocoBase applications',
   'auth.passwordMismatch': "Passwords don't match.",
   'routeOverlay.close': 'Close',
@@ -1476,7 +1476,7 @@ const enUS = {
     themes: { default: 'Spacious', compact: 'Compact' },
   },
   app: {
-    title: 'NocoBase',
+    title: 'NocoHR',
   },
   actions: {
     close: 'Close',
