@@ -14,7 +14,10 @@
  *   `grants`); the certification steward's notice goes to the task owner
  *   (hr01 by default) and the new department's head, once per event.
  * - exports.ts: 持证操作追溯 and 权限变化记录.
- * - the demonstration pages are demo-batch.ts.
+ * - the pages a certificate unlocks come from the enabled industry content
+ *   packs (../industry-packs/); the manufacturing pack's pages are
+ *   demo-batch.ts. A pack that is off contributes no page, set or operation
+ *   to what a certificate is said to allow.
  *
  * Certificate states and permissions follow rules only; no AI employee
  * changes a certificate, a permission or a schedule.
@@ -30,7 +33,7 @@ import type {
   RunOutcome,
 } from '../automation.js';
 import type { DemoBatchService } from '../demo-batch.js';
-import { DEMO_OPERATIONS } from '../demo-batch.js';
+import type { IndustryPackService } from '../industry-packs/service.js';
 import type { ActorContext } from '../framework-service.js';
 import { json, type Platform } from '../platform.js';
 import { addDays, HrError, str } from '../shared.js';
@@ -47,16 +50,11 @@ import { createTransferCheck, type TransferJudgement } from './transfer.js';
 export const TRANSFER_CHECK_TASK = 'certificationSteward.transferCheck';
 const STEWARD = 'talent.certificationSteward';
 
-/** Display names of the demonstration pages a permission set may open. */
-const PAGE_TITLES: Record<string, string> = {
-  'demo.batchRecord': '设备开工登记',
-  'demo.forkliftDispatch': '叉车出库登记',
-};
-
 export interface CertificationGrant {
   readonly key: string;
   readonly title: string;
-  readonly pages: readonly { id: string; title: string }[];
+  /** Pages the set opens; an industry pack's page carries its name and route, any other page its id and no path. */
+  readonly pages: readonly { id: string; title: string; path: string | null }[];
   readonly operations: readonly {
     resource: string;
     action: string;
@@ -71,14 +69,17 @@ export interface MyCertificateGrant {
   readonly status: string;
   readonly expiresAt: string | null;
   readonly expiring: boolean;
-  /** Page resources the certificate opens (the client links the demonstration pages). */
+  /** Page resources the certificate opens. */
   readonly pages: readonly string[];
+  /** The enabled industry packs' pages among them, with name and route (they have no menu entry). */
+  readonly pageLinks: readonly { id: string; title: string; path: string }[];
   readonly permissionSets: readonly string[];
 }
 
 export interface LicensedServicesDeps {
   readonly platform: Platform;
   readonly demoBatch: () => DemoBatchService;
+  readonly industryPacks: () => IndustryPackService;
   readonly automation: () => AutomationService;
   readonly ai: AIRunner;
   readonly titleText: (title: unknown) => string;
@@ -117,15 +118,21 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
     audit: deps.audit,
   });
 
-  /** Permission sets assigned to a certification subject, with the pages and operations they open. */
+  /**
+   * Permission sets assigned to a certification subject, with the pages and operations they open. A set,
+   * page or operation of an industry pack that is off is left out.
+   */
   async function certificationGrants(
     certificationId: string,
+    locale?: string,
   ): Promise<CertificationGrant[]> {
     const composites = new Map(
       authz.compositeResources.list().map((c) => [c.name, c]),
     );
+    const catalog = await deps.industryPacks().catalog(locale);
     const result: CertificationGrant[] = [];
     for (const set of await authz.permissionSets.list()) {
+      if (catalog.hiddenSet(set.key)) continue;
       const assignments = await authz.permissionSets.listAssignments(set.key);
       if (
         !assignments.some(
@@ -136,13 +143,25 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
       )
         continue;
       const pages = set.grants
-        .filter((grant) => grant.resource.type === 'page')
-        .map((grant) => ({
-          id: grant.resource.id,
-          title: PAGE_TITLES[grant.resource.id] ?? grant.resource.id,
-        }));
+        .filter(
+          (grant) =>
+            grant.resource.type === 'page' &&
+            !catalog.hiddenPage(grant.resource.id),
+        )
+        .map((grant) => {
+          const page = catalog.page(grant.resource.id);
+          return {
+            id: grant.resource.id,
+            title: page?.title ?? grant.resource.id,
+            path: page?.path ?? null,
+          };
+        });
       const operations = set.grants
-        .filter((grant) => grant.resource.type === 'composite')
+        .filter(
+          (grant) =>
+            grant.resource.type === 'composite' &&
+            !catalog.hiddenResource(grant.resource.id),
+        )
         .flatMap((grant) =>
           grant.actions.map((action) => {
             const composite = composites.get(grant.resource.id);
@@ -198,6 +217,7 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
   const exports = createLicensedExports({
     platform,
     demoBatch: deps.demoBatch,
+    industryPacks: deps.industryPacks,
     grantHistory: () => settings.grantHistory(),
     titleText: deps.titleText,
   });
@@ -329,7 +349,10 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
     },
 
     /** 我的证书: what each certificate the caller holds lets them do (only the holder sees this). */
-    async myGrants(ctx: ActorContext): Promise<{
+    async myGrants(
+      ctx: ActorContext,
+      locale?: string,
+    ): Promise<{
       enabled: boolean;
       employeeId: string | null;
       items: MyCertificateGrant[];
@@ -363,8 +386,22 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
         .execute();
       const items: MyCertificateGrant[] = [];
       for (const row of rows) {
-        const grants = await certificationGrants(str(row.certificationId));
+        const grants = await certificationGrants(
+          str(row.certificationId),
+          locale,
+        );
         if (!grants.length) continue;
+        const pageLinks = new Map<
+          string,
+          { id: string; title: string; path: string }
+        >();
+        for (const page of grants.flatMap((g) => g.pages))
+          if (page.path)
+            pageLinks.set(page.id, {
+              id: page.id,
+              title: page.title,
+              path: page.path,
+            });
         items.push({
           certificateId: str(row.id),
           certificationId: str(row.certificationId),
@@ -373,6 +410,7 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
           expiresAt: dateOnly(row.expiresAt),
           expiring: str(row.status) === 'expiring',
           pages: [...new Set(grants.flatMap((g) => g.pages.map((p) => p.id)))],
+          pageLinks: [...pageLinks.values()],
           permissionSets: grants.map((g) => g.title),
         });
       }
@@ -799,10 +837,8 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
       return { created, shifts };
     },
 
-    /** Whether the demonstration operations are wired (for the settings page). */
-    demoOperations() {
-      return DEMO_OPERATIONS.map((op) => ({ ...op }));
-    },
+    /** 行业内容包 (设置 / 持证上岗). */
+    industryPacks: () => deps.industryPacks(),
   };
   return service;
 }

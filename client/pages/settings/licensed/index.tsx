@@ -33,6 +33,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/toast';
 
+import { IndustryPacksCard } from './industry-packs.js';
+
 /** `GET talent/licensed/settings` (server/providers/hr/licensed/settings.ts). */
 export interface LicensedSettingsData {
   value: {
@@ -65,7 +67,8 @@ const PATH = 'talent/licensed/settings';
 /**
  * 设置 / 持证上岗 (V4-14, hr.admin): the industry pack switch, the permission
  * sets obtainable only through a certification, the schedule and transfer
- * checks, the shifts' required certifications and the change log. Permission
+ * checks, the industry content packs (industry-packs.tsx), the shifts'
+ * required certifications and the change log. Permission
  * sets are assigned to certifications in Settings → Authorization, not here.
  */
 export default function LicensedOperationSettingsPage(): ReactElement {
@@ -86,6 +89,7 @@ export default function LicensedOperationSettingsPage(): ReactElement {
             initial={remote.data}
             onSaved={remote.reload}
           />
+          <IndustryPacksCard />
           <LicensedShiftRequirementsCard />
           <HistoryCard history={remote.data.history} />
           {import.meta.env.DEV ? <PrepareCard onDone={remote.reload} /> : null}

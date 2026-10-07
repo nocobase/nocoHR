@@ -874,6 +874,8 @@ const enUS = {
       hrIntegrationErp: 'Business-system integration (demand plans)',
     },
   },
+  // V4-14 行业内容包 (server/locales/modules/licensed.ts).
+  industryPacks: licensedServerEn.industryPacks,
   payroll: {
     permissionSets: {
       hrPayroll: 'Payroll specialist',

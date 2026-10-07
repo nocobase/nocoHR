@@ -5,7 +5,6 @@ import { Link } from 'react-router';
 
 import { buttonVariants } from '@/components/ui/button';
 
-import { DEMO_PAGES } from '../../pages/demo/pages.js';
 import { useRemote } from './use-remote.js';
 
 /** `GET talent/licensed/my-grants` (server/providers/hr/licensed/index.ts). */
@@ -20,6 +19,8 @@ export interface LicensedGrants {
     expiresAt: string | null;
     expiring: boolean;
     pages: string[];
+    /** The enabled industry content packs' pages among them, with name and route (no menu entry of their own). */
+    pageLinks: { id: string; title: string; path: string }[];
     permissionSets: string[];
   }[];
 }
@@ -51,11 +52,9 @@ export function LicensedCertificateGrants({
   return (
     <ul className='space-y-3' aria-label={t('licensed.grants.title')}>
       {items.map((item) => {
-        const pages = item.pages.flatMap((id) =>
-          DEMO_PAGES[id] ? [DEMO_PAGES[id]] : [],
-        );
+        const pages = item.pageLinks;
         const operations = pages.length
-          ? pages.map((page) => t(page.title)).join('、')
+          ? pages.map((page) => page.title).join('、')
           : item.permissionSets.join('、');
         return (
           <li
@@ -81,7 +80,7 @@ export function LicensedCertificateGrants({
                     className={buttonVariants({ size: 'sm' })}
                   >
                     <PlayIcon data-icon='inline-start' />
-                    {t('licensed.grants.open', { title: t(page.title) })}
+                    {t('licensed.grants.open', { title: page.title })}
                   </Link>
                 ))}
               </div>

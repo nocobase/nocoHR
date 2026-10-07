@@ -12,6 +12,7 @@ import { scopeForUser } from '../../providers/hr/authorize.js';
 import { HrError, str } from '../../providers/hr/shared.js';
 import {
   demoBatchServiceToken,
+  industryPackServiceToken,
   licensedServicesToken,
 } from '../../providers/hr/tokens.js';
 
@@ -35,6 +36,10 @@ function failure(error: unknown) {
 }
 
 const deps = { licensed: licensedServicesToken, authz: authorizationToken };
+
+/** Said instead of a trace while no industry content pack with these records is on. */
+export const PACK_DISABLED_NOTE =
+  '没有启用带业务登记的行业内容包，没有可追溯的持证操作记录；管理员可在“设置 → 持证上岗 → 行业内容包”中启用。';
 
 export const getCertificationGrants = defineTools({
   scope: 'SPECIFIED',
@@ -124,19 +129,29 @@ export const traceStartLogs = defineTools({
   definition: {
     name: 'traceStartLogs',
     description:
-      'For a work order number (such as MO-24031) or a dispatch note number (CK-24031), optionally an operation number (10, 20, 30 or op20) and a kind (machineStart or forkliftDispatch), list each registration ordered by time: registrant, time, certificate number and its status at registration, its status and expiry now, and when the registrant completed the certification’s required courses, with links to the records. Only people in the current user data range are returned.',
+      'For a work order number (such as MO-24031) or a dispatch note number (CK-24031), optionally an operation number (10, 20, 30 or op20) and a kind (machineStart or forkliftDispatch), list each registration ordered by time: registrant, time, certificate number and its status at registration, its status and expiry now, and when the registrant completed the certification’s required courses, with links to the records. Only people in the current user data range are returned. Registrations exist only while an industry content pack that brings them is on: otherwise the result is packDisabled: true with a note to pass on, and nothing is traced.',
     schema: z.object({
       workOrderNo: z.string().min(1).max(32),
       operationNo: z.string().max(32).optional(),
       kind: z.enum(['machineStart', 'forkliftDispatch']).optional(),
     }),
   },
-  dependencies: { demoBatch: demoBatchServiceToken, authz: authorizationToken },
+  dependencies: {
+    demoBatch: demoBatchServiceToken,
+    industryPacks: industryPackServiceToken,
+    authz: authorizationToken,
+  },
   invoke: async (
     ctx,
     args: { workOrderNo: string; operationNo?: string; kind?: string },
   ) => {
     try {
+      const { kinds } = await ctx.deps.industryPacks.catalog();
+      if (!kinds.size || (args.kind && !kinds.has(args.kind)))
+        return {
+          status: 'success',
+          content: { packDisabled: true, logs: [], note: PACK_DISABLED_NOTE },
+        };
       return {
         status: 'success',
         content: {
@@ -218,7 +233,7 @@ export function withLicensedStewardTools(
 行业方案 · 持证上岗（第十四步）：
 1. 说明某张证书能做什么、到期后会失去什么时，先调用 getCertificationGrants，只用它返回的显示名称，不猜测权限内容；它返回空时说明该证书不带来系统操作。
 2. 调岗资质检查只陈述事实：员工仍持有哪张证书、仍能使用哪些操作、新岗位是否要求；建议由 HR 决定保留或吊销，不替 HR 决定。listCertificatesNotRequired 与 sendTransferCheckNotice 只在事件任务中使用。
-3. 被问到某张业务单据（如工单 MO-24031、出库单 CK-24031）的某个步骤由谁登记、登记当日证书是否有效时，调用 traceStartLogs（优先于只查开工登记的 traceBatchSignoffs），只根据它返回的数据回答，按登记时间排序；逐条写登记人、登记时间、登记时的证书编号与状态、证书现在的状态和必修课程完成时间，并附上记录链接；登记当日有效、现已失效的，写明“登记当日有效，现已过期”（或“现已吊销”）。
+3. 持证操作登记来自行业内容包（在“设置 → 持证上岗 → 行业内容包”中启用；例如制造业包的工单 MO-24031、出库单 CK-24031）。被问到某张业务单据的某个步骤由谁登记、登记当日证书是否有效时，调用 traceStartLogs（优先于只查开工登记的 traceBatchSignoffs）；它返回 packDisabled 时，照它的 note 说明没有可追溯的登记，不要猜测。否则只根据它返回的数据回答，按登记时间排序；逐条写登记人、登记时间、登记时的证书编号与状态、证书现在的状态和必修课程完成时间，并附上记录链接；登记当日有效、现已失效的，写明“登记当日有效，现已过期”（或“现已吊销”）。
 4. 不替用户开通权限、续发或吊销证书、放行排班。用户提出时说明应走的流程：开通操作需先取得对应证书（完成课程与考试，外部证书由 HR 核验）；续证请完成复审；吊销由 HR 在认证项目页按吊销流程处理；权限集分配在“设置 → 授权”中由管理员调整；被阻止的排班只能换人或等证书有效后再排。
 5. 普通员工只能问自己的证书及其带来的操作；问别人的证书时说明没有权限。`,
     tools: [

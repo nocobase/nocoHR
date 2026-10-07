@@ -79,7 +79,6 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 
-import { DEMO_PAGES } from '../../demo/pages.js';
 import { CertificationDialog } from './certification-dialog.js';
 import { QualificationDossier } from './dossier.js';
 import type { CertificationsOutletContext } from './types.js';
@@ -372,7 +371,7 @@ function Body({
                 <ExternalLinkIcon data-icon='inline-start' />
                 {t('talent.certifications.manageGrants')}
               </Link>
-              <DemoPageLinks pages={detail.grantedPages} />
+              <PackPageLinks pages={detail.grantedPageLinks} />
             </CardContent>
           </Card>
         ) : null}
@@ -520,14 +519,13 @@ function Body({
   );
 }
 
-/** Demonstration pages this certification's permission sets open; they have no menu entry of their own. */
-function DemoPageLinks({
-  pages,
+/** Industry content pack pages this certification's permission sets open; they have no menu entry of their own. */
+function PackPageLinks({
+  pages: links,
 }: {
-  pages: readonly string[];
+  pages: CertificationDetail['grantedPageLinks'];
 }): ReactElement | null {
   const { t } = useTranslation();
-  const links = pages.flatMap((id) => (DEMO_PAGES[id] ? [DEMO_PAGES[id]] : []));
   if (!links.length) return null;
   return (
     <div className='flex flex-wrap gap-2'>
@@ -538,7 +536,7 @@ function DemoPageLinks({
           className={buttonVariants({ size: 'sm' })}
         >
           <PlayIcon data-icon='inline-start' />
-          {t('talent.certifications.openDemoPage', { title: t(link.title) })}
+          {t('talent.certifications.openDemoPage', { title: link.title })}
         </Link>
       ))}
     </div>

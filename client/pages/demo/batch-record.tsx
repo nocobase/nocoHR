@@ -6,7 +6,11 @@ import { useState, type ReactElement } from 'react';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { CertificateStatusBadge } from '@/components/talent/certificate-card';
-import { errorMessage } from '@/components/talent/errors';
+import {
+  errorMessage,
+  isIndustryPackDisabled,
+} from '@/components/talent/errors';
+import { IndustryPackDisabled } from '@/components/talent/industry-pack-disabled';
 import { BlockSkeleton, LoadError } from '@/components/talent/states';
 import { useRemote } from '@/components/talent/use-remote';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -109,7 +113,11 @@ export default function DemoBatchRecordPage(): ReactElement {
         <AlertDescription>{t('demo.batch.notice')}</AlertDescription>
       </Alert>
       {batch.error ? (
-        <LoadError error={batch.error} onRetry={batch.reload} />
+        isIndustryPackDisabled(batch.error) ? (
+          <IndustryPackDisabled />
+        ) : (
+          <LoadError error={batch.error} onRetry={batch.reload} />
+        )
       ) : !batch.data ? (
         <BlockSkeleton rows={4} />
       ) : (

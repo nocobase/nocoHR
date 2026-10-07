@@ -839,6 +839,8 @@ const zhCN: AppServerResource = {
       hrIntegrationErp: '业务系统集成（业务量计划）',
     },
   },
+  // V4-14 行业内容包 (server/locales/modules/licensed.ts).
+  industryPacks: licensedServerZh.industryPacks,
   payroll: {
     permissionSets: {
       hrPayroll: '薪酬专员',

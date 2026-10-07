@@ -260,5 +260,11 @@ export interface CertificationDetail extends CertificationSummary {
   readonly grantedPermissionSets:
     readonly { key: string; title: string }[] | null;
   readonly grantedPages: readonly string[];
+  /** The enabled industry content packs' pages among them, with name and route. */
+  readonly grantedPageLinks: readonly {
+    id: string;
+    title: string;
+    path: string;
+  }[];
   readonly can: { manage: boolean; revoke: boolean };
 }

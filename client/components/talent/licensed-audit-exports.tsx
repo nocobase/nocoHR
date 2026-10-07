@@ -74,27 +74,41 @@ const daysAgo = (days: number) => {
 
 /**
  * V4-14 审计导出 · 持证上岗 (a tab of the V3-11 audit page; talent.audit,
- * hr.admin and hr.auditor): 持证操作追溯 (offered only where the start logs
- * exist) and 权限变化记录, each previewed on the page and downloaded as
+ * hr.admin and hr.auditor): 持证操作追溯 (offered only while an industry
+ * content pack with records is on; otherwise the page says there is nothing
+ * to trace) and 权限变化记录, each previewed on the page and downloaded as
  * Excel. Every download is written to the export log by the server.
  */
 export function LicensedAuditExports(): ReactElement {
-  const options = useRemote<{ startTraceAvailable: boolean }>(
-    'talent/licensed/audit/options',
-  );
+  const { t } = useTranslation();
+  const options = useRemote<{
+    startTraceAvailable: boolean;
+    startTraceSample: string | null;
+  }>('talent/licensed/audit/options');
   return (
     <div className='space-y-4'>
-      {options.data?.startTraceAvailable ? <StartTraceCard /> : null}
+      {options.data?.startTraceAvailable ? (
+        <StartTraceCard sample={options.data.startTraceSample ?? ''} />
+      ) : options.data ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('licensed.audit.startTrace')}</CardTitle>
+            <CardDescription>
+              {t('licensed.audit.nothingToTrace')}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
       <PermissionChangesCard />
     </div>
   );
 }
 
-function StartTraceCard(): ReactElement {
+function StartTraceCard({ sample }: { sample: string }): ReactElement {
   const { t } = useTranslation();
   const { locale } = useLocale();
   const api = useApiClient();
-  const [workOrderNo, setWorkOrderNo] = useState('MO-24031');
+  const [workOrderNo, setWorkOrderNo] = useState(sample);
   const [step, setStep] = useState('');
   const [rows, setRows] = useState<TraceEntry[] | null>(null);
   const query = { workOrderNo, step: step || undefined };

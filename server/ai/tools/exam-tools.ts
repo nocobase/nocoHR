@@ -6,13 +6,16 @@ import {
 import { z } from 'zod';
 
 import { scopeForUser } from '../../providers/hr/authorize.js';
+import { MACHINE_START } from '../../providers/hr/industry-packs/manufacturing.js';
 import { HrError } from '../../providers/hr/shared.js';
 import {
   demoBatchServiceToken,
+  industryPackServiceToken,
   examServiceToken,
   insightServiceToken,
   learningServiceToken,
 } from '../../providers/hr/tokens.js';
+import { PACK_DISABLED_NOTE } from './licensed-tools.js';
 
 const I18N = { namespace: 'hr' };
 
@@ -327,15 +330,29 @@ export const traceBatchSignoffs = defineTools({
   definition: {
     name: 'traceBatchSignoffs',
     description:
-      'For a demonstration work order (batchNo, such as MO-24031) and optionally an operation (step: op10 粗车, op20 精车, op30 钻孔攻丝; the number alone, such as 20, also works), list each machine start log: operator, time, the certificate number and its status when starting, the certificate status now, and when the operator completed the courses the certification requires. Each entry carries links to the underlying records. Only people in the current user data range are returned.',
+      'For a demonstration work order (batchNo, such as MO-24031) and optionally an operation (step: op10 粗车, op20 精车, op30 钻孔攻丝; the number alone, such as 20, also works), list each machine start log: operator, time, the certificate number and its status when starting, the certificate status now, and when the operator completed the courses the certification requires. Each entry carries links to the underlying records. Only people in the current user data range are returned. While the manufacturing industry content pack is off the result is packDisabled: true with a note to pass on.',
     schema: z.object({
       batchNo: z.string().min(1).max(32),
       step: z.string().max(32).optional(),
     }),
   },
-  dependencies: { demoBatch: demoBatchServiceToken, authz: authorizationToken },
+  dependencies: {
+    demoBatch: demoBatchServiceToken,
+    industryPacks: industryPackServiceToken,
+    authz: authorizationToken,
+  },
   invoke: async (ctx, args: { batchNo: string; step?: string }) => {
     try {
+      // Machine start logs are the manufacturing pack's (行业内容包).
+      if (!(await ctx.deps.industryPacks.catalog()).kinds.has(MACHINE_START))
+        return {
+          status: 'success',
+          content: {
+            packDisabled: true,
+            signoffs: [],
+            note: PACK_DISABLED_NOTE,
+          },
+        };
       return {
         status: 'success',
         content: {

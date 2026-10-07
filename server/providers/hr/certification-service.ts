@@ -23,6 +23,7 @@ import {
   type CollectionPolicies,
 } from './authorize.js';
 import type { ActorContext } from './framework-service.js';
+import type { PackCatalog } from './industry-packs/service.js';
 import type { LearningService } from './learning-service.js';
 import { bool, json, type EmployeeSummary, type Platform } from './platform.js';
 import {
@@ -111,8 +112,14 @@ export interface CertificationDetail extends CertificationSummary {
   /** Permission sets assigned to this certification's subject; managed in Settings → Authorization. */
   readonly grantedPermissionSets:
     readonly { key: string; title: string }[] | null;
-  /** Page resources those permission sets open, for every viewer. */
+  /** Page resources those permission sets open, for every viewer (none of an industry pack that is off). */
   readonly grantedPages: readonly string[];
+  /** The enabled industry packs' pages among them, with name and route (they have no menu entry). */
+  readonly grantedPageLinks: readonly {
+    id: string;
+    title: string;
+    path: string;
+  }[];
   readonly can: { manage: boolean; revoke: boolean };
 }
 
@@ -129,6 +136,7 @@ export interface CertificationService {
   getCertification(
     ctx: ActorContext,
     id: string,
+    locale?: string,
   ): Promise<CertificationDetail | undefined>;
   saveCertification(
     ctx: ActorContext,
@@ -222,6 +230,11 @@ export interface CertificationServiceDeps {
    * permissions. Defaults to on when not wired, the V1 behaviour.
    */
   readonly licensed?: () => Promise<boolean>;
+  /**
+   * 行业内容包: what the enabled packs contribute. A permission set or page of a pack that is off is not
+   * named as something a certificate allows or loses. Not wired: nothing is hidden and no page is linked.
+   */
+  readonly packCatalog?: (locale?: string) => Promise<PackCatalog>;
   /** V3-10: a certificate of a certification that qualifies for a position was issued. */
   readonly onQualified?: () => ((certificateId: string) => void) | undefined;
   /**
@@ -722,7 +735,7 @@ export function createCertificationService(
       return { items: await toSummaries(rows), canManage };
     },
 
-    async getCertification(ctx, id) {
+    async getCertification(ctx, id, locale) {
       const row = await assertCertificationVisible(ctx, id).catch(
         (error: unknown) => {
           if (error instanceof HrError && error.status === 404)
@@ -775,6 +788,13 @@ export function createCertificationService(
       // Permission sets assigned to this certification: their titles for managers, and the pages they open for
       // everyone, so a holder can find what the certificate unlocks.
       const assigned: { key: string; title: string; pages: string[] }[] = [];
+      const catalog = deps.packCatalog
+        ? await deps.packCatalog(locale)
+        : undefined;
+      const pageLinks = new Map<
+        string,
+        { id: string; title: string; path: string }
+      >();
       for (const set of (await licensed())
         ? await authz.permissionSets.list()
         : []) {
@@ -788,10 +808,20 @@ export function createCertificationService(
           assigned.push({
             key: set.key,
             title: deps.titleText(set.title),
-            pages: set.grants
-              .filter((grant) => grant.resource.type === 'page')
-              .map((grant) => grant.resource.id),
+            pages: catalog?.hiddenSet(set.key)
+              ? []
+              : set.grants
+                  .filter(
+                    (grant) =>
+                      grant.resource.type === 'page' &&
+                      !catalog?.hiddenPage(grant.resource.id),
+                  )
+                  .map((grant) => grant.resource.id),
           });
+      }
+      for (const id of assigned.flatMap((set) => set.pages)) {
+        const page = catalog?.page(id);
+        if (page) pageLinks.set(id, { id, ...page });
       }
       const granted = canManage
         ? assigned.map(({ key, title }) => ({ key, title }))
@@ -802,6 +832,7 @@ export function createCertificationService(
         holders,
         grantedPermissionSets: granted,
         grantedPages: [...new Set(assigned.flatMap((set) => set.pages))],
+        grantedPageLinks: [...pageLinks.values()],
         can: {
           manage: canManage,
           revoke: await platform.can(ctx, CERTIFICATE, 'revoke'),
@@ -1388,8 +1419,10 @@ export function createCertificationService(
     async grantedSetTitles(certificationId) {
       // V4-14: with the industry pack off a certificate grants nothing, so there is nothing to lose.
       if (!(await licensed())) return [];
+      const catalog = deps.packCatalog ? await deps.packCatalog() : undefined;
       const titles: string[] = [];
       for (const set of await authz.permissionSets.list()) {
+        if (catalog?.hiddenSet(set.key)) continue;
         const assignments = await authz.permissionSets.listAssignments(set.key);
         if (
           assignments.some(

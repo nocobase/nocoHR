@@ -20,14 +20,24 @@
  * registrations check twice on the server: the business operation first,
  * then a valid or expiring certificate of a certification the operation's
  * permission set is assigned to; without one the registration is refused,
- * whatever the permission says. The mapping of page to permission set is
- * demonstration configuration (DEMO_OPERATIONS). These pages and their
- * records exist only where the demo seed ran; they are not a product
- * feature.
+ * whatever the permission says.
+ *
+ * Both pages are the 制造业 industry content pack's (industry-packs/
+ * manufacturing.ts maps page, operation, kind and permission set). With the
+ * pack off, both pages answer INDUSTRY_PACK_DISABLED before anything else,
+ * and the traces leave out the kinds of packs that are off; nothing is
+ * deleted.
  */
 import { authorizeAction, policyOf } from './authorize.js';
 import { CERTIFICATION_SUBJECT } from './certification-service.js';
 import type { ActorContext } from './framework-service.js';
+import {
+  CNC_OPERATOR_SET,
+  FORKLIFT_DISPATCH,
+  FORKLIFT_OPERATOR_SET,
+  MACHINE_START,
+} from './industry-packs/manufacturing.js';
+import type { IndustryPackService } from './industry-packs/service.js';
 import type { Platform } from './platform.js';
 import { HrError, newId, str } from './shared.js';
 
@@ -43,10 +53,6 @@ export const DEMO_BATCH = {
   /** The operation that takes machine start logs in the demo. */
   signableStep: 'op20',
 } as const;
-/** The permission set whose holders may record a machine start. */
-export const CNC_OPERATOR_PERMISSION_SET = 'prod.cncOperator';
-/** V4-14: the permission set whose holders may record a forklift dispatch. */
-export const FORKLIFT_OPERATOR_PERMISSION_SET = 'equip.forkliftOperator';
 /** V4-14 叉车出库登记: one demonstration dispatch note on one forklift. */
 export const DEMO_FORKLIFT = {
   orderNo: 'CK-24031',
@@ -57,27 +63,7 @@ export const DEMO_FORKLIFT = {
     { code: 'BC-2405', quantity: 80 },
   ],
 } as const;
-/**
- * V4-14 演示配置: which demonstration page each permission set opens, the
- * operation behind its button, and the kind of start log it writes.
- */
-export const DEMO_OPERATIONS = [
-  {
-    kind: 'machineStart',
-    permissionSet: CNC_OPERATOR_PERMISSION_SET,
-    page: 'demo.batchRecord',
-    resource: 'demo.batch',
-    action: 'signFilling',
-  },
-  {
-    kind: 'forkliftDispatch',
-    permissionSet: FORKLIFT_OPERATOR_PERMISSION_SET,
-    page: 'demo.forkliftDispatch',
-    resource: 'demo.forklift',
-    action: 'dispatch',
-  },
-] as const;
-export type StartLogKind = (typeof DEMO_OPERATIONS)[number]['kind'];
+type StartLogKind = typeof MACHINE_START | typeof FORKLIFT_DISPATCH;
 const BATCH = 'demo.batch';
 const FORKLIFT = 'demo.forklift';
 const STEWARD = 'talent.certificationSteward';
@@ -173,13 +159,18 @@ function dateOnly(value: unknown): string | null {
 
 export function createDemoBatchService(deps: {
   readonly platform: Platform;
+  /** 行业内容包: the operations stop, and the traces leave out their kinds, while their pack is off. */
+  readonly industryPacks: () => Pick<
+    IndustryPackService,
+    'assertOperation' | 'catalog'
+  >;
 }): DemoBatchService {
   const { platform } = deps;
   const { database, authz } = platform;
 
-  /** Certifications a permission set is assigned to (the CNC operator set by default). */
+  /** Certifications a permission set is assigned to. */
   async function operatorCertifications(
-    permissionSet: string = CNC_OPERATOR_PERMISSION_SET,
+    permissionSet: string,
   ): Promise<string[]> {
     const assignments = await authz.permissionSets
       .listAssignments(permissionSet)
@@ -197,10 +188,12 @@ export function createDemoBatchService(deps: {
       .where('batchNo', '=', batchNo);
     if (step) builder = builder.where('step', '=', step);
     const rows = await builder.orderBy('signedAt', 'desc').execute();
-    // Rows written before V4-14 carry no kind: they are machine starts.
-    return kind
-      ? rows.filter((row) => str(row.kind ?? 'machineStart') === kind)
-      : rows;
+    // Only the kinds of enabled industry packs; rows written before V4-14 carry no kind: they are machine starts.
+    const { kinds } = await deps.industryPacks().catalog();
+    return rows.filter((row) => {
+      const rowKind = str(row.kind ?? MACHINE_START);
+      return kinds.has(rowKind) && (!kind || rowKind === kind);
+    });
   }
 
   /**
@@ -314,7 +307,7 @@ export function createDemoBatchService(deps: {
     const employee = await platform.employee(str(row.employeeId));
     return {
       id: str(row.id),
-      kind: str(row.kind ?? 'machineStart'),
+      kind: str(row.kind ?? MACHINE_START),
       machineNo: row.machineNo ? str(row.machineNo) : null,
       step: str(row.step),
       employeeId: str(row.employeeId),
@@ -329,6 +322,7 @@ export function createDemoBatchService(deps: {
 
   const service: DemoBatchService = {
     async view(ctx) {
+      await deps.industryPacks().assertOperation(MACHINE_START);
       await authorizeAction(ctx.authz, BATCH, 'view');
       const rows = await signoffRows(DEMO_BATCH.batchNo);
       const signoffs = await Promise.all(rows.map(toSignoff));
@@ -345,23 +339,25 @@ export function createDemoBatchService(deps: {
     },
 
     async signFilling(ctx) {
+      await deps.industryPacks().assertOperation(MACHINE_START);
       // Granted only through the certification's permission set; nothing on the request can claim it.
       await authorizeAction(ctx.authz, BATCH, 'signFilling');
       return record(ctx, {
-        kind: 'machineStart',
+        kind: MACHINE_START,
         batchNo: DEMO_BATCH.batchNo,
         step: DEMO_BATCH.signableStep,
         machineNo: DEMO_BATCH.machines[DEMO_BATCH.signableStep],
-        permissionSet: CNC_OPERATOR_PERMISSION_SET,
+        permissionSet: CNC_OPERATOR_SET,
       });
     },
 
     async forkliftView(ctx) {
+      await deps.industryPacks().assertOperation(FORKLIFT_DISPATCH);
       await authorizeAction(ctx.authz, FORKLIFT, 'view');
       const rows = await signoffRows(
         DEMO_FORKLIFT.orderNo,
         undefined,
-        'forkliftDispatch',
+        FORKLIFT_DISPATCH,
       );
       return {
         orderNo: DEMO_FORKLIFT.orderNo,
@@ -374,13 +370,14 @@ export function createDemoBatchService(deps: {
     },
 
     async forkliftDispatch(ctx) {
+      await deps.industryPacks().assertOperation(FORKLIFT_DISPATCH);
       await authorizeAction(ctx.authz, FORKLIFT, 'dispatch');
       return record(ctx, {
-        kind: 'forkliftDispatch',
+        kind: FORKLIFT_DISPATCH,
         batchNo: DEMO_FORKLIFT.orderNo,
         step: 'dispatch',
         machineNo: DEMO_FORKLIFT.forkliftNo,
-        permissionSet: FORKLIFT_OPERATOR_PERMISSION_SET,
+        permissionSet: FORKLIFT_OPERATOR_SET,
       });
     },
 

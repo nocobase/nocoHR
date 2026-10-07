@@ -188,6 +188,8 @@ import { talentReviewServicesToken } from './tokens.js';
 import { createLicensedServices } from './licensed/index.js';
 import { LICENSED_COMPOSITES } from './licensed/resources.js';
 import { licensedServicesToken } from './tokens.js';
+import { createIndustryPackService } from './industry-packs/service.js';
+import { industryPackServiceToken } from './tokens.js';
 // V4-14 end
 // V4-13 end
 import type { TalentConfig } from '../../config/talent.js';
@@ -1167,6 +1169,26 @@ export default class HrProvider extends ServiceProvider<Application> {
    */
   private registerLicensed(): void {
     const container = this.app.container;
+    // 行业内容包: the industry content (pages, operations, permission sets) the 持证上岗 mechanism works on.
+    container.singleton(industryPackServiceToken, () => {
+      const i18n = container.resolve(i18nToken);
+      return createIndustryPackService({
+        database: container.resolve(databaseManagerToken),
+        authz: container.resolve(authorizationToken),
+        translate: (key, locale) => {
+          const text = i18n.getFixedT(
+            'hr',
+            locale ?? i18n.getDefaultLocale(),
+          )(key);
+          return text === key ? '' : text;
+        },
+        audit: (event) =>
+          container
+            .resolve(loggingToken)
+            .getLogger('hr-audit')
+            .info(event, 'HR audit'),
+      });
+    });
     container.singleton(licensedServicesToken, () => {
       const i18n = container.resolve(i18nToken);
       // An untranslated title (e.g. the plugin's built-in sets, whose names only the client ships)
@@ -1178,6 +1200,7 @@ export default class HrProvider extends ServiceProvider<Application> {
       return createLicensedServices({
         platform: container.resolve(platformToken),
         demoBatch: () => container.resolve(demoBatchServiceToken),
+        industryPacks: () => container.resolve(industryPackServiceToken),
         automation: () => container.resolve(automationServiceToken),
         ai: createAIRunner(container),
         titleText: (title) => {
@@ -2177,7 +2200,11 @@ export default class HrProvider extends ServiceProvider<Application> {
       }),
     );
     container.singleton(demoBatchServiceToken, () =>
-      createDemoBatchService({ platform: container.resolve(platformToken) }),
+      createDemoBatchService({
+        platform: container.resolve(platformToken),
+        // 行业内容包: the pages are the manufacturing pack's and stop with it.
+        industryPacks: () => container.resolve(industryPackServiceToken),
+      }),
     );
   }
 
@@ -2343,6 +2370,9 @@ export default class HrProvider extends ServiceProvider<Application> {
         licensed: async () =>
           (await container.resolve(examSettingsToken).licensedOperation())
             .enabled,
+        // 行业内容包: a pack that is off names no page or set a certificate allows.
+        packCatalog: (locale) =>
+          container.resolve(industryPackServiceToken).catalog(locale),
         onQualified: () => (certificateId) =>
           this.inBackground('certificationSteward.qualificationPrep', () =>
             container

@@ -279,6 +279,13 @@ export const licensedServicesToken: ServiceToken<
 > = createServiceToken<import('./licensed/index.js').LicensedServices>(
   'hr/licensed-services',
 );
+// 行业内容包 (industry-packs/): which industry content the 持证上岗 mechanism works on.
+export const industryPackServiceToken: ServiceToken<
+  import('./industry-packs/service.js').IndustryPackService
+> =
+  createServiceToken<import('./industry-packs/service.js').IndustryPackService>(
+    'hr/industry-packs',
+  );
 // V4-14 end
 // V2-06 邮件往来 (总纲 邮件约定).
 export const mailSettingsToken: ServiceToken<

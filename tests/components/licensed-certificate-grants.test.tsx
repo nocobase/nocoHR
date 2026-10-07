@@ -30,6 +30,13 @@ const GRANT = {
   expiresAt: '2027-04-30',
   expiring: false,
   pages: ['demo.batchRecord'],
+  pageLinks: [
+    {
+      id: 'demo.batchRecord',
+      title: '设备开工登记',
+      path: '/demo/batch-record',
+    },
+  ],
   permissionSets: ['设备开工登记'],
 };
 
@@ -49,11 +56,11 @@ describe('LicensedCertificateGrants', () => {
     state.data = { enabled: true, employeeId: 'emp-zhoudi', items: [GRANT] };
   });
 
-  it('says what the holder’s certificate allows and links to the page', () => {
+  it('says what the holder’s certificate allows and links to the page the server names', () => {
     renderGrants({ employeeId: 'emp-zhoudi' });
     expect(
       screen.getByText(/licensed\.grants\.canOperate/u).textContent,
-    ).toContain('navigation.demoBatchRecord');
+    ).toContain('设备开工登记');
     const link = screen.getByRole('link');
     expect(link.getAttribute('href')).toBe('/demo/batch-record');
     expect(screen.queryByText(/licensed\.grants\.willLose/u)).toBeNull();
@@ -67,6 +74,19 @@ describe('LicensedCertificateGrants', () => {
     };
     renderGrants({ certificationId: 'cert-cnc' });
     expect(screen.getByText(/licensed\.grants\.willLose/u)).toBeTruthy();
+  });
+
+  it('names the permission sets without a link when no enabled pack page is among them', () => {
+    state.data = {
+      enabled: true,
+      employeeId: 'emp-zhoudi',
+      items: [{ ...GRANT, pages: [], pageLinks: [] }],
+    };
+    renderGrants({});
+    expect(
+      screen.getByText(/licensed\.grants\.canOperate/u).textContent,
+    ).toContain('设备开工登记');
+    expect(screen.queryByRole('link')).toBeNull();
   });
 
   it('shows nothing on someone else’s wall or with the industry pack off', () => {

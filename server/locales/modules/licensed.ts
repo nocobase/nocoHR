@@ -11,6 +11,18 @@ export const licensedServerEn = {
   permissionSets: {
     forkliftOperator: 'Forklift dispatch',
   },
+  // 行业内容包 (server/providers/hr/industry-packs/): each pack's name, its one-line description and the pages it brings.
+  industryPacks: {
+    manufacturing: {
+      title: 'Manufacturing',
+      description:
+        'Equipment start-up and forklift dispatch sign-offs that only certified operators may record, with their trace.',
+      operations: {
+        machineStart: 'Equipment start-up sign-off',
+        forkliftDispatch: 'Forklift dispatch',
+      },
+    },
+  },
   notifications: {
     certificateIssuedWithSets: n(
       'Certificate issued',
@@ -38,6 +50,17 @@ export const licensedServerEn = {
 export const licensedServerZh: typeof licensedServerEn = {
   permissionSets: {
     forkliftOperator: '叉车出库登记',
+  },
+  industryPacks: {
+    manufacturing: {
+      title: '制造业',
+      description:
+        '设备开工登记、叉车出库登记：只有持证人能登记，并可追溯登记时的证书。',
+      operations: {
+        machineStart: '设备开工登记',
+        forkliftDispatch: '叉车出库登记',
+      },
+    },
   },
   notifications: {
     certificateIssuedWithSets: n(

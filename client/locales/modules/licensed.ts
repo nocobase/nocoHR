@@ -84,6 +84,25 @@ const en = {
       'Saved on its own: a shift already in use can gain or lose a requirement.',
     external: 'External',
   },
+  industryPacks: {
+    title: 'Industry content packs',
+    description:
+      'The pages and registrations a certificate can unlock in one industry. A new installation has none on; turning a pack on creates its permission sets when missing. Assign them to certifications in Settings → Authorization.',
+    none: 'No industry content packs available.',
+    noCertification: 'No certification assigned yet',
+    setCreatedOnEnable: 'Created when turned on',
+    enabled: 'Industry content pack turned on.',
+    disabled: 'Industry content pack turned off.',
+    confirmTitle: 'Turn off {{title}}?',
+    confirmDescription:
+      'Its pages and registrations stop working, and its records leave the trace and the export. Nothing is deleted: permission sets, assignments and records stay, and turning it on again restores everything.',
+    confirmDisable: 'Turn off',
+  },
+  packDisabled: {
+    title: 'This industry content pack is not turned on',
+    description:
+      'Turn it on in Settings → Licensed operation → Industry content packs. Nothing recorded here was deleted.',
+  },
   grants: {
     title: 'What your certificates allow',
     canOperate: 'Allows: {{operations}}',
@@ -128,6 +147,8 @@ const en = {
       'For each step of a business document: who registered, when, the certificate number and status then, its status now, and when they completed the required courses.',
     workOrderNo: 'Business document number',
     operationNo: 'Step (optional)',
+    nothingToTrace:
+      'Nothing to trace: no industry content pack with certified registrations is turned on, or none has been recorded yet.',
     show: 'Show',
     download: 'Download Excel',
     registrant: 'Registered by',
@@ -251,6 +272,24 @@ const zh: Shape<typeof en> = {
     fieldHint: '单独保存：已经排过的班次也可以增减要求。',
     external: '外部证书',
   },
+  industryPacks: {
+    title: '行业内容包',
+    description:
+      '某个行业里证书能解锁的页面和登记。新安装默认都不启用；启用时会补建缺少的权限集，再到“设置 → 授权”中分配给认证。',
+    none: '没有可用的行业内容包。',
+    noCertification: '尚未分配证书',
+    setCreatedOnEnable: '启用时创建',
+    enabled: '行业内容包已启用。',
+    disabled: '行业内容包已停用。',
+    confirmTitle: '停用“{{title}}”？',
+    confirmDescription:
+      '停用后，它的页面和登记不能再使用，它的记录也不再出现在追溯和导出中。不会删除任何内容：权限集、分配和记录都保留，重新启用即恢复。',
+    confirmDisable: '停用',
+  },
+  packDisabled: {
+    title: '该行业内容包未启用',
+    description: '请在 设置 / 持证上岗 中启用。已登记的记录没有被删除。',
+  },
   grants: {
     title: '证书带来的操作',
     canOperate: '可操作：{{operations}}',
@@ -293,6 +332,8 @@ const zh: Shape<typeof en> = {
       '按业务单据的步骤列出登记人、登记时间、登记时的证书编号与状态、证书当前状态，以及登记人必修课程的完成时间。',
     workOrderNo: '业务单号',
     operationNo: '步骤（可选）',
+    nothingToTrace:
+      '没有可追溯的持证操作：未启用带业务登记的行业内容包，或还没有登记记录。',
     show: '查看',
     download: '下载 Excel',
     registrant: '登记人',
@@ -362,6 +403,9 @@ const enShared = {
       'The notice can go only to the task owner and the new department head.',
     NOTHING_TO_SEND:
       'This job change leaves no certificate for HR to decide on.',
+    INDUSTRY_PACK_DISABLED:
+      'This industry content pack is not turned on. Turn it on in Settings → Licensed operation.',
+    INDUSTRY_PACK_NOT_FOUND: 'This industry content pack does not exist.',
   },
   automationTasks: {
     'certificationSteward.transferCheck': {
@@ -400,6 +444,8 @@ const zhShared: typeof enShared = {
     PERMISSION_SET_NOT_FOUND: '权限集 {{permissionSet}} 不存在。',
     RECIPIENT_NOT_ALLOWED: '提醒只能发给任务负责人和新部门负责人。',
     NOTHING_TO_SEND: '这次调岗没有需要 HR 决定的证书。',
+    INDUSTRY_PACK_DISABLED: '该行业内容包未启用，请在 设置 / 持证上岗 中启用。',
+    INDUSTRY_PACK_NOT_FOUND: '没有这个行业内容包。',
   },
   automationTasks: {
     'certificationSteward.transferCheck': {

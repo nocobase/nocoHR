@@ -49,6 +49,11 @@ export function errorMessage(error: unknown, t: Translate): string {
   return t('talent.errors.generic');
 }
 
+/** The page belongs to an industry content pack that is off (server: INDUSTRY_PACK_DISABLED). */
+export function isIndustryPackDisabled(error: unknown): boolean {
+  return errorCode(error) === 'INDUSTRY_PACK_DISABLED';
+}
+
 export function isForbidden(error: unknown): boolean {
   return error instanceof ApiClientError && error.status === 403;
 }

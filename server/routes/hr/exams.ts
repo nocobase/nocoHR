@@ -365,6 +365,7 @@ export const examApiRoutes: AppApiRouteContribution<Application> =
       const certification = await certifications.getCertification(
         actor(c),
         c.req.param('id'),
+        locale(c),
       );
       if (!certification) throw new HrError('CERTIFICATION_NOT_FOUND', 404);
       return c.json({ data: certification });

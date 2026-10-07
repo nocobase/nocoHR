@@ -4,6 +4,7 @@
  * each service call authorizes its own business operation:
  *
  * - /api/talent/licensed/settings — 设置 / 持证上岗 (talent.licensedOperationSettings · manage)
+ * - /api/talent/licensed/industry-packs — 行业内容包: list, turn one on or off (the same settings · manage)
  * - /api/talent/licensed/my-grants — what the caller's own certificates let them do
  * - /api/talent/licensed/shifts — 班次 · 要求的认证 (talent.shift · manageRequiredCertifications)
  * - /api/talent/licensed/audit/* — 持证操作追溯 and 权限变化记录 (talent.audit)
@@ -28,7 +29,13 @@ import {
   demoBatchServiceToken,
   licensedServicesToken,
 } from '../../providers/hr/tokens.js';
-import { actor, installErrorHandler, readJson, type HrEnv } from './shared.js';
+import {
+  actor,
+  installErrorHandler,
+  locale,
+  readJson,
+  type HrEnv,
+} from './shared.js';
 
 const XLSX_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -73,8 +80,26 @@ export const licensedRoutes: AppApiRouteContribution<Application> =
         data: await licensed().settings.update(actor(c), await readJson(c)),
       }),
     );
+    // 行业内容包: each service call authorizes talent.licensedOperationSettings · manage first.
+    api.get('/industry-packs', async (c) =>
+      c.json({
+        data: await licensed().industryPacks().list(actor(c), locale(c)),
+      }),
+    );
+    api.put('/industry-packs/:key', async (c) =>
+      c.json({
+        data: await licensed()
+          .industryPacks()
+          .setEnabled(
+            actor(c),
+            param(c.req.param('key')),
+            await readJson(c),
+            locale(c),
+          ),
+      }),
+    );
     api.get('/my-grants', async (c) =>
-      c.json({ data: await licensed().myGrants(actor(c)) }),
+      c.json({ data: await licensed().myGrants(actor(c), locale(c)) }),
     );
     api.get('/shifts', async (c) =>
       c.json({ data: await licensed().shiftRequirements(actor(c)) }),
@@ -100,9 +125,12 @@ export const licensedRoutes: AppApiRouteContribution<Application> =
         'talent.audit',
         'exportPermissionChanges',
       );
+      const trace = await licensed().exports.startTraceOptions();
       return c.json({
         data: {
-          startTraceAvailable: await licensed().exports.startTraceAvailable(),
+          startTraceAvailable: trace.available,
+          // The latest traceable document, as the example the page starts from.
+          startTraceSample: trace.sampleDocumentNo,
         },
       });
     });

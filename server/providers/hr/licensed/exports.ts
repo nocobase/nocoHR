@@ -5,8 +5,9 @@
  * - 持证操作追溯 (Excel, `exportStartTrace`): per step of a business document
  *   (the demo's work order or dispatch note), who registered, when, the certificate number and status at
  *   registration, the certificate's status now, and when the registrant
- *   completed the certification's required courses. Offered only where the
- *   demo start logs exist.
+ *   completed the certification's required courses. Offered only while an
+ *   industry content pack is on and records of its kinds exist; the kinds
+ *   of packs that are off are left out.
  * - 权限变化记录 (Excel, `exportPermissionChanges`): for a person or a
  *   certification over a period, the permission sets gained or lost through
  *   a certificate or a change of the certification subject's assignments.
@@ -26,6 +27,7 @@ import { z } from 'zod';
 import { authorizeAction, policyOf } from '../authorize.js';
 import type { DemoBatchService, SignoffTrace } from '../demo-batch.js';
 import type { ActorContext } from '../framework-service.js';
+import type { IndustryPackService } from '../industry-packs/service.js';
 import type { Platform } from '../platform.js';
 import { HrError, isDateOnly, newId, str } from '../shared.js';
 import type { GrantHistory } from './settings.js';
@@ -89,6 +91,7 @@ const permissionQuery = z
 export function createLicensedExports(deps: {
   readonly platform: Platform;
   readonly demoBatch: () => DemoBatchService;
+  readonly industryPacks: () => Pick<IndustryPackService, 'catalog'>;
   readonly grantHistory: () => Promise<GrantHistory>;
   readonly titleText: (title: unknown) => string;
 }) {
@@ -144,15 +147,34 @@ export function createLicensedExports(deps: {
     return XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) as Uint8Array;
   }
 
-  /** Whether the demonstration start logs exist (the start trace is offered only then). */
-  async function startTraceAvailable(): Promise<boolean> {
-    return Boolean(
-      await database
-        .query()
-        .selectFrom('demoBatchSignoffs')
-        .select(['id'])
-        .executeTakeFirst(),
+  /**
+   * Whether there is anything to trace: an enabled industry pack with records of its kinds. With one, the
+   * latest record's document number is offered as the example to look up.
+   */
+  async function startTraceOptions(): Promise<{
+    available: boolean;
+    sampleDocumentNo: string | null;
+  }> {
+    const { kinds } = await deps.industryPacks().catalog();
+    if (!kinds.size) return { available: false, sampleDocumentNo: null };
+    const rows = await database
+      .query()
+      .selectFrom('demoBatchSignoffs')
+      .select(['batchNo', 'kind'])
+      .orderBy('signedAt', 'desc')
+      .execute();
+    // Rows written before V4-14 carry no kind: they are machine starts.
+    const latest = rows.find((row) =>
+      kinds.has(str(row.kind ?? 'machineStart')),
     );
+    return {
+      available: Boolean(latest),
+      sampleDocumentNo: latest ? str(latest.batchNo) : null,
+    };
+  }
+
+  async function startTraceAvailable(): Promise<boolean> {
+    return (await startTraceOptions()).available;
   }
 
   async function startTrace(
@@ -160,6 +182,9 @@ export function createLicensedExports(deps: {
     input: { workOrderNo: string; step?: string; kind?: string },
   ): Promise<SignoffTrace[]> {
     const people = await scopedEmployees(ctx, 'exportStartTrace');
+    // Nothing to trace while no industry pack is on.
+    if (!(await deps.industryPacks().catalog()).kinds.size)
+      throw new HrError('INDUSTRY_PACK_DISABLED', 404);
     return deps
       .demoBatch()
       .traceWithin(
@@ -333,6 +358,7 @@ export function createLicensedExports(deps: {
 
   return {
     startTraceAvailable,
+    startTraceOptions,
     startTrace,
     permissionChanges,
 
