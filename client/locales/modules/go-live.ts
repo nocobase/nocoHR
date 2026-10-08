@@ -170,6 +170,8 @@ const en = {
       'These employees have neither Feishu nor a work mailbox that could be reached. Each link is shown only now and opens the account once: give it to the person only.',
     copy: 'Copy link',
     copied: 'Link copied.',
+    copyAll: 'Copy all',
+    copiedAll: '{{count}} links copied, one line per employee.',
     linkLabel: 'Activation link of {{name}}',
     expires: 'Valid until {{at}}',
     sentBy: {
@@ -383,6 +385,8 @@ const zh: typeof en = {
       '这些员工既没有绑定飞书，也无法发送到工作邮箱。链接只在这里显示一次，只能打开一次账号：请只交给本人。',
     copy: '复制链接',
     copied: '已复制链接。',
+    copyAll: '复制全部',
+    copiedAll: '已复制 {{count}} 个链接，每人一行。',
     linkLabel: '{{name}}的激活链接',
     expires: '有效期至 {{at}}',
     sentBy: {

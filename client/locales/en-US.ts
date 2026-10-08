@@ -5683,6 +5683,34 @@ const enUS = {
         base: 'Yearly base adjustment',
       },
       noPlans: 'No plans yet',
+      plan: {
+        create: 'New plan',
+        edit: 'Edit plan',
+        editOf: 'Edit the plan of {{city}}',
+        emptyDescription:
+          'A plan sets each insurance’s rates and base range for a city; enrolments use the plan of their city.',
+        description:
+          'Rates are percentages. An enrolment’s base outside an item’s range is clamped to it.',
+        effectiveFrom: 'From',
+        effectiveTo: 'Until',
+        effectiveToHint: 'Leave empty while the plan stays in force.',
+        note: 'Note',
+        items: 'Insurances',
+        itemsHint:
+          'Remove an insurance the city does not collect; add it back below.',
+        employerRate: 'Employer (%)',
+        employeeRate: 'Employee (%)',
+        baseMin: 'Base minimum',
+        baseMax: 'Base maximum',
+        removeItem: 'Remove {{name}}',
+        cityRequired: 'Enter the city.',
+        monthInvalid: 'Enter months such as 2026-10.',
+        rangeInvalid: 'The end month comes before the start month.',
+        itemsRequired: 'Keep at least one insurance.',
+        rateInvalid: 'Rates are numbers from 0 to 100.',
+        baseInvalid:
+          'Bases are numbers of 0 or more, and the maximum is not below the minimum.',
+      },
       open: 'open',
       item: 'Item',
       employerRate: 'Employer',
@@ -5868,6 +5896,7 @@ const enUS = {
         'Attendance is not locked yet for: {{names}}.',
       ENROLMENT_ACTIVE_EXISTS: 'The employee is already insured.',
       PLAN_NOT_FOUND: 'No plan for this city and month.',
+      PLAN_ITEM_DUPLICATE: 'Each insurance appears once in a plan.',
     },
     authz: {
       group: 'Payroll',

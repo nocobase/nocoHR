@@ -98,7 +98,7 @@ export function ActivationButton({
         {t('goLive.activation.detailTitle')}
       </Button>
       <Dialog open={open} onOpenChange={(next) => (next ? null : close())}>
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>{t('goLive.activation.detailTitle')}</DialogTitle>
             <DialogDescription>

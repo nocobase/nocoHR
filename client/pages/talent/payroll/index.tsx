@@ -59,7 +59,9 @@ export default function PayrollPage(): ReactElement {
         <PageHeader
           title={t('payroll.cycles.title')}
           description={t('payroll.cycles.description')}
-          // 上线准备: 导入个税累计期初 (talent.payroll importOpening).
+          // 上线准备: 导入个税累计期初 (talent.payroll importOpening). No list
+          // here shows the openings (a cycle reads them when it calculates),
+          // so there is nothing to reload after an import.
           actions={<OpeningImportButton kind='taxOpenings' />}
         />
         <Tabs

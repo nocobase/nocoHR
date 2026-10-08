@@ -79,6 +79,8 @@ export type ActivationOutcome =
 export interface ActivationResult {
   readonly employeeId: string;
   readonly name: string;
+  /** For the hand-over list HR copies (姓名 工号, link); the login may differ. */
+  readonly employeeNo: string | null;
   readonly login: string | null;
   readonly accountCreated: boolean;
   readonly outcome: ActivationOutcome;
@@ -579,6 +581,7 @@ export function createAccountActivation(deps: {
         const base = {
           employeeId: id,
           name: text(employee.name),
+          employeeNo: text(employee.employeeNo) || null,
           expiresAt: null,
         };
         const skip = (reason: string, login: string | null = null) =>
@@ -683,6 +686,7 @@ export function createAccountActivation(deps: {
       return {
         employeeId,
         name: text(employee.name),
+        employeeNo: text(employee.employeeNo) || null,
         login: text(user.username || user.email),
         accountCreated: false,
         outcome: delivered.outcome,

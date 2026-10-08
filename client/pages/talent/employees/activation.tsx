@@ -1,6 +1,6 @@
 import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { CopyIcon } from 'lucide-react';
+import { CopyIcon, CopyPlusIcon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 
 import { errorMessage } from '@/components/talent/errors';
@@ -26,6 +26,8 @@ import { toast } from '@/components/ui/toast';
 export interface ActivationResult {
   employeeId: string;
   name: string;
+  /** Absent from servers older than the hand-over list. */
+  employeeNo?: string | null;
   login: string | null;
   accountCreated: boolean;
   expiresAt: string | null;
@@ -57,6 +59,49 @@ export function CopyLinkButton({ link }: { link: string }): ReactElement {
       }}
     >
       <CopyIcon />
+    </Button>
+  );
+}
+
+/**
+ * The hand-over links as lines of `姓名 工号<TAB>链接`, for a spreadsheet or
+ * a message: the links are shown only once, so HR keeps them in one go.
+ */
+function handOverLines(results: readonly ActivationResult[]): string {
+  return results
+    .flatMap((r) =>
+      r.outcome.status === 'manual'
+        ? [
+            `${[r.name, r.employeeNo ?? r.login].filter(Boolean).join(' ')}\t${r.outcome.link}`,
+          ]
+        : [],
+    )
+    .join('\n');
+}
+
+function CopyAllLinksButton({
+  results,
+  count,
+}: {
+  results: readonly ActivationResult[];
+  count: number;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <Button
+      variant='outline'
+      size='sm'
+      onClick={() => {
+        void navigator.clipboard?.writeText(handOverLines(results)).then(() =>
+          toast.add({
+            type: 'success',
+            title: t('goLive.activation.copiedAll', { count }),
+          }),
+        );
+      }}
+    >
+      <CopyPlusIcon data-icon='inline-start' />
+      {t('goLive.activation.copyAll')}
     </Button>
   );
 }
@@ -124,6 +169,11 @@ export function ActivationResults({
           <AlertTitle>{t('goLive.activation.handOverTitle')}</AlertTitle>
           <AlertDescription>
             <p>{t('goLive.activation.handOverDescription')}</p>
+            {manual.length > 1 ? (
+              <div className='mt-3'>
+                <CopyAllLinksButton results={manual} count={manual.length} />
+              </div>
+            ) : null}
             <div className='mt-3 flex flex-col gap-4'>
               {manual.map((r) =>
                 r.outcome.status === 'manual' ? (
@@ -139,7 +189,7 @@ export function ActivationResults({
           </AlertDescription>
         </Alert>
       ) : null}
-      <ul className='flex max-h-64 flex-col divide-y overflow-y-auto rounded-lg border text-sm'>
+      <ul className='flex flex-col divide-y rounded-lg border text-sm'>
         {results.map((r) => (
           <li
             key={r.employeeId}
@@ -231,7 +281,9 @@ export function ActivationDialog({
   }
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : close())}>
-      <DialogContent className='sm:max-w-xl'>
+      {/* The body scrolls between the fixed header and footer: fifteen hand-over
+          links are taller than a screen, and the close button must stay reachable. */}
+      <DialogContent className='max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl'>
         <DialogHeader>
           <DialogTitle>
             {results
@@ -244,39 +296,44 @@ export function ActivationDialog({
             </DialogDescription>
           )}
         </DialogHeader>
-        {results ? (
-          <ActivationResults results={results} />
-        ) : (
-          <div className='flex flex-col gap-4'>
-            <RadioGroup
-              value={effectiveScope}
-              onValueChange={(value) => setScope(value as 'selected' | 'all')}
-            >
-              <div className='flex items-center gap-2'>
-                <RadioGroupItem
-                  value='selected'
-                  id='activation-scope-selected'
-                  disabled={!selectedIds.length}
-                />
-                <Label htmlFor='activation-scope-selected'>
-                  {t('goLive.activation.scopeSelected', {
-                    count: selectedIds.length,
-                  })}
-                </Label>
-              </div>
-              <div className='flex items-center gap-2'>
-                <RadioGroupItem value='all' id='activation-scope-all' />
-                <Label htmlFor='activation-scope-all'>
-                  {t('goLive.activation.scopeAll')}
-                </Label>
-              </div>
-            </RadioGroup>
-            <p className='text-sm text-muted-foreground'>
-              {t('goLive.activation.privileged')}
-            </p>
-            {error ? <FieldError>{error}</FieldError> : null}
-          </div>
-        )}
+        <div
+          data-slot='dialog-body'
+          className='-mx-4 min-h-0 overflow-y-auto px-4'
+        >
+          {results ? (
+            <ActivationResults results={results} />
+          ) : (
+            <div className='flex flex-col gap-4'>
+              <RadioGroup
+                value={effectiveScope}
+                onValueChange={(value) => setScope(value as 'selected' | 'all')}
+              >
+                <div className='flex items-center gap-2'>
+                  <RadioGroupItem
+                    value='selected'
+                    id='activation-scope-selected'
+                    disabled={!selectedIds.length}
+                  />
+                  <Label htmlFor='activation-scope-selected'>
+                    {t('goLive.activation.scopeSelected', {
+                      count: selectedIds.length,
+                    })}
+                  </Label>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <RadioGroupItem value='all' id='activation-scope-all' />
+                  <Label htmlFor='activation-scope-all'>
+                    {t('goLive.activation.scopeAll')}
+                  </Label>
+                </div>
+              </RadioGroup>
+              <p className='text-sm text-muted-foreground'>
+                {t('goLive.activation.privileged')}
+              </p>
+              {error ? <FieldError>{error}</FieldError> : null}
+            </div>
+          )}
+        </div>
         <DialogFooter>
           {results ? (
             <Button onClick={close}>{t('goLive.activation.close')}</Button>

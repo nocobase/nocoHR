@@ -80,8 +80,14 @@ export default function StructurePage(): ReactElement {
   const { t } = useTranslation();
   const { structureId = 'new' } = useParams();
   const list = useRemote<Structure[]>('talent/payroll-settings/structures');
+  // A structure created here: this list was loaded before it existed, and the
+  // editor moves to its id at once, so it stands in until the reload answers
+  // (the parent's reload refreshes only the parent's own list).
+  const [created, setCreated] = useState<Structure | null>(null);
   const isNew = structureId === 'new';
-  const found = list.data?.find((s) => s.id === structureId);
+  const found =
+    list.data?.find((s) => s.id === structureId) ??
+    (created?.id === structureId ? created : undefined);
   return (
     <RouteChildPage>
       <PageContainer className='max-w-5xl'>
@@ -98,9 +104,17 @@ export default function StructurePage(): ReactElement {
           </Alert>
         ) : (
           <Editor
-            key={found?.id ?? 'new'}
+            // The editor that created a structure stays mounted on its new
+            // address, keeping the trial calculation it just showed.
+            key={
+              created && created.id === found?.id ? 'new' : (found?.id ?? 'new')
+            }
             initial={found ?? EMPTY}
             isNew={isNew}
+            onCreated={(structure) => {
+              setCreated(structure);
+              list.reload();
+            }}
           />
         )}
       </PageContainer>
@@ -111,9 +125,11 @@ export default function StructurePage(): ReactElement {
 function Editor({
   initial,
   isNew,
+  onCreated,
 }: {
   initial: Structure;
   isNew: boolean;
+  onCreated: (structure: Structure) => void;
 }): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
@@ -126,7 +142,12 @@ function Editor({
   const variables = useRemote<Variables>('talent/payroll-settings/variables');
   const [draft, setDraft] = useState<Structure>(initial);
   const [note, setNote] = useState('');
-  // Stable row keys for the parameter rows, whose codes change while typed.
+  // Stable row keys for the item and parameter rows, whose codes change
+  // while typed: a key built from the code remounted the row on every
+  // keystroke and the code input lost focus.
+  const [itemKeys, setItemKeys] = useState(() =>
+    initial.items.map(() => crypto.randomUUID()),
+  );
   const [paramKeys, setParamKeys] = useState(() =>
     initial.params.map(() => crypto.randomUUID()),
   );
@@ -146,7 +167,10 @@ function Editor({
     const target = index + delta;
     if (target < 0 || target >= items.length) return;
     [items[index], items[target]] = [items[target], items[index]];
+    const keys = [...itemKeys];
+    [keys[index], keys[target]] = [keys[target], keys[index]];
     setDraft({ ...draft, items });
+    setItemKeys(keys);
   };
   const setParam = (index: number, patch: Partial<StructureParam>) =>
     setDraft({
@@ -201,9 +225,14 @@ function Editor({
       });
       setTrial(data.trial);
       setDraft(data.structure);
+      if (data.structure.items.length !== itemKeys.length)
+        setItemKeys(data.structure.items.map(() => crypto.randomUUID()));
+      if (data.structure.params.length !== paramKeys.length)
+        setParamKeys(data.structure.params.map(() => crypto.randomUUID()));
       setNote('');
       toast.add({ type: 'success', title: t('payroll.structure.saved') });
       outlet?.reload?.();
+      if (isNew) onCreated(data.structure);
       if (isNew)
         await navigate(`../${encodeURIComponent(data.structure.id)}`, {
           relative: 'path',
@@ -294,7 +323,7 @@ function Editor({
         <CardContent className='space-y-3'>
           {draft.items.map((item, index) => (
             <div
-              key={`${String(index)}-${item.code}`}
+              key={itemKeys[index]}
               className='space-y-3 rounded-lg border p-3'
             >
               <div className='grid gap-3 sm:grid-cols-4'>
@@ -457,12 +486,13 @@ function Editor({
                     size='icon-sm'
                     variant='ghost'
                     aria-label={t('payroll.structure.remove')}
-                    onClick={() =>
+                    onClick={() => {
                       setDraft({
                         ...draft,
                         items: draft.items.filter((_, i) => i !== index),
-                      })
-                    }
+                      });
+                      setItemKeys(itemKeys.filter((_, i) => i !== index));
+                    }}
                   >
                     <Trash2Icon />
                   </Button>
@@ -479,7 +509,8 @@ function Editor({
           ))}
           <Button
             variant='outline'
-            onClick={() =>
+            onClick={() => {
+              setItemKeys([...itemKeys, crypto.randomUUID()]);
               setDraft({
                 ...draft,
                 items: [
@@ -496,8 +527,8 @@ function Editor({
                     includedInSocialBase: false,
                   },
                 ],
-              })
-            }
+              });
+            }}
           >
             <PlusIcon data-icon='inline-start' />
             {t('payroll.structure.addItem')}

@@ -9,7 +9,7 @@ import { useApiClient } from '@nocobase/app-client';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { PlusIcon } from 'lucide-react';
-import { useState, type ReactElement } from 'react';
+import { useEffect, useReducer, useState, type ReactElement } from 'react';
 import { Link, Outlet, useLocation, useSearchParams } from 'react-router';
 // V4-12
 import { ReviewResultLabel } from '@/components/talent/performance-payroll';
@@ -60,6 +60,8 @@ export default function SalariesPage(): ReactElement {
     resource: { type: 'composite', id: 'talent.salary' },
     action: 'adjust',
   });
+  // Bumped after an opening import so the files and 待建档 lists reload.
+  const [imported, bumpImported] = useReducer((n: number) => n + 1, 0);
   const tabs = view.can ? TABS : (['adjustments'] as const);
   const requested = params.get('tab') ?? '';
   const tab = (tabs as readonly string[]).includes(requested)
@@ -74,7 +76,10 @@ export default function SalariesPage(): ReactElement {
           actions={
             <>
               {/* 上线准备: 导入期初档案 (talent.salary import). */}
-              <OpeningImportButton kind='salaryFiles' />
+              <OpeningImportButton
+                kind='salaryFiles'
+                onImported={bumpImported}
+              />
               {adjust.can ? (
                 <Button
                   nativeButton={false}
@@ -115,10 +120,10 @@ export default function SalariesPage(): ReactElement {
             {view.can ? (
               <>
                 <TabsContent value='files' className='pt-4'>
-                  <FilesTab />
+                  <FilesTab refresh={imported} />
                 </TabsContent>
                 <TabsContent value='pending' className='pt-4'>
-                  <PendingTab />
+                  <PendingTab refresh={imported} />
                 </TabsContent>
               </>
             ) : null}
@@ -133,13 +138,21 @@ export default function SalariesPage(): ReactElement {
   );
 }
 
-function FilesTab(): ReactElement {
+/** Calls `reload` whenever `refresh` changes after the first render. */
+function useRefreshOn(refresh: number, reload: () => void): void {
+  useEffect(() => {
+    if (refresh) reload();
+  }, [refresh, reload]);
+}
+
+function FilesTab({ refresh }: { refresh: number }): ReactElement {
   const { t } = useTranslation();
   const money = useMoney();
   const lookups = useLookups();
   const location = useLocation();
   const [search, setSearch] = useState('');
   const list = useRemote<SalaryList>('talent/salaries');
+  useRefreshOn(refresh, list.reload);
   if (list.error) return <LoadError error={list.error} onRetry={list.reload} />;
   if (!list.data) return <BlockSkeleton rows={6} />;
   const keyword = search.trim();
@@ -217,11 +230,12 @@ function FilesTab(): ReactElement {
   );
 }
 
-function PendingTab(): ReactElement {
+function PendingTab({ refresh }: { refresh: number }): ReactElement {
   const { t } = useTranslation();
   const lookups = useLookups();
   const location = useLocation();
   const list = useRemote<SalaryList>('talent/salaries');
+  useRefreshOn(refresh, list.reload);
   if (list.error) return <LoadError error={list.error} onRetry={list.reload} />;
   if (!list.data) return <BlockSkeleton rows={4} />;
   if (!list.data.pendingFiles.length)
@@ -239,7 +253,10 @@ function PendingTab(): ReactElement {
             {t('payroll.salaries.hired', { date: p.hireDate ?? '—' })}
           </span>
           {list.data?.can.manage ? (
-            <RecruitingSalaryPrefill employeeId={p.employeeId} onDone={list.reload} />
+            <RecruitingSalaryPrefill
+              employeeId={p.employeeId}
+              onDone={list.reload}
+            />
           ) : null}
           {list.data?.can.manage ? (
             <Button
