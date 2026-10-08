@@ -376,6 +376,58 @@ describe('V2-05 scheduling', () => {
     });
     expect(east.status).toBe(200);
   });
+
+  // A direct publish of cells that have no row yet creates them, so the publish grant must allow create
+  // (2026-10-07: hr.admin got 403 FORBIDDEN publishing 18 new cells; save-then-publish worked).
+  it('publishes cells that had no row within the grant, and refuses outside it', async () => {
+    const cells = (employeeId: string, start: number) =>
+      Array.from({ length: 3 }, (_, i) => ({
+        employeeId,
+        date: day(start + i),
+        shiftId: 'shift-mc-early',
+        expectedUpdatedAt: null,
+      }));
+    const admin = cells('emp-limin', 70);
+    for (const c of admin)
+      expect(await scheduleOf(c.employeeId, c.date)).toBeUndefined();
+    const byAdmin = await call('hr01', 'POST', '/schedules/publish', {
+      cells: admin,
+      acknowledgeWarnings: true,
+    });
+    expect(byAdmin.status).toBe(200);
+    for (const c of admin)
+      expect((await scheduleOf(c.employeeId, c.date))?.status).toBe(
+        'published',
+      );
+
+    const manager = cells('emp-qianjin', 70);
+    const byManager = await call('mgr_njl', 'POST', '/schedules/publish', {
+      cells: manager,
+      acknowledgeWarnings: true,
+    });
+    expect(byManager.status).toBe(200);
+    for (const c of manager)
+      expect((await scheduleOf(c.employeeId, c.date))?.status).toBe(
+        'published',
+      );
+
+    // 成都 is outside mgr_njl's managed departments.
+    const outside = cells('emp-zhaoyang', 70);
+    const byOutsider = await call('mgr_njl', 'POST', '/schedules/publish', {
+      cells: outside,
+      acknowledgeWarnings: true,
+    });
+    expect([403, 404]).toContain(byOutsider.status);
+    // An employee holds no scheduling grant at all.
+    const byEmployee = await call('emp_njl_3', 'POST', '/schedules/publish', {
+      cells: cells('emp-wanglei', 70),
+      acknowledgeWarnings: true,
+    });
+    expect(byEmployee.status).toBe(403);
+    expect(byEmployee.json.code).toBe('FORBIDDEN');
+    for (const c of [...outside, ...cells('emp-wanglei', 70)])
+      expect(await scheduleOf(c.employeeId, c.date)).toBeUndefined();
+  });
 });
 
 describe('V2-05 leave conflicts and cover suggestions', () => {

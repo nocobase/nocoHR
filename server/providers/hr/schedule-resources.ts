@@ -91,6 +91,13 @@ export const scheduleResource = defineCompositeResource(
           .title(label('attendance.schedules.publish'))
           .grant('employees', employees)
           .grant('shifts', shifts)
-          .grant('schedules', schedules.update(SCHEDULE_WRITE_FIELDS)),
+          // Publishing a cell that has no row yet creates it (POST /schedules/publish),
+          // so publish may create as well as update, within the same record scope.
+          .grant(
+            'schedules',
+            schedules
+              .create(SCHEDULE_WRITE_FIELDS)
+              .update(SCHEDULE_WRITE_FIELDS),
+          ),
       ),
 );
