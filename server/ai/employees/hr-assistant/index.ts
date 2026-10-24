@@ -1,4 +1,4 @@
-import { defineAIEmployee } from '@nocobase/ai-employee';
+import { defineAIEmployee } from '../../contracts.js';
 
 /**
  * The HR assistant. V1 step 1: checks employee data after every Excel import.

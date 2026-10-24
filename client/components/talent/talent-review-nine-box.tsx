@@ -70,13 +70,19 @@ export function NineBox({
           performance: p.performanceBand ?? '—',
           potential: p.potentialBand ?? '—',
         })}
-        {p.aiSuggestion?.suggestedBox && p.aiSuggestion.suggestedBox !== p.box ? (
-          <span className='inline-flex items-center gap-0.5' title={t('talentReview.nineBox.suggested')}>
+        {p.aiSuggestion?.suggestedBox &&
+        p.aiSuggestion.suggestedBox !== p.box ? (
+          <span
+            className='inline-flex items-center gap-0.5'
+            title={t('talentReview.nineBox.suggested')}
+          >
             <SparklesIcon className='size-3' />
             {p.aiSuggestion.suggestedBox}
           </span>
         ) : null}
-        {p.decidedAt ? <span>· {t('talentReview.nineBox.decided')}</span> : null}
+        {p.decidedAt ? (
+          <span>· {t('talentReview.nineBox.decided')}</span>
+        ) : null}
       </span>
     </button>
   );
@@ -112,8 +118,12 @@ export function NineBox({
                 )}
               >
                 <div className='flex items-center justify-between text-xs'>
-                  <span className='font-medium'>{t(`talentReview.nineBox.box${box}`)}</span>
-                  <span className='text-muted-foreground tabular-nums'>{cards.length}</span>
+                  <span className='font-medium'>
+                    {t(`talentReview.nineBox.box${box}`)}
+                  </span>
+                  <span className='text-muted-foreground tabular-nums'>
+                    {cards.length}
+                  </span>
                 </div>
                 {cards.map(card)}
               </div>
@@ -129,7 +139,9 @@ export function NineBox({
           <div className='text-sm font-medium'>
             {t('talentReview.nineBox.unplaced', { count: unplaced.length })}
           </div>
-          <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>{unplaced.map(card)}</div>
+          <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+            {unplaced.map(card)}
+          </div>
         </div>
       ) : null}
     </div>

@@ -264,7 +264,7 @@ export function createRecruitingAssistant(
 
   async function structured<T>(
     run: AutomationRunContext,
-    actorUserId: string,
+    actor: ActorContext,
     employee: string,
     title: string,
     prompt: string,
@@ -273,7 +273,8 @@ export function createRecruitingAssistant(
   ): Promise<T> {
     const { data, sessionId } = await ctx.ai.structured({
       employee,
-      userId: actorUserId,
+      userId: actor.userId,
+      authorization: actor.authz,
       title,
       prompt,
       schema,
@@ -402,7 +403,7 @@ export function createRecruitingAssistant(
     try {
       const answer = await structured(
         run,
-        actor.userId,
+        actor,
         'recruitingAssistant',
         `职位描述起草 · ${position.title}`,
         [
@@ -587,7 +588,7 @@ export function createRecruitingAssistant(
       try {
         const answer = await structured(
           run,
-          actor.userId,
+          actor,
           'recruitingAssistant',
           '简历库复用',
           [
@@ -640,7 +641,7 @@ export function createRecruitingAssistant(
   /** parseResume: sanitized text only; image-only resumes are left for the recruiter. */
   async function parseResume(
     run: AutomationRunContext | null,
-    actorUserId: string,
+    actor: ActorContext,
     candidateId: string,
   ): Promise<{ status: string; sentText: string | null }> {
     const candidate = await deps.candidates.candidateRow(candidateId);
@@ -667,7 +668,8 @@ export function createRecruitingAssistant(
     try {
       const { data, sessionId } = await ctx.ai.structured({
         employee: 'recruitingAssistant',
-        userId: actorUserId,
+        userId: actor.userId,
+        authorization: actor.authz,
         title: '简历解析',
         prompt: [
           '从下面的简历文本中提取教育、工作经历、技能和证书，按结构化格式输出；不要输出性别、年龄、出生日期、婚育、民族、籍贯、宗教、政治面貌、照片等信息。education.level 取 middleSchool/highSchool/vocational/associate/bachelor/master/doctor/unknown 之一；experiences.years 为该段经历的年数。',
@@ -786,7 +788,7 @@ export function createRecruitingAssistant(
       application.candidateId,
     );
     if (candidate.parseStatus !== 'parsed' || candidate.resumeFileId)
-      await parseResume(run, actor.userId, candidate.id);
+      await parseResume(run, actor, candidate.id);
     const input = await screeningInput(applicationId);
     let suggestion: ScreeningSuggestion;
     const rule = () =>
@@ -812,7 +814,7 @@ export function createRecruitingAssistant(
       try {
         const answer = await structured(
           run,
-          actor.userId,
+          actor,
           'recruitingAssistant',
           '简历初筛',
           [
@@ -887,7 +889,7 @@ export function createRecruitingAssistant(
     try {
       const answer = await structured(
         run,
-        actor.userId,
+        actor,
         'recruitingAssistant',
         '面试题',
         [
@@ -1021,7 +1023,7 @@ export function createRecruitingAssistant(
     try {
       const answer = await structured(
         run,
-        actor.userId,
+        actor,
         'recruitingAssistant',
         '面试汇总',
         [
@@ -1170,7 +1172,7 @@ export function createRecruitingAssistant(
     try {
       const answer = await structured(
         run,
-        run.owner.userId,
+        run.owner,
         'hrAssistant',
         `用工测算 · ${plan.departmentTitle}`,
         [

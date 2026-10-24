@@ -26,12 +26,22 @@ import { bodyLimit } from 'hono/body-limit';
 
 import { clientIpResolver } from '../../http/client-ip.js';
 import { WindowThrottle } from '../../http/throttle.js';
-import { profileServicesToken, talentReviewServicesToken } from '../../providers/hr/tokens.js';
+import {
+  profileServicesToken,
+  talentReviewServicesToken,
+} from '../../providers/hr/tokens.js';
 import { scopeForUser } from '../../providers/hr/authorize.js';
-import { draftLeaveRequest, getMyLeaveBalance, getMySchedule } from '../../ai/tools/attendance-tools.js';
+import {
+  draftLeaveRequest,
+  getMyLeaveBalance,
+  getMySchedule,
+} from '../../ai/tools/attendance-tools.js';
 import { teamCertificationSummary } from '../../ai/tools/exam-tools.js';
 import { searchKnowledge } from '../../ai/tools/knowledge-tools.js';
-import { getTeamOverview, searchEmployees } from '../../ai/tools/profile-tools.js';
+import {
+  getTeamOverview,
+  searchEmployees,
+} from '../../ai/tools/profile-tools.js';
 import { getEmployeeLearningProfile } from '../../ai/tools/training-tools.js';
 import type { AgentToolName } from '../../providers/hr/talent-review/agents.js';
 
@@ -42,11 +52,16 @@ interface ToolLike {
 }
 
 interface ArgumentSchema {
-  safeParse(input: unknown): { success: true; data: unknown } | { success: false; error: { issues: { path: PropertyKey[] }[] } };
+  safeParse(
+    input: unknown,
+  ):
+    | { success: true; data: unknown }
+    | { success: false; error: { issues: { path: PropertyKey[] }[] } };
 }
 
 const isSchema = (value: unknown): value is ArgumentSchema =>
-  Boolean(value) && typeof (value as { safeParse?: unknown }).safeParse === 'function';
+  Boolean(value) &&
+  typeof (value as { safeParse?: unknown }).safeParse === 'function';
 
 const PROTOCOL = '2025-06-18';
 const FAILURE_LOGS_PER_MINUTE = 10;
@@ -59,23 +74,32 @@ const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
 });
 
 /** The descriptions and input schemas an external assistant sees. */
-const DESCRIPTIONS: Record<AgentToolName, { description: string; inputSchema: unknown }> = {
+const DESCRIPTIONS: Record<
+  AgentToolName,
+  { description: string; inputSchema: unknown }
+> = {
   askKnowledge: {
     description:
       'Search the NocoHR knowledge base the user may read; answer only from the passages, citing them. Uncontrolled documents carry a notice.',
     inputSchema: obj({ question: { type: 'string' } }, ['question']),
   },
   getMyLearning: {
-    description: "The user's own learning tasks (required courses, due dates, status) and competency gaps.",
+    description:
+      "The user's own learning tasks (required courses, due dates, status) and competency gaps.",
     inputSchema: obj({}),
   },
   getMyCertificates: {
-    description: "The user's own certificates and their expiry dates. Never another person's.",
+    description:
+      "The user's own certificates and their expiry dates. Never another person's.",
     inputSchema: obj({}),
   },
   getMySchedule: {
-    description: "The user's own published shifts between two dates (YYYY-MM-DD, at most two months).",
-    inputSchema: obj({ from: { type: 'string' }, to: { type: 'string' } }, ['from', 'to']),
+    description:
+      "The user's own published shifts between two dates (YYYY-MM-DD, at most two months).",
+    inputSchema: obj({ from: { type: 'string' }, to: { type: 'string' } }, [
+      'from',
+      'to',
+    ]),
   },
   getMyLeaveBalance: {
     description: "The user's own leave balances and leave types.",
@@ -86,20 +110,32 @@ const DESCRIPTIONS: Record<AgentToolName, { description: string; inputSchema: un
       'Create a DRAFT leave request for the user only. It is not submitted: give the user the link; they submit it in NocoHR.',
     inputSchema: obj(
       {
-        leaveType: { type: 'string', description: 'Leave type code such as annual, or id.' },
-        startAt: { type: 'string', description: 'ISO 8601 with offset; a whole day starts at 00:00.' },
-        endAt: { type: 'string', description: 'ISO 8601 with offset; a whole day ends at 00:00 of the next day.' },
+        leaveType: {
+          type: 'string',
+          description: 'Leave type code such as annual, or id.',
+        },
+        startAt: {
+          type: 'string',
+          description: 'ISO 8601 with offset; a whole day starts at 00:00.',
+        },
+        endAt: {
+          type: 'string',
+          description:
+            'ISO 8601 with offset; a whole day ends at 00:00 of the next day.',
+        },
         reason: { type: 'string' },
       },
       ['leaveType', 'startAt', 'endAt'],
     ),
   },
   getTeamCertificationSummary: {
-    description: 'Department heads: required certificates of the team (valid, expiring, expired, missing).',
+    description:
+      'Department heads: required certificates of the team (valid, expiring, expired, missing).',
     inputSchema: obj({ departmentId: { type: 'string' } }),
   },
   getTeamLearningProgress: {
-    description: 'Department heads: the team learning in progress, overdue and completed this month.',
+    description:
+      'Department heads: the team learning in progress, overdue and completed this month.',
     inputSchema: obj({ departmentId: { type: 'string' } }),
   },
   listMyPendingDecisions: {
@@ -108,7 +144,8 @@ const DESCRIPTIONS: Record<AgentToolName, { description: string; inputSchema: un
     inputSchema: obj({}),
   },
   searchEmployees: {
-    description: 'Heads and HR: find people in scope by a sentence (text) or structured conditions.',
+    description:
+      'Heads and HR: find people in scope by a sentence (text) or structured conditions.',
     inputSchema: obj({ text: { type: 'string' } }),
   },
 };
@@ -118,7 +155,11 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
     const container = app.container;
     const services = () => container.resolve(talentReviewServicesToken);
 
-    async function runTool(tool: ToolLike, userId: string, input: Record<string, unknown>) {
+    async function runTool(
+      tool: ToolLike,
+      userId: string,
+      input: Record<string, unknown>,
+    ) {
       // The external assistant's arguments meet the tool's own schema first, as the AI employee runtime's do;
       // a tool never sees arguments its schema refuses.
       const schema = tool.definition?.schema;
@@ -130,7 +171,13 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
             status: 'error',
             content: {
               code: 'INVALID_ARGUMENTS',
-              fields: [...new Set(parsed.error.issues.map((i) => i.path.map(String).join('.') || '(root)'))].slice(0, 10),
+              fields: [
+                ...new Set(
+                  parsed.error.issues.map(
+                    (i) => i.path.map(String).join('.') || '(root)',
+                  ),
+                ),
+              ].slice(0, 10),
             },
           };
         args = parsed.data;
@@ -148,26 +195,41 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
       )) as { status: string; content: unknown };
     }
 
-    const invoke = async (name: string, userId: string, args: Record<string, unknown>) => {
+    const invoke = async (
+      name: string,
+      userId: string,
+      args: Record<string, unknown>,
+    ) => {
       switch (name as AgentToolName) {
         case 'askKnowledge':
-          return runTool(searchKnowledge, userId, { query: typeof args.question === 'string' ? args.question : '' });
+          return runTool(searchKnowledge, userId, {
+            query: typeof args.question === 'string' ? args.question : '',
+          });
         case 'getMyLearning': {
           const result = await runTool(getEmployeeLearningProfile, userId, {});
           const content = result.content as Record<string, unknown>;
-          return { status: result.status, content:
+          return {
+            status: result.status,
+            content:
               result.status === 'success'
                 ? {
                     openTasks: content.openTasks,
                     completedTasks: content.completedTasks,
                     requirements: content.requirements,
                   }
-                : content };
+                : content,
+          };
         }
         case 'getMyCertificates': {
           const result = await runTool(getEmployeeLearningProfile, userId, {});
           const content = result.content as Record<string, unknown>;
-          return { status: result.status, content: result.status === 'success' ? { certificates: content.certificates } : content };
+          return {
+            status: result.status,
+            content:
+              result.status === 'success'
+                ? { certificates: content.certificates }
+                : content,
+          };
         }
         case 'getMySchedule':
           return runTool(getMySchedule, userId, args);
@@ -180,16 +242,29 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
         case 'getTeamLearningProgress': {
           const result = await runTool(getTeamOverview, userId, args);
           const content = result.content as Record<string, unknown>;
-          return { status: result.status, content: result.status === 'success' ? { learning: content.learning, people: content.people } : content };
+          return {
+            status: result.status,
+            content:
+              result.status === 'success'
+                ? { learning: content.learning, people: content.people }
+                : content,
+          };
         }
         case 'listMyPendingDecisions': {
-          const authz = await scopeForUser(container.resolve(authorizationToken), userId);
+          const authz = await scopeForUser(
+            container.resolve(authorizationToken),
+            userId,
+          );
           const counts = await container
             .resolve(profileServicesToken)
             .decisions.counts({ userId, authz });
           return {
             status: 'success',
-            content: { counts, link: '/talent/decisions', note: '确认、审批须在 NocoHR 中完成。' },
+            content: {
+              counts,
+              link: '/talent/decisions',
+              note: '确认、审批须在 NocoHR 中完成。',
+            },
           };
         }
         case 'searchEmployees':
@@ -199,7 +274,10 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
     };
 
     const clientIp = clientIpResolver(app.config);
-    const failureLogs = new WindowThrottle({ limit: FAILURE_LOGS_PER_MINUTE, windowMs: 60_000 });
+    const failureLogs = new WindowThrottle({
+      limit: FAILURE_LOGS_PER_MINUTE,
+      windowMs: 60_000,
+    });
 
     const r = new Hono();
     r.use('/talent/agent/mcp', bodyLimit({ maxSize: 262_144 }));
@@ -215,18 +293,40 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
             userId: auth.token?.userId ?? null,
             tool: 'mcp',
             status: auth.error,
-            summary: auth.error === 'rateLimited' ? '超过每分钟调用上限' : '令牌无效、过期或已撤销',
+            summary:
+              auth.error === 'rateLimited'
+                ? '超过每分钟调用上限'
+                : '令牌无效、过期或已撤销',
           });
         return c.json(
-          { jsonrpc: '2.0', id: null, error: { code: auth.error === 'rateLimited' ? -32029 : -32001, message: auth.error } },
+          {
+            jsonrpc: '2.0',
+            id: null,
+            error: {
+              code: auth.error === 'rateLimited' ? -32029 : -32001,
+              message: auth.error,
+            },
+          },
           auth.error === 'rateLimited' ? 429 : 401,
         );
       }
-      let body: { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
+      let body: {
+        jsonrpc?: string;
+        id?: unknown;
+        method?: string;
+        params?: Record<string, unknown>;
+      };
       try {
         body = await c.req.json();
       } catch {
-        return c.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400);
+        return c.json(
+          {
+            jsonrpc: '2.0',
+            id: null,
+            error: { code: -32700, message: 'Parse error' },
+          },
+          400,
+        );
       }
       const id = body.id ?? null;
       const reply = (result: unknown) => c.json({ jsonrpc: '2.0', id, result });
@@ -254,23 +354,35 @@ export const agentMcpRoutes: AppApiRouteContribution<Application> =
           });
         }
         case 'tools/call': {
-          const name = typeof body.params?.name === 'string' ? body.params.name : '';
+          const name =
+            typeof body.params?.name === 'string' ? body.params.name : '';
           const args =
             body.params?.arguments && typeof body.params.arguments === 'object'
               ? (body.params.arguments as Record<string, unknown>)
               : {};
-          const outcome = await services().agents.call(authenticated, name, args, invoke);
+          const outcome = await services().agents.call(
+            authenticated,
+            name,
+            args,
+            invoke,
+          );
           return reply({
             content: [{ type: 'text', text: JSON.stringify(outcome.content) }],
             structuredContent:
-              outcome.content && typeof outcome.content === 'object' && !Array.isArray(outcome.content)
+              outcome.content &&
+              typeof outcome.content === 'object' &&
+              !Array.isArray(outcome.content)
                 ? outcome.content
                 : { value: outcome.content },
             isError: !outcome.ok,
           });
         }
         default:
-          return c.json({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } });
+          return c.json({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32601, message: 'Method not found' },
+          });
       }
     });
     return r;

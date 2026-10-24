@@ -269,8 +269,7 @@ export function createReviewService(
   async function scopedEmployees(departmentIds: readonly string[]) {
     const ids = new Set<string>();
     for (const id of departmentIds)
-      for (const d of await platform.organization.descendantsOf(id))
-        ids.add(d);
+      for (const d of await platform.organization.descendantsOf(id)) ids.add(d);
     if (!ids.size) return [];
     return [...(await ctx.employees()).values()].filter(
       (e) => ids.has(e.departmentId) && e.status !== 'leave',
@@ -377,7 +376,10 @@ export function createReviewService(
         .repository('talentPlacements')
         .withPolicy(policyOf(policies, 'talentPlacements'))
         .findMany({})) as Record<string, unknown>[];
-      const counts = new Map<string, { total: number; placed: number; potential: number }>();
+      const counts = new Map<
+        string,
+        { total: number; placed: number; potential: number }
+      >();
       for (const p of placements) {
         const c = counts.get(str(p.talentReviewId)) ?? {
           total: 0,
@@ -593,7 +595,11 @@ export function createReviewService(
       throw new HrError('TALENT_REVIEW_CONCLUDED', 409);
     },
 
-    async assessPotential(actor: ActorContext, placementId: string, input: unknown) {
+    async assessPotential(
+      actor: ActorContext,
+      placementId: string,
+      input: unknown,
+    ) {
       const row = await visiblePlacement(actor, 'assessPotential', placementId);
       const review = await reviewRow(str(row.talentReviewId));
       if (!['preparing', 'inSession'].includes(review.status))
@@ -628,7 +634,11 @@ export function createReviewService(
     },
 
     /** 绩效维度 by hand (no result, or an adjustment), with a reason. */
-    async setPerformance(actor: ActorContext, placementId: string, input: unknown) {
+    async setPerformance(
+      actor: ActorContext,
+      placementId: string,
+      input: unknown,
+    ) {
       const row = await visiblePlacement(actor, 'place', placementId);
       const review = await reviewRow(str(row.talentReviewId));
       if (!['preparing', 'inSession'].includes(review.status))
@@ -724,7 +734,11 @@ export function createReviewService(
       await database
         .query()
         .updateTable('talentPlacements')
-        .set({ decidedBy: actor.userId, decidedAt: new Date(), updatedAt: new Date() })
+        .set({
+          decidedBy: actor.userId,
+          decidedAt: new Date(),
+          updatedAt: new Date(),
+        })
         .where('id', '=', placementId)
         .execute();
       hooks.onPlacementConfirmed(placementId);

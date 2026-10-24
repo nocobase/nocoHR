@@ -11,7 +11,7 @@ import {
   PlusIcon,
   QrCodeIcon,
 } from 'lucide-react';
-import { useMemo, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
@@ -88,6 +88,10 @@ function useSessionTime(): (value: string, withDate?: boolean) => string {
       hour: '2-digit',
       minute: '2-digit',
     }).format(new Date(value));
+}
+
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
 /**
@@ -259,7 +263,7 @@ function SessionTable({
   );
 }
 
-function MonthCalendar({
+export function MonthCalendar({
   sessions,
   onOpen,
 }: {
@@ -273,6 +277,66 @@ function MonthCalendar({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  const [today, setToday] = useState(() => localDateKey(new Date()));
+  const todayRef = useRef(today);
+  useEffect(() => {
+    let timer: number | undefined;
+    let refreshTimer: number | undefined;
+
+    const clearTimer = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+    };
+    const clearRefreshTimer = () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = undefined;
+    };
+    const syncToday = (onlyWhenVisible = false) => {
+      if (onlyWhenVisible && document.visibilityState !== 'visible') return;
+      const now = new Date();
+      const nextMidnight = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+      );
+      const next = localDateKey(now);
+      if (todayRef.current !== next) {
+        clearRefreshTimer();
+        refreshTimer = window.setTimeout(() => {
+          refreshTimer = undefined;
+          const current = localDateKey(new Date());
+          todayRef.current = current;
+          setToday(current);
+        }, 1);
+      }
+      clearTimer();
+      timer = window.setTimeout(
+        () => syncToday(),
+        Math.max(1, nextMidnight.getTime() - now.getTime()),
+      );
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') syncToday();
+      else {
+        clearTimer();
+        clearRefreshTimer();
+      }
+    };
+
+    syncToday();
+    window.addEventListener('focus', syncTodayFromFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearTimer();
+      clearRefreshTimer();
+      window.removeEventListener('focus', syncTodayFromFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+
+    function syncTodayFromFocus(): void {
+      syncToday(true);
+    }
+  }, []);
   const days = useMemo(() => {
     // Weeks start on Monday.
     const start = new Date(month);
@@ -283,18 +347,15 @@ function MonthCalendar({
       return day;
     });
   }, [month]);
-  const key = (date: Date) =>
-    `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
   const byDay = useMemo(() => {
     const map = new Map<string, TrainingSession[]>();
     for (const session of sessions) {
-      const k = key(new Date(session.startAt));
+      const k = localDateKey(new Date(session.startAt));
       map.set(k, [...(map.get(k) ?? []), session]);
     }
     return map;
   }, [sessions]);
   const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' });
-  const today = key(new Date());
   return (
     <Card>
       <CardContent className='space-y-3'>
@@ -336,11 +397,11 @@ function MonthCalendar({
             </div>
           ))}
           {days.map((day) => {
-            const items = byDay.get(key(day)) ?? [];
+            const items = byDay.get(localDateKey(day)) ?? [];
             const inMonth = day.getMonth() === month.getMonth();
             return (
               <div
-                key={key(day)}
+                key={localDateKey(day)}
                 className={cn(
                   'min-h-20 space-y-1 bg-background p-1',
                   !inMonth && 'bg-muted/30 text-muted-foreground',
@@ -349,7 +410,8 @@ function MonthCalendar({
                 <span
                   className={cn(
                     'inline-flex size-5 items-center justify-center rounded-full tabular-nums',
-                    key(day) === today && 'bg-primary text-primary-foreground',
+                    localDateKey(day) === today &&
+                      'bg-primary text-primary-foreground',
                   )}
                 >
                   {day.getDate()}

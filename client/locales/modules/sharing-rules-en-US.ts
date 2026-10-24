@@ -1,0 +1,128 @@
+export default {
+  page: {
+    title: 'Sharing rules',
+    description:
+      'Share selected records with people who already have the action. Rules never grant actions, pages, fields or related records; restrictions still apply.',
+    refreshing: 'Refreshing rules…',
+  },
+  search: {
+    label: 'Search sharing rules',
+    placeholder: 'Search rule, resource, subject or action',
+    group: 'Resource group',
+    allGroups: 'All resource groups',
+    clear: 'Clear filters',
+  },
+  columns: {
+    rule: 'Rule',
+    resource: 'Resource',
+    subjects: 'Shared with',
+    actions: 'Actions and records',
+    rowActions: 'Rule actions',
+  },
+  actions: {
+    new: 'New sharing rule',
+    edit: 'Edit',
+    delete: 'Delete',
+    save: 'Save rule',
+    saving: 'Saving…',
+    cancel: 'Cancel',
+    forRule: 'Actions for {{name}}',
+    addSubject: 'Add subject',
+    removeSubject: 'Remove {{name}}',
+    addAction: 'Add action and scope',
+    removeAction: 'Remove this action',
+    addRecords: 'Add selected records',
+    removeRecord: 'Remove record {{id}}',
+    configureFilter: 'Configure filter',
+    addCondition: 'Add condition',
+  },
+  empty: {
+    title: 'No sharing rules yet',
+    description:
+      'Create a rule for a specific collaboration need and the records it should include.',
+    readOnly: 'No sharing rules are configured.',
+    noResults: 'No matching sharing rules',
+    noResultsDescription: 'Clear the search or resource group filter.',
+  },
+  labels: {
+    noActions: 'No actions selected',
+    noRecordsSelected: 'No records selected',
+    customFilter: 'Custom filter',
+    unsupportedAll:
+      'Unsupported all-record selection retained from existing data',
+    required: 'Required',
+    ruleKey: 'Rule key',
+    title: 'Rule name',
+    resource: 'Resource',
+    resourceGroup: 'Resource group',
+    reason: 'Reason',
+    subjects: 'Shared with',
+    subjectHelp: 'Add one or more users, teams or other registered subjects.',
+    subjectType: 'Subject type',
+    subjectSearch: 'Search subjects',
+    subjectResults: 'Subject results',
+    selectedSubjects: 'Selected subjects',
+    noSubjectTypes: 'No subject types are available.',
+    noSubjects: 'No subjects match this search.',
+    fixedSubject: 'This rule uses a fixed subject type.',
+    action: 'Action',
+    actions: 'Shared actions and record scopes',
+    actionHelp: 'Choose only the action scopes needed for this collaboration.',
+    scope: 'Data scope',
+    selection: 'Record selection',
+    selectedRecords: 'Selected records',
+    recordDirectory: 'Available records',
+    noRecords: 'No records are available on this page.',
+    recordPolicy: 'Record access policy',
+    noCompatiblePolicies:
+      'No registered record access policies support this collection.',
+    unsupportedSelection:
+      'This saved selection is not supported by the current options. It will be retained until you change or remove it.',
+    unknownAction:
+      'This action or data scope is no longer registered. It will be retained until you remove it.',
+    selectAction: 'Choose an action and data scope',
+    selectResource: 'Choose a resource',
+    selectSubject: 'Choose a subject type',
+    selectRecords: 'Choose selected records',
+    sharingSemantics:
+      'Sharing adds records only for an action the subject already has. It does not grant the action, page, fields or related records. Restriction rules still narrow access.',
+    previousPage: 'Previous records',
+    nextPage: 'Next records',
+    pageOf: 'Page {{page}} of {{pages}}',
+    recordCount: '{{count}} selected: {{records}}',
+    removeRecord: 'Remove record {{id}}',
+    filterSummary: 'Custom filter with {{count}} condition(s).',
+  },
+  confirm: {
+    deleteTitle: 'Delete sharing rule “{{name}}”?',
+    deleteDescription:
+      'This permanently removes the rule and its assignments. The change cannot be undone.',
+    changeResourceTitle: 'Change resource for “{{name}}”?',
+    changeResourceDescription:
+      'Changing the resource clears every action and record scope in this rule. You will need to add them again.',
+    changeResource: 'Change resource and clear actions',
+  },
+  feedback: {
+    created: 'Sharing rule “{{name}}” was created.',
+    saved: 'Sharing rule “{{name}}” was saved.',
+    deleted: 'Sharing rule “{{name}}” was deleted.',
+  },
+  errors: {
+    listReloadFailed: 'The latest rules could not be confirmed.',
+    required: 'Complete all required fields before saving.',
+    atLeastOneSubject: 'Add at least one subject.',
+    atLeastOneAction: 'Add at least one action and record selection.',
+    unsupportedResource:
+      'Choose a registered resource that supports record access.',
+    invalidRecordSelection:
+      'Select one or more specific records or a registered record access policy.',
+    duplicateSubject: 'This subject has already been added.',
+    keyExists: 'This rule key is already in use.',
+    changedElsewhere:
+      'One or more fields you changed were updated by someone else. Reload the latest rule and review it before saving.',
+    savedUnconfirmed:
+      'The change was sent, but the latest rules could not be confirmed. Reload before making another change.',
+    subjectDirectory: 'Subjects could not be loaded. Retry the request.',
+    recordDirectory: 'Records could not be loaded. Retry the request.',
+  },
+};

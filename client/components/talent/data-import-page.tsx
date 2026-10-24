@@ -4,7 +4,6 @@ import { DownloadIcon, FileSpreadsheetIcon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -147,7 +146,6 @@ export function DataImportPage({
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         <PageHeader
           title={t(`dataImport.${kind}.title`)}
           description={t(`dataImport.${kind}.description`)}

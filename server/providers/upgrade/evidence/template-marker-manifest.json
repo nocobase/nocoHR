@@ -1,0 +1,1196 @@
+{
+  "baseline": "dbb8355",
+  "templatePackage": "@nocobase/app-template-default",
+  "completionMarker": "1.0.0-beta.76",
+  "protectedCount": 145,
+  "unchangedProtected": 144,
+  "authorizedProtectedChanges": 1,
+  "historicalSources": 138,
+  "templateLedgerPaths": 284,
+  "protected": [
+    {
+      "path": "database/main/migrations/.gitkeep",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "currentSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609020001_rename_business_mail_messages.ts",
+      "baselineSha256": "4a3f3ab52bec5d98507f9f60004a36b630efa940d9f23b2fc209427680854b1f",
+      "currentSha256": "4a3f3ab52bec5d98507f9f60004a36b630efa940d9f23b2fc209427680854b1f",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609270001_create_organization.ts",
+      "baselineSha256": "9fc0f75823c81472bd971a01395d890166ee11afbfedf80740d7644e31a93ba8",
+      "currentSha256": "9fc0f75823c81472bd971a01395d890166ee11afbfedf80740d7644e31a93ba8",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609270002_create_talent_framework.ts",
+      "baselineSha256": "20afc3e58896802b60ae00ccccdfb8386058474ac166470fc38cc827ecc4cbc7",
+      "currentSha256": "20afc3e58896802b60ae00ccccdfb8386058474ac166470fc38cc827ecc4cbc7",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609270003_create_employees.ts",
+      "baselineSha256": "cad7905be38c78de175eb85a5a610d32d23080fafe6862f6791059e1e8bdeb95",
+      "currentSha256": "cad7905be38c78de175eb85a5a610d32d23080fafe6862f6791059e1e8bdeb95",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609270004_create_hr_core.ts",
+      "baselineSha256": "4a8b5ee17284a2dfb930e2715a7db75803225fcba7fb5712cfb39c9295e13d15",
+      "currentSha256": "4a8b5ee17284a2dfb930e2715a7db75803225fcba7fb5712cfb39c9295e13d15",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609280001_create_knowledge_learning.ts",
+      "baselineSha256": "86f0f9d4c30e56817382dc6fd2b431c8f6d6989628b6108efecf1425f6c9cc60",
+      "currentSha256": "86f0f9d4c30e56817382dc6fd2b431c8f6d6989628b6108efecf1425f6c9cc60",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609280002_create_exams_certifications.ts",
+      "baselineSha256": "9bfe410b24311ddb14093edca7228a3b8efd431c7a902622b99213973bbac700",
+      "currentSha256": "9bfe410b24311ddb14093edca7228a3b8efd431c7a902622b99213973bbac700",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609280003_extend_certification_lifecycle.ts",
+      "baselineSha256": "d6bbac99a907f1b8a15c289c5ee9ef77cc163b62225939a59d3b94ad63f2ab73",
+      "currentSha256": "d6bbac99a907f1b8a15c289c5ee9ef77cc163b62225939a59d3b94ad63f2ab73",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609280004_add_ai_automation.ts",
+      "baselineSha256": "d43ecd4ccafe1e6671a3234efccdfdf34ffa2d3a5fc12192cc37fab7601c7ec0",
+      "currentSha256": "d43ecd4ccafe1e6671a3234efccdfdf34ffa2d3a5fc12192cc37fab7601c7ec0",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290001_create_training_operations.ts",
+      "baselineSha256": "3d753dad42faee9a7bf5e3fd60a19daaf2d291630ae4fff18f2788adf4085f71",
+      "currentSha256": "3d753dad42faee9a7bf5e3fd60a19daaf2d291630ae4fff18f2788adf4085f71",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290002_add_content_maintenance.ts",
+      "baselineSha256": "1b52ebbc78dc2a31ac45fc07ab88bb81eeebfa0e05be526bf75a6d3912773ae4",
+      "currentSha256": "1b52ebbc78dc2a31ac45fc07ab88bb81eeebfa0e05be526bf75a6d3912773ae4",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290003_add_employee_import_batches.ts",
+      "baselineSha256": "c1af89126977d3c6a44da68ba6f28cfe15f91c4636e7f96fa6f3c0657859b95e",
+      "currentSha256": "c1af89126977d3c6a44da68ba6f28cfe15f91c4636e7f96fa6f3c0657859b95e",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290004_add_personnel_settings.ts",
+      "baselineSha256": "5dc5038215aa96f9e51caea07e3631e712e400e23bd62b603ec95217155da051",
+      "currentSha256": "5dc5038215aa96f9e51caea07e3631e712e400e23bd62b603ec95217155da051",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290005_create_work_items.ts",
+      "baselineSha256": "7b4bf9ed8fc40056c7164e0ef5e74ace5a49c0c1a3148ddaf390a106d616ce5d",
+      "currentSha256": "7b4bf9ed8fc40056c7164e0ef5e74ace5a49c0c1a3148ddaf390a106d616ce5d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290006_create_attendance_leave.ts",
+      "baselineSha256": "304d82f3705f3b39379b9e05d6c2299f868c1d9635af16902b918ef6fde009bd",
+      "currentSha256": "304d82f3705f3b39379b9e05d6c2299f868c1d9635af16902b918ef6fde009bd",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290007_create_leave_proof_files.ts",
+      "baselineSha256": "5fa8082cf3f0a95b125bd05ec271badcd4d9cbc8843dc7098c828fd8e38b63ff",
+      "currentSha256": "5fa8082cf3f0a95b125bd05ec271badcd4d9cbc8843dc7098c828fd8e38b63ff",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290008_extend_core_hr_events.ts",
+      "baselineSha256": "38b62ed75cf63071d845a4d6db1a6b524e21297bf3455d1f18fadcd5f088e9bf",
+      "currentSha256": "38b62ed75cf63071d845a4d6db1a6b524e21297bf3455d1f18fadcd5f088e9bf",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290009_create_org_sync.ts",
+      "baselineSha256": "562ce6f9b9ac6711936248a0d59cb0df90367b6d563b163fc3d73ad91bc70b21",
+      "currentSha256": "562ce6f9b9ac6711936248a0d59cb0df90367b6d563b163fc3d73ad91bc70b21",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290010_extend_knowledge_service.ts",
+      "baselineSha256": "54acaf0b2dfe5e977ebaea7f06f1358342d0e5f2a4ddcb0e39945f2dacd4a8dc",
+      "currentSha256": "54acaf0b2dfe5e977ebaea7f06f1358342d0e5f2a4ddcb0e39945f2dacd4a8dc",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609290011_extend_attendance.ts",
+      "baselineSha256": "2843e8edeb7acd65bcae3e296858d38e42da3f44118dbeef54f566c2d7948545",
+      "currentSha256": "2843e8edeb7acd65bcae3e296858d38e42da3f44118dbeef54f566c2d7948545",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609300001_create_custom_fields.ts",
+      "baselineSha256": "2a5bfbf5b095b5c5834e4ccf2561addd09c884c4c010cb0d93545a2a1e81d9f3",
+      "currentSha256": "2a5bfbf5b095b5c5834e4ccf2561addd09c884c4c010cb0d93545a2a1e81d9f3",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609300002_create_change_checklists.ts",
+      "baselineSha256": "6482367ade89b43a0d14953676617db3af236e092aea5d0b0d8b5b387c27ad6d",
+      "currentSha256": "6482367ade89b43a0d14953676617db3af236e092aea5d0b0d8b5b387c27ad6d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609300003_create_compliance_issues.ts",
+      "baselineSha256": "b7a3038e5f8e6fb6ec618d448ec92656a1e500174fa0a42fba74d4268ecd06b6",
+      "currentSha256": "b7a3038e5f8e6fb6ec618d448ec92656a1e500174fa0a42fba74d4268ecd06b6",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609300004_create_settings_change_log.ts",
+      "baselineSha256": "67d9ab8cbc7da95f4a9c4626f582486b843938f667cd0bfcbe6705d67040777c",
+      "currentSha256": "67d9ab8cbc7da95f4a9c4626f582486b843938f667cd0bfcbe6705d67040777c",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202609300005_extend_custom_fields_attendance.ts",
+      "baselineSha256": "b9a2f723cbfb9d27846e0807760d3b61d76c4f1b0ca92e9c73f8aad30418ea9d",
+      "currentSha256": "b9a2f723cbfb9d27846e0807760d3b61d76c4f1b0ca92e9c73f8aad30418ea9d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610010001_create_payroll.ts",
+      "baselineSha256": "59064d2c8ba536278d40af05a4b1359eadf656d1c84fa140d1aff83310dc8b1f",
+      "currentSha256": "59064d2c8ba536278d40af05a4b1359eadf656d1c84fa140d1aff83310dc8b1f",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610020001_extend_competency_framework.ts",
+      "baselineSha256": "f90e857e81d7bd4d556fca86b19702dca941bede1b25270100940bbec921d782",
+      "currentSha256": "f90e857e81d7bd4d556fca86b19702dca941bede1b25270100940bbec921d782",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610030001_extend_learning_job_events.ts",
+      "baselineSha256": "c8d817d6fb4828c98deb1146931813ccef3000bcffcc5c8482d7c40615a1ffc7",
+      "currentSha256": "c8d817d6fb4828c98deb1146931813ccef3000bcffcc5c8482d7c40615a1ffc7",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610040001_extend_exams_certification.ts",
+      "baselineSha256": "317a0355ed35f42c9b537167aeeeacb83fb9d63c260a9c614ae44b7015b78bb5",
+      "currentSha256": "317a0355ed35f42c9b537167aeeeacb83fb9d63c260a9c614ae44b7015b78bb5",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610050001_add_im_cards.ts",
+      "baselineSha256": "dd970079de53c67edfd12d7d22265f63601cb6a70c277450965bfc5f74e7f63d",
+      "currentSha256": "dd970079de53c67edfd12d7d22265f63601cb6a70c277450965bfc5f74e7f63d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610060001_create_device_code.ts",
+      "baselineSha256": "9551ace0c1425ed13382268c86d1a7ba13d09fffe1fe1f0cc9a0808e31b18cf5",
+      "currentSha256": "9551ace0c1425ed13382268c86d1a7ba13d09fffe1fe1f0cc9a0808e31b18cf5",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610070001_attendance_inquiry_exception.ts",
+      "baselineSha256": "7ae85ba6dcbe40223a0724d9b557ffe3219639a4a01fbc00e6cf3c28b75707c3",
+      "currentSha256": "7ae85ba6dcbe40223a0724d9b557ffe3219639a4a01fbc00e6cf3c28b75707c3",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610080001_create_profile_signals.ts",
+      "baselineSha256": "a2768ab603ca3a7b7dda0a09acd749cfb7277ebbc66d8c7ee992f26b64b0a64b",
+      "currentSha256": "a2768ab603ca3a7b7dda0a09acd749cfb7277ebbc66d8c7ee992f26b64b0a64b",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610080002_extend_content_revisions.ts",
+      "baselineSha256": "ffd9fc9df159e1e451933caea99e6500637d129f729e155c0bc4c9e5ddf492fc",
+      "currentSha256": "ffd9fc9df159e1e451933caea99e6500637d129f729e155c0bc4c9e5ddf492fc",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610090001_create_recruiting.ts",
+      "baselineSha256": "fbba5422e35caab29c45e9046176ada16a581ee5752770984d61168fb000dc5d",
+      "currentSha256": "fbba5422e35caab29c45e9046176ada16a581ee5752770984d61168fb000dc5d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610100001_create_performance.ts",
+      "baselineSha256": "211681ea20295526c5d943ef5b1b14ef35fcae8f19f09fa8ebda1d30570558b1",
+      "currentSha256": "211681ea20295526c5d943ef5b1b14ef35fcae8f19f09fa8ebda1d30570558b1",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610110001_create_talent_review.ts",
+      "baselineSha256": "f518276185f545f3216bb452f7898402334563bf5e96e1922faf63da4a9a3e49",
+      "currentSha256": "f518276185f545f3216bb452f7898402334563bf5e96e1922faf63da4a9a3e49",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610120001_licensed_operation.ts",
+      "baselineSha256": "90cd71920e046fe160dc266092b9c398027e101daf194383fb3cee3bc4bf0ea4",
+      "currentSha256": "90cd71920e046fe160dc266092b9c398027e101daf194383fb3cee3bc4bf0ea4",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610140001_add_im_card_message_id.ts",
+      "baselineSha256": "3bf5300282d8680606e1f3a6e2cc3619f665de74de001a56cb84a4ef8d6cf420",
+      "currentSha256": "3bf5300282d8680606e1f3a6e2cc3619f665de74de001a56cb84a4ef8d6cf420",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610150001_add_work_item_detail.ts",
+      "baselineSha256": "b293906c44964b4e39be2deba769b06feee724066236ac99690896a184356d1a",
+      "currentSha256": "b293906c44964b4e39be2deba769b06feee724066236ac99690896a184356d1a",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610160001_create_mail_messages.ts",
+      "baselineSha256": "b8a14b88107cfdd3cb35ecf00cde7f7eda2bf5b79c122cdc67834f079d38e345",
+      "currentSha256": "b8a14b88107cfdd3cb35ecf00cde7f7eda2bf5b79c122cdc67834f079d38e345",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610170001_create_audit_requests.ts",
+      "baselineSha256": "d32792d3f8269810e76812b240e22f13184247692fae42543dc797e870a43826",
+      "currentSha256": "d32792d3f8269810e76812b240e22f13184247692fae42543dc797e870a43826",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610180001_add_mail_proposal.ts",
+      "baselineSha256": "a9e566ef8121538a9fe7605a5c9a85abac880d1cdbf96b635e607153977ddab8",
+      "currentSha256": "a9e566ef8121538a9fe7605a5c9a85abac880d1cdbf96b635e607153977ddab8",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610190001_add_business_mail_plugin_refs.ts",
+      "baselineSha256": "de6f44aefdc3787c31cd739a861b7718f421290d7ea9a1d9e5de5eb9c9ffc3b6",
+      "currentSha256": "de6f44aefdc3787c31cd739a861b7718f421290d7ea9a1d9e5de5eb9c9ffc3b6",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610190002_departed_employee_mail.ts",
+      "baselineSha256": "ca312906e238b0ccb0ae4253ff1d4020e70eb7a75074018025e40ce155c4c331",
+      "currentSha256": "ca312906e238b0ccb0ae4253ff1d4020e70eb7a75074018025e40ce155c4c331",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610200001_candidate_deletion_requests.ts",
+      "baselineSha256": "72c602a1c431aedcb3f4d66185ab5e04984b7054b77f4193acc568fff4cc27b3",
+      "currentSha256": "72c602a1c431aedcb3f4d66185ab5e04984b7054b77f4193acc568fff4cc27b3",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610200002_recruiting_source_name.ts",
+      "baselineSha256": "580e639e3d31e90009951aea982cb42b8adfb42281a4dd47a5bcc89f799567d0",
+      "currentSha256": "580e639e3d31e90009951aea982cb42b8adfb42281a4dd47a5bcc89f799567d0",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610210001_extend_custom_fields_organization.ts",
+      "baselineSha256": "a82298d8b8ff6a487c969da40d8f11d0943399598e733ccc33e711c0229e8bad",
+      "currentSha256": "a82298d8b8ff6a487c969da40d8f11d0943399598e733ccc33e711c0229e8bad",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610240001_position_requirement_source_clauses.ts",
+      "baselineSha256": "25c1e915ca3b2ecc203dc867b7f597c900b5535964d06dc78d364a15e9c7d1a2",
+      "currentSha256": "25c1e915ca3b2ecc203dc867b7f597c900b5535964d06dc78d364a15e9c7d1a2",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610250001_hr_file_purpose.ts",
+      "baselineSha256": "d1d931d7fbe3d5ad7a8ef43cb8db0c01d19fe944c02a10402324f24f9d5a9100",
+      "currentSha256": "d1d931d7fbe3d5ad7a8ef43cb8db0c01d19fe944c02a10402324f24f9d5a9100",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610260001_one_time_code_sends.ts",
+      "baselineSha256": "54898b6002ba7e2df29be11e8d4f858969514843b8c0a16e4ca5be2d69056e4a",
+      "currentSha256": "54898b6002ba7e2df29be11e8d4f858969514843b8c0a16e4ca5be2d69056e4a",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610260002_recruiting_link_issued_at.ts",
+      "baselineSha256": "e6bbf5e1978cc1f4b23f55908877e962e8cc6178d8a00107f8233226061f6a35",
+      "currentSha256": "e6bbf5e1978cc1f4b23f55908877e962e8cc6178d8a00107f8233226061f6a35",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610260003_agent_token_rate_window.ts",
+      "baselineSha256": "eee963cf22c558370b28711e7e5eac1edd237c3019bc176e1d57e2584acd0628",
+      "currentSha256": "eee963cf22c558370b28711e7e5eac1edd237c3019bc176e1d57e2584acd0628",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610260011_business_mail_offers.ts",
+      "baselineSha256": "9df2c225aed6cbd19a22dfe7de3d2a13723410f504314cf5027c34a1243f625b",
+      "currentSha256": "9df2c225aed6cbd19a22dfe7de3d2a13723410f504314cf5027c34a1243f625b",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610270001_create_data_import_batches.ts",
+      "baselineSha256": "342d0a6afe967c3ea6b9f90cfd421e2b2d5467919fc3b5f5f7af7edc260ccf62",
+      "currentSha256": "342d0a6afe967c3ea6b9f90cfd421e2b2d5467919fc3b5f5f7af7edc260ccf62",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610270011_payroll_opening_imports.ts",
+      "baselineSha256": "9f92e0bcb40295a1f714e961685ee36ce071dafb3e59ba9d5b5e256a644df032",
+      "currentSha256": "9f92e0bcb40295a1f714e961685ee36ce071dafb3e59ba9d5b5e256a644df032",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610270021_create_account_activations.ts",
+      "baselineSha256": "7a3c2c3b7069abbfbe57f5a7619e9154b3e05705db7e69b88b0338ff330c1a80",
+      "currentSha256": "7a3c2c3b7069abbfbe57f5a7619e9154b3e05705db7e69b88b0338ff330c1a80",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610270031_create_capability_migration_state.ts",
+      "baselineSha256": "994cbd45437bf8a7f12211a1c3850c773421f42d41e9dbbbd844796d7cda8b42",
+      "currentSha256": "994cbd45437bf8a7f12211a1c3850c773421f42d41e9dbbbd844796d7cda8b42",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610270032_create_process_execution_state.ts",
+      "baselineSha256": "c0ca99111aef28b68526b57bb06d36e6e14040d78dd816874a1ae338dca034c8",
+      "currentSha256": "c0ca99111aef28b68526b57bb06d36e6e14040d78dd816874a1ae338dca034c8",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610270033_create_assistant_conversations.ts",
+      "baselineSha256": "c9fcef0e9553317a91f14c23a5567b1973dd830fdfbbef47995019086be83f94",
+      "currentSha256": "c9fcef0e9553317a91f14c23a5567b1973dd830fdfbbef47995019086be83f94",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610270034_create_assistant_history_configuration.ts",
+      "baselineSha256": "e5b065a785b0ec9c2a368c512c0ee9e7c8e4174078cae38e93eb22d22abeae09",
+      "currentSha256": "e5b065a785b0ec9c2a368c512c0ee9e7c8e4174078cae38e93eb22d22abeae09",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/migrations/202610270035_create_process_history.ts",
+      "baselineSha256": "819fc0ba5acc441455d01232f590ededb766a29545b3ea1e0faeaac20ee2d631",
+      "currentSha256": "819fc0ba5acc441455d01232f590ededb766a29545b3ea1e0faeaac20ee2d631",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/.gitkeep",
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "currentSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609270101_hr_permission_sets.ts",
+      "baselineSha256": "be7149de70df29d0be55030eff73c62d9c93f637ae2fdc450e58fabdc2338bc0",
+      "currentSha256": "be7149de70df29d0be55030eff73c62d9c93f637ae2fdc450e58fabdc2338bc0",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609270102_hr_demo_data.ts",
+      "baselineSha256": "2b48d7fdd685dc38e0d236ee1a12a9751be013dcfd93ae3d798a29f44fe739af",
+      "currentSha256": "2b48d7fdd685dc38e0d236ee1a12a9751be013dcfd93ae3d798a29f44fe739af",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609270103_hr_employee_list_grant.ts",
+      "baselineSha256": "da01fcf034fac2cd49b8732263ee11bb29d670d532ce6e740f2fa9360633f6b9",
+      "currentSha256": "da01fcf034fac2cd49b8732263ee11bb29d670d532ce6e740f2fa9360633f6b9",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609280101_hr_learning_permissions.ts",
+      "baselineSha256": "06d03b104ded943372ac3de10bd9ca33906b53746c72a5fa84ccc6b08749fb88",
+      "currentSha256": "06d03b104ded943372ac3de10bd9ca33906b53746c72a5fa84ccc6b08749fb88",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609280102_hr_demo_learning.ts",
+      "baselineSha256": "ad1ad4deb6ece626463812e78dc0e0e50a42e771f52583b6a6840a8f657534a9",
+      "currentSha256": "ad1ad4deb6ece626463812e78dc0e0e50a42e771f52583b6a6840a8f657534a9",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609280103_hr_demo_exams.ts",
+      "baselineSha256": "7faac0d26fa18744929ef5f7523666570f235b359626accacd42fa73898aa204",
+      "currentSha256": "7faac0d26fa18744929ef5f7523666570f235b359626accacd42fa73898aa204",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290101_hr_training_permissions.ts",
+      "baselineSha256": "ee1a15b6583b9b6c2e6b540e334f20f421c45e8f7533270e4ad9aff44e9f46da",
+      "currentSha256": "ee1a15b6583b9b6c2e6b540e334f20f421c45e8f7533270e4ad9aff44e9f46da",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290102_hr_demo_training.ts",
+      "baselineSha256": "2d7baca982abcec035b6ef120c82e554787d7b6066cadf4ba41ba2d9324a721f",
+      "currentSha256": "2d7baca982abcec035b6ef120c82e554787d7b6066cadf4ba41ba2d9324a721f",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290103_hr_v1_positions_permissions.ts",
+      "baselineSha256": "d3afc7250e6d02555404a8a8e80d1cb835ddf4c279b0aba4849a0a4eb4812fbd",
+      "currentSha256": "d3afc7250e6d02555404a8a8e80d1cb835ddf4c279b0aba4849a0a4eb4812fbd",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290104_workbench_permissions.ts",
+      "baselineSha256": "ddb9a8d4ce53b45e7fa5c3c948506aee8a1207d809fda8acba11c06818823c78",
+      "currentSha256": "ddb9a8d4ce53b45e7fa5c3c948506aee8a1207d809fda8acba11c06818823c78",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290105_attendance_settings_permissions.ts",
+      "baselineSha256": "fc803121f33b2d7a4c9eb2dbc2e81a3502c8a8ac3c6ef81dd67701739efd7986",
+      "currentSha256": "fc803121f33b2d7a4c9eb2dbc2e81a3502c8a8ac3c6ef81dd67701739efd7986",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290106_leave_management_permissions.ts",
+      "baselineSha256": "3aefaf3a33ae528b31cc28b12816eead0315294cfa779a27ff183805645d85c4",
+      "currentSha256": "3aefaf3a33ae528b31cc28b12816eead0315294cfa779a27ff183805645d85c4",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290107_leave_page_permission.ts",
+      "baselineSha256": "600fb2901eab304fc06c370437258bb2372191c2860a81286d80805f5d6a09e2",
+      "currentSha256": "600fb2901eab304fc06c370437258bb2372191c2860a81286d80805f5d6a09e2",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290108_attendance_page_permission.ts",
+      "baselineSha256": "64018934cad9d5403603f34279ce91af9d9a173f10ee68eacedab8ffecdd07e4",
+      "currentSha256": "64018934cad9d5403603f34279ce91af9d9a173f10ee68eacedab8ffecdd07e4",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290109_leave_request_permissions.ts",
+      "baselineSha256": "96792e4a66c83f459b4c18b68a3a72839773a9a6b831297a7ba79d2a00d1bb6d",
+      "currentSha256": "96792e4a66c83f459b4c18b68a3a72839773a9a6b831297a7ba79d2a00d1bb6d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290110_approval_page_permission.ts",
+      "baselineSha256": "7a56c3b111740c988778fd6ac4ab4bfd00b9808b992694a831e9b1cb6b3607d7",
+      "currentSha256": "7a56c3b111740c988778fd6ac4ab4bfd00b9808b992694a831e9b1cb6b3607d7",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290111_schedule_permissions.ts",
+      "baselineSha256": "8430c4fd5f3abffe82dd95f7b611a934295a70c6488fc6dc7c6e0fde4381a9cf",
+      "currentSha256": "8430c4fd5f3abffe82dd95f7b611a934295a70c6488fc6dc7c6e0fde4381a9cf",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290112_core_hr_permissions.ts",
+      "baselineSha256": "6620e01486242a8ad60a23d79e1d31c22674ffa04bbb8af5d213ba37af43e9f6",
+      "currentSha256": "6620e01486242a8ad60a23d79e1d31c22674ffa04bbb8af5d213ba37af43e9f6",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290113_demo_job_events.ts",
+      "baselineSha256": "5fa4895a1e66f1d54afccc7a8568e25269c863d1fb0f14edbf831195c7aa197a",
+      "currentSha256": "5fa4895a1e66f1d54afccc7a8568e25269c863d1fb0f14edbf831195c7aa197a",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290114_hr_assistant_prep_owners.ts",
+      "baselineSha256": "d5e75f8b476967e07d4d718bc4ad3860c779dcd526a3e19180b8df9fa392ba02",
+      "currentSha256": "d5e75f8b476967e07d4d718bc4ad3860c779dcd526a3e19180b8df9fa392ba02",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290115_org_sync_permissions.ts",
+      "baselineSha256": "ea0f6e50c883e02876584e18801a42f0d14888e9cfa38df8390c0475de1bd077",
+      "currentSha256": "ea0f6e50c883e02876584e18801a42f0d14888e9cfa38df8390c0475de1bd077",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290116_demo_org_sync.ts",
+      "baselineSha256": "a6795a42e48f83767ef7b93071d759ae3967438f87cb788fb0f87d805c7a7f13",
+      "currentSha256": "a6795a42e48f83767ef7b93071d759ae3967438f87cb788fb0f87d805c7a7f13",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290117_knowledge_service_permissions.ts",
+      "baselineSha256": "23fa7f246360e5b162c67d83338b4896f6fb6a122a1643a90fc2ad1935bc0155",
+      "currentSha256": "23fa7f246360e5b162c67d83338b4896f6fb6a122a1643a90fc2ad1935bc0155",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290118_ai_entry_permissions.ts",
+      "baselineSha256": "049684a530b08472fd6d610208976f64546094cd4bba70d48f47f48e0b391b1c",
+      "currentSha256": "049684a530b08472fd6d610208976f64546094cd4bba70d48f47f48e0b391b1c",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290119_knowledge_automation_owner.ts",
+      "baselineSha256": "7e3958ffa0cd6b34bb069ed17f6d934f14d439b55bc8758fe81832917928fbcd",
+      "currentSha256": "7e3958ffa0cd6b34bb069ed17f6d934f14d439b55bc8758fe81832917928fbcd",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290120_attendance_permissions.ts",
+      "baselineSha256": "c9a439728cdeb5af0a333ec3c2c9d4f6ccf514fd86e9cf9179ff1f8b5c062bc9",
+      "currentSha256": "c9a439728cdeb5af0a333ec3c2c9d4f6ccf514fd86e9cf9179ff1f8b5c062bc9",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290121_demo_attendance.ts",
+      "baselineSha256": "f42d1e0c8b709aa9f8c220bcb13bcda88da2fe3c103a2cbde0784b393ce3decc",
+      "currentSha256": "f42d1e0c8b709aa9f8c220bcb13bcda88da2fe3c103a2cbde0784b393ce3decc",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609300101_hr_demo_v1_02_additions.ts",
+      "baselineSha256": "7cc93fdee7eca7e325bdeba543b3840eb8cf073c70ca83d5c3638ccdb96739d0",
+      "currentSha256": "7cc93fdee7eca7e325bdeba543b3840eb8cf073c70ca83d5c3638ccdb96739d0",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610010101_payroll_permissions.ts",
+      "baselineSha256": "88b5ca700f33e2fcd9bfbef47d42409cbc14be404ca7b7bdc82a2570d3cf94ad",
+      "currentSha256": "88b5ca700f33e2fcd9bfbef47d42409cbc14be404ca7b7bdc82a2570d3cf94ad",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610010102_demo_payroll.ts",
+      "baselineSha256": "3e3f823fdf12a9f488efaf3cc9eba369b0003aa18a104fddf40141bf8fcce454",
+      "currentSha256": "3e3f823fdf12a9f488efaf3cc9eba369b0003aa18a104fddf40141bf8fcce454",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610020101_competency_permissions.ts",
+      "baselineSha256": "28a15a0cabff151996341b2cd42ecee3f6e50bcd543914a488150052d06f1d74",
+      "currentSha256": "28a15a0cabff151996341b2cd42ecee3f6e50bcd543914a488150052d06f1d74",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610020102_hr_demo_competency.ts",
+      "baselineSha256": "0958a38fd204201860741a83b9a2a5f081f613a72de9aab3f509847514a56265",
+      "currentSha256": "0958a38fd204201860741a83b9a2a5f081f613a72de9aab3f509847514a56265",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610030101_hr_learning_v3_09.ts",
+      "baselineSha256": "0b4397f9e3d1e333beec43f9ec45b3fbc9fcfbe8c7bd79ad5b06ba8307e812f6",
+      "currentSha256": "0b4397f9e3d1e333beec43f9ec45b3fbc9fcfbe8c7bd79ad5b06ba8307e812f6",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610040101_exam_certification_permissions.ts",
+      "baselineSha256": "3e1ff7f3da828dac8d19fb302c6d6e3e823d8b29175ce65c16e417f317389a64",
+      "currentSha256": "3e1ff7f3da828dac8d19fb302c6d6e3e823d8b29175ce65c16e417f317389a64",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610040102_demo_exams_v3_10.ts",
+      "baselineSha256": "340422cab2ce21d9c82edc335b6782adfb6c4ab853f2556378da946fafd0668d",
+      "currentSha256": "340422cab2ce21d9c82edc335b6782adfb6c4ab853f2556378da946fafd0668d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610070101_demo_attendance_inquiry.ts",
+      "baselineSha256": "52ff01145755f3ba98aa13dc09dd0701c311025c70f04da4e3092adccc81e2de",
+      "currentSha256": "52ff01145755f3ba98aa13dc09dd0701c311025c70f04da4e3092adccc81e2de",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610080101_profile_permissions.ts",
+      "baselineSha256": "3a53cba1dbc932b5967727f606c429710ad1200051cd877a3d91d2a3211a5817",
+      "currentSha256": "3a53cba1dbc932b5967727f606c429710ad1200051cd877a3d91d2a3211a5817",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610080102_hr_demo_profile.ts",
+      "baselineSha256": "9b5bddd9d3c255bef25c9f0ca197a4f2f6255b46ed74b37bd7d4cc8d61375e48",
+      "currentSha256": "9b5bddd9d3c255bef25c9f0ca197a4f2f6255b46ed74b37bd7d4cc8d61375e48",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610080103_hr_demo_profile_retention.ts",
+      "baselineSha256": "60d5cd22a00befb924e80506e74cd7cf1c5e7e4781ec8364860f8a02d88d8e8c",
+      "currentSha256": "60d5cd22a00befb924e80506e74cd7cf1c5e7e4781ec8364860f8a02d88d8e8c",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610090101_recruiting_permissions.ts",
+      "baselineSha256": "9c32b33ab7b61d26d4b612f4631dc27d7fc1c62bd669465bf4b20e61d84fda14",
+      "currentSha256": "9c32b33ab7b61d26d4b612f4631dc27d7fc1c62bd669465bf4b20e61d84fda14",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610090102_demo_recruiting.ts",
+      "baselineSha256": "152ac653deacbb7861e09d120fd04ac3206545a3baec5236d9f6848ab69daff9",
+      "currentSha256": "152ac653deacbb7861e09d120fd04ac3206545a3baec5236d9f6848ab69daff9",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610100101_performance_permissions.ts",
+      "baselineSha256": "873b7ebe3dd3de1252ebf67079e74dd0fde8fa0457c6c39de40e8763b7d3e2ce",
+      "currentSha256": "873b7ebe3dd3de1252ebf67079e74dd0fde8fa0457c6c39de40e8763b7d3e2ce",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610100102_demo_performance.ts",
+      "baselineSha256": "606455a61e5ea384d859d33e1d7a4f4d1f81e29928907a4124aca4a0654bf1e1",
+      "currentSha256": "606455a61e5ea384d859d33e1d7a4f4d1f81e29928907a4124aca4a0654bf1e1",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610110101_talent_review_permissions.ts",
+      "baselineSha256": "8de7387467a66abb5d7b2feb59e6618c024d824dece8f02b6ee1ae773cbb204f",
+      "currentSha256": "8de7387467a66abb5d7b2feb59e6618c024d824dece8f02b6ee1ae773cbb204f",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610110102_talent_review_initial_versions.ts",
+      "baselineSha256": "50d924e1b5fc65b8c3b4c27479660123b1906fab706ad63fd36459d12d2285a8",
+      "currentSha256": "50d924e1b5fc65b8c3b4c27479660123b1906fab706ad63fd36459d12d2285a8",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610110103_demo_talent_review.ts",
+      "baselineSha256": "e246d2ea6d46cda3a291adc7531a19b9eb6d1f90545ef2b95e17a6304d386ef5",
+      "currentSha256": "e246d2ea6d46cda3a291adc7531a19b9eb6d1f90545ef2b95e17a6304d386ef5",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610120101_licensed_permissions.ts",
+      "baselineSha256": "613c9ea9d29093fa5bf49a039d718af05f683b63911bfc8d75981808dcddd515",
+      "currentSha256": "613c9ea9d29093fa5bf49a039d718af05f683b63911bfc8d75981808dcddd515",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610120102_demo_licensed.ts",
+      "baselineSha256": "6731a185b9567206b2669f8bca5068a63aa70479535636cac05471a82b8911c4",
+      "currentSha256": "6731a185b9567206b2669f8bca5068a63aa70479535636cac05471a82b8911c4",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610130101_demo_contract_backfill.ts",
+      "baselineSha256": "963194a2fca1f89a07c116f1fa721333cde80b8233eb21b8cc354cf9f73aa739",
+      "currentSha256": "963194a2fca1f89a07c116f1fa721333cde80b8233eb21b8cc354cf9f73aa739",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610160101_mail_permissions.ts",
+      "baselineSha256": "a81533b014edc6abee6b2ee506401d1f2c39860c1b3645a4453f946bab331701",
+      "currentSha256": "a81533b014edc6abee6b2ee506401d1f2c39860c1b3645a4453f946bab331701",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610160102_demo_mail_billing.ts",
+      "baselineSha256": "a36a5171409b02d9a53f7cd1e71ed3451a12456a37c27b8ca48d045b6e3f6e9a",
+      "currentSha256": "a36a5171409b02d9a53f7cd1e71ed3451a12456a37c27b8ca48d045b6e3f6e9a",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610160103_mail_permissions_recruiting.ts",
+      "baselineSha256": "0499b28ddd00673dd2a9c090128ddc1bc03002d5178dc6693ad6a7a7c2cc84c7",
+      "currentSha256": "0499b28ddd00673dd2a9c090128ddc1bc03002d5178dc6693ad6a7a7c2cc84c7",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610160104_demo_mail_recruiting.ts",
+      "baselineSha256": "d627e17aa159426066124809cfd55398e3b42eeafe022f1b26160e3dcb475ab1",
+      "currentSha256": "d627e17aa159426066124809cfd55398e3b42eeafe022f1b26160e3dcb475ab1",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610170101_audit_request_permissions.ts",
+      "baselineSha256": "c296577586d79efe82de6dbe979e8d6cbc7a83d937f4d1b97fc9677525e45779",
+      "currentSha256": "c296577586d79efe82de6dbe979e8d6cbc7a83d937f4d1b97fc9677525e45779",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610170102_demo_mail_audit.ts",
+      "baselineSha256": "1f2b1ee498d31b7dafa777e74aa5a219bfd55d0567f7ee3ceab98ca39bfa2b07",
+      "currentSha256": "1f2b1ee498d31b7dafa777e74aa5a219bfd55d0567f7ee3ceab98ca39bfa2b07",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610190101_demo_mail_local_inboxes.ts",
+      "baselineSha256": "be012d81d1c3bb5334f43f857773bc88bf2e455d950bcb3b4e758b6902c86480",
+      "currentSha256": "be012d81d1c3bb5334f43f857773bc88bf2e455d950bcb3b4e758b6902c86480",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610190102_mail_workspace_permissions.ts",
+      "baselineSha256": "221b91f6fbb852629beea44c62133b47214cbf24395ec873f65dcd10998b66f8",
+      "currentSha256": "221b91f6fbb852629beea44c62133b47214cbf24395ec873f65dcd10998b66f8",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610190103_demo_mail_departed.ts",
+      "baselineSha256": "633ed857a918d473604ae29e77154c7ee40e50f402faf642548f3a0f5825e7e5",
+      "currentSha256": "633ed857a918d473604ae29e77154c7ee40e50f402faf642548f3a0f5825e7e5",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610200101_demo_recruiting_receipt.ts",
+      "baselineSha256": "5204703b5348d8f266229d31e98fa6034bbd90e739bb4b0e43f483e31b7dee8b",
+      "currentSha256": "5204703b5348d8f266229d31e98fa6034bbd90e739bb4b0e43f483e31b7dee8b",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610200102_demo_receipt_deletion_link.ts",
+      "baselineSha256": "7d482b3c69bd94dc2b0da0b7676bd6d153046ae4caed094fd5591de7f91f1d62",
+      "currentSha256": "7d482b3c69bd94dc2b0da0b7676bd6d153046ae4caed094fd5591de7f91f1d62",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610200103_mail_purpose_permissions.ts",
+      "baselineSha256": "f96dce583f62f0cd4aa0b5561de13b5007c7a0686415d5e44dede041551b0f0f",
+      "currentSha256": "f96dce583f62f0cd4aa0b5561de13b5007c7a0686415d5e44dede041551b0f0f",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610210101_demo_manufacturing_pack_defaults.ts",
+      "baselineSha256": "7bd73c21667ef85fc586d6e2567f7955adf57b76e2c7ceb2384316f81db7f33d",
+      "currentSha256": "7bd73c21667ef85fc586d6e2567f7955adf57b76e2c7ceb2384316f81db7f33d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610210102_drop_unused_manufacturing_sets.ts",
+      "baselineSha256": "3124273666e7a465fe08c512e3e9361a90fdaf59d29c59a220f83b9ff45c0636",
+      "currentSha256": "3124273666e7a465fe08c512e3e9361a90fdaf59d29c59a220f83b9ff45c0636",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610210111_demo_recruiting_transfer_housing.ts",
+      "baselineSha256": "44fc974d2a5ab28a3040a32ef5543674974569e47649fe6f0066734cc768868f",
+      "currentSha256": "44fc974d2a5ab28a3040a32ef5543674974569e47649fe6f0066734cc768868f",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610210131_demo_talent_review_terms.ts",
+      "baselineSha256": "71aab1fd68e97b849bb7a21fe214847dc5efb5dc72cadd915eccd3e822b1b7a2",
+      "currentSha256": "71aab1fd68e97b849bb7a21fe214847dc5efb5dc72cadd915eccd3e822b1b7a2",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610210132_demo_search_synonyms.ts",
+      "baselineSha256": "9a493d9ebf8180e91ecce3db56f67a087de69546731367bf6dbab0fba3ec2ee7",
+      "currentSha256": "9a493d9ebf8180e91ecce3db56f67a087de69546731367bf6dbab0fba3ec2ee7",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610220101_demo_workforce_unit.ts",
+      "baselineSha256": "0d89ab061455927565c6aeebb4fbcd203ddb96f733678b28eea27d87ce8e401d",
+      "currentSha256": "0d89ab061455927565c6aeebb4fbcd203ddb96f733678b28eea27d87ce8e401d",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610230101_industry_pack_in_use.ts",
+      "baselineSha256": "5d0a48b3e7bf14b83bcb368f1f47a51c55a7464f743c08e0f6f652883026b84b",
+      "currentSha256": "5d0a48b3e7bf14b83bcb368f1f47a51c55a7464f743c08e0f6f652883026b84b",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610230102_demo_industry_pack.ts",
+      "baselineSha256": "2012e8b0c316ff6bb2c0bce39eed93c430e8a0ed25bcfdbcf4b4ccba863ad8d1",
+      "currentSha256": "2012e8b0c316ff6bb2c0bce39eed93c430e8a0ed25bcfdbcf4b4ccba863ad8d1",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610260012_demo_business_mail_offers.ts",
+      "baselineSha256": "7eabc2803b2b2431edb058f8e97160185ac7de7f9e35ff63acf30f71c71aa030",
+      "currentSha256": "7eabc2803b2b2431edb058f8e97160185ac7de7f9e35ff63acf30f71c71aa030",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610260121_social_insurance_export_permission.ts",
+      "baselineSha256": "4bd7ad8d635f0ad4ae1f5610dd9127e2e711ddaaff00855ebbae601a554e4e81",
+      "currentSha256": "4bd7ad8d635f0ad4ae1f5610dd9127e2e711ddaaff00855ebbae601a554e4e81",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610270101_data_import_permissions.ts",
+      "baselineSha256": "4201098c4b4f4065c8a6d00b72b421b8afd1a612d6d2037dc03fee328e2b8bd7",
+      "currentSha256": "4201098c4b4f4065c8a6d00b72b421b8afd1a612d6d2037dc03fee328e2b8bd7",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610270111_payroll_opening_import_permission.ts",
+      "baselineSha256": "63de0035d3033a704833cc7dd6593ba3aff7dab97af56bf389527b05c8f06568",
+      "currentSha256": "63de0035d3033a704833cc7dd6593ba3aff7dab97af56bf389527b05c8f06568",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610270121_go_live_permissions.ts",
+      "baselineSha256": "e4946e37267a63410154d71c8f498bafa442708a16fac425da26098cad3e05ea",
+      "currentSha256": "e4946e37267a63410154d71c8f498bafa442708a16fac425da26098cad3e05ea",
+      "unchanged": true
+    },
+    {
+      "path": "package.json",
+      "baselineSha256": "c6ccd1b29574423d5965aab6bb2842e0028e451eaae51a216685ce1f6dfb87ef",
+      "currentSha256": "ddd8787db5bc95d2190f8a417cae43b83c7af3de32cd4254cb340ad85a2133d4",
+      "unchanged": false,
+      "approvedDifference": "/nocobase/defaultTemplateVersion: 1.0.0-beta.54 -> 1.0.0-beta.76",
+      "onlyApprovedBytesChanged": true
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "baselineSha256": "ff5d3af1819d158505e1944eb95a1440c9dd4719f37f8f186b004aa66adb2d14",
+      "currentSha256": "ff5d3af1819d158505e1944eb95a1440c9dd4719f37f8f186b004aa66adb2d14",
+      "unchanged": true
+    },
+    {
+      "path": "server/providers/upgrade/template-ownership.tsv",
+      "baselineSha256": "01cefe994ceaee7d10bff275e8f02a34eb803040e63ff01958aedba4d39c1702",
+      "currentSha256": "01cefe994ceaee7d10bff275e8f02a34eb803040e63ff01958aedba4d39c1702",
+      "unchanged": true
+    },
+    {
+      "path": "server/config/processes.ts",
+      "baselineSha256": "bf54761883ce467ca3aa77d9da612defc0f78ae94ad1b42681012b7c693a9d43",
+      "currentSha256": "bf54761883ce467ca3aa77d9da612defc0f78ae94ad1b42681012b7c693a9d43",
+      "unchanged": true
+    },
+    {
+      "path": "server/config/assistant.ts",
+      "baselineSha256": "3abe1980ca2de38b7f75216673cb223d33886792e86f1b3a3fbb6fc4143a78b1",
+      "currentSha256": "3abe1980ca2de38b7f75216673cb223d33886792e86f1b3a3fbb6fc4143a78b1",
+      "unchanged": true
+    },
+    {
+      "path": "server/providers/upgrade/preflight.ts",
+      "baselineSha256": "a9d390bfea0cfca3c09717c8ae0efd199b7010ec0fe43619d30d2979e57c9901",
+      "currentSha256": "a9d390bfea0cfca3c09717c8ae0efd199b7010ec0fe43619d30d2979e57c9901",
+      "unchanged": true
+    },
+    {
+      "path": ".agents/rules/native-ai.md",
+      "baselineSha256": "cc787df6abb13bfb9a5c094409d948fc7e0bee742ddd0993266550f4ad711e77",
+      "currentSha256": "cc787df6abb13bfb9a5c094409d948fc7e0bee742ddd0993266550f4ad711e77",
+      "unchanged": true
+    }
+  ],
+  "composition": [
+    {
+      "path": "server/plugins.ts",
+      "sha256": "06ea3d1812e22c57295e69948d592ef4c7679940eff95ea9c8015f3797fb32f3",
+      "unchanged": true
+    },
+    {
+      "path": "server/providers/index.ts",
+      "sha256": "9e32d0444669010a67ad1a15fdfb4baf50a59514c772ab4a27f225c0930ab44a",
+      "unchanged": true
+    }
+  ],
+  "versions": [
+    {
+      "name": "@nocobase/app-skills",
+      "declared": "0.1.0-beta.44",
+      "installed": "0.1.0-beta.44"
+    },
+    {
+      "name": "@nocobase/app-server",
+      "declared": "^3.0.0-beta.2",
+      "installed": "3.0.0-beta.2"
+    },
+    {
+      "name": "@nocobase/app-plugin-agents",
+      "declared": "^1.0.0-beta.18",
+      "installed": "1.0.0-beta.18"
+    },
+    {
+      "name": "@nocobase/app-plugin-knowledge",
+      "declared": "^0.1.0-beta.9",
+      "installed": "0.1.0-beta.9"
+    },
+    {
+      "name": "@nocobase/app-plugin-scheduler",
+      "declared": "^1.0.0-beta.19",
+      "installed": "1.0.0-beta.19"
+    },
+    {
+      "name": "@nocobase/jobs",
+      "declared": "^0.1.0-beta.3",
+      "installed": "0.1.0-beta.3"
+    }
+  ],
+  "applicationRuntimeDelta": [],
+  "skillMeaning": "Template source integrated into application worktree; application PR merge is not required or authorized.",
+  "acceptance": "Marker records source adoption; original failures and owner/independent acceptance remain separate.",
+  "attribution": {
+    "replay": {
+      "files": 242,
+      "passedFiles": 242,
+      "failedFiles": 0,
+      "assertions": 2022,
+      "passedAssertions": 2022,
+      "failedAssertions": 0,
+      "pendingAssertions": 0,
+      "exitCode": 0,
+      "durationSeconds": 719.46
+    },
+    "organization": {
+      "passedAssertions": 19,
+      "fileStatus": "passed",
+      "events": [
+        {
+          "suite": "org-sync-attribution",
+          "pid": 1885921,
+          "t": 13781.658275,
+          "event": "installed"
+        },
+        {
+          "suite": "org-sync-attribution",
+          "stage": "application",
+          "event": "begin",
+          "pid": 1885921,
+          "elapsedMs": 0,
+          "providers": [
+            {
+              "name": "router",
+              "state": "ready"
+            },
+            {
+              "name": "realtime",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/database",
+              "state": "ready"
+            },
+            {
+              "name": "i18n",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/logging",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/caching",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/id-generator",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/secrets",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/session",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/drive",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/mailer",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/queue",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-server/jobs",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-authentication",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-authorization",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-users",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-api-keys",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-notification",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-notification-in-app",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-notification-providers",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-file",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-scheduler/authorization",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-scheduler",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-mail",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-mail/builtins",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-agents",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-agents/runners",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-agents/authorization",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-foundation",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-knowledge",
+              "state": "ready"
+            },
+            {
+              "name": "@nocobase/app-plugin-knowledge/authorization",
+              "state": "ready"
+            },
+            {
+              "name": "hr/talent",
+              "state": "ready"
+            },
+            {
+              "name": "hr/native-ai",
+              "state": "ready"
+            },
+            {
+              "name": "hr/native-knowledge",
+              "state": "ready"
+            },
+            {
+              "name": "hr/go-live",
+              "state": "ready"
+            },
+            {
+              "name": "app/assistant",
+              "state": "ready"
+            },
+            {
+              "name": "app/processes",
+              "state": "ready"
+            }
+          ],
+          "resources": [
+            "CloseReq",
+            "PipeWrap",
+            "PipeWrap",
+            "PipeWrap",
+            "PipeWrap",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Timeout",
+            "Immediate"
+          ],
+          "mailReads": 0,
+          "mailRuns": [],
+          "mailPending": []
+        },
+        {
+          "suite": "org-sync-attribution",
+          "stage": "application",
+          "event": "done",
+          "pid": 1885921,
+          "elapsedMs": 28,
+          "providers": [],
+          "resources": [
+            "FSReqPromise",
+            "PipeWrap",
+            "PipeWrap",
+            "PipeWrap",
+            "PipeWrap",
+            "Timeout"
+          ],
+          "mailReads": 0,
+          "mailRuns": [],
+          "mailPending": []
+        }
+      ]
+    },
+    "original": {
+      "files": 242,
+      "passedFiles": 241,
+      "failedFiles": 1,
+      "assertions": 2022,
+      "passedAssertions": 2022,
+      "exitCode": 1,
+      "failure": "organization afterAll/server.close exceeds original 30 seconds"
+    },
+    "classification": "unresolved",
+    "reason": "Single same-selection replay did not reproduce the original failing interleaving; no waiting provider or public Mail call was observed. No second replay."
+  },
+  "checks": {
+    "observerRegression": "3 passed before replay",
+    "guidancePreflightAndObserver": "18 passed, overlapping the full selection",
+    "changedDiagnosticTypes": "passed; repository typeRoots in portable config",
+    "changedLint": "passed, zero warnings",
+    "originalBudgetSeconds": 30,
+    "replayCommand": "pnpm test --maxWorkers=2 --reporter=default --reporter=json --outputFile.json=<owned-output>/attribution-full.json",
+    "additionalReplayCount": 0
+  },
+  "templateSource": {
+    "version": "1.0.0-beta.76",
+    "metadata": "https://registry.npmjs.org/@nocobase/app-template-default/1.0.0-beta.76",
+    "tarball": "https://registry.npmjs.org/@nocobase/app-template-default/-/app-template-default-1.0.0-beta.76.tgz",
+    "integrity": "sha512-KQD7WG0oOmln+JfLgd35m4EshjOVjG3pMopJXmxd/0zAwTaeZPyg7AJ12EsxI3K4dxsgr7/mpWsyyx+Y42IHOg==",
+    "sha1": "a65772d58490af3392b2ce80d120731d115a5f11",
+    "evidence": "Reused final independent review of exact official release: 271 target-file hashes in the unchanged 284-path ledger match the tarball. No rolling tag resolved in this step."
+  },
+  "originalEvidence": {
+    "currentIntegrationArchiveSha256": "84d1a6dfa728c387d3bc3dfefd40edd13d57ef2cfa607eeadaa2f0233e273584",
+    "finalReviewArchiveSha256": "3bb446fbfa7ba832cef8faf84a2aea63d2fc46e2f503e53b42ead31c46d6d62c"
+  }
+}

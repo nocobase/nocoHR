@@ -196,3 +196,20 @@ export const getChatToolParts = (messages: AIChatMessage[]) => {
   visit(messages);
   return result;
 };
+
+/** A saved terminal tool group can be continued, never approved or executed again. */
+export function getDecidedToolMessage(messages: AIChatMessage[]) {
+  const message = messages.at(-1);
+  if (message?.role !== 'assistant' || !message.metadata?.serverMessageId)
+    return;
+  const tools = message.parts.filter(isAIToolPart);
+  if (
+    !tools.length ||
+    !tools.every(
+      (part) =>
+        part.state === 'output-available' || part.state === 'output-error',
+    )
+  )
+    return;
+  return message;
+}

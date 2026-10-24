@@ -1,3 +1,5 @@
+import { MailPollError } from './mail/task-result.js';
+import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import type { Application } from '@nocobase/app-server/application';
 import {
   authorizationToken,
@@ -12,7 +14,8 @@ import { loggingToken } from '@nocobase/app-server/logging';
 import { databaseManagerToken } from '@nocobase/db';
 import { ServiceProvider } from '@nocobase/service-provider';
 
-import { createAIRunner } from './ai-runner.js';
+import { createNativeBillReview } from '../native-ai/vendor-bill.js';
+import { createNativeStructuredAI } from '../native-ai/structured.js';
 import { workbenchResource } from './workbench-resource.js';
 import { documentConflictResource } from './content-resources.js';
 import { createWorkItemStore, workItemText } from './work-item-store.js';
@@ -353,7 +356,15 @@ export default class HrProvider extends ServiceProvider<Application> {
       createImChannel({
         platform: this.app.container.resolve(platformToken),
         entry: () => this.app.container.resolve(aiEntryServiceToken),
-        ai: createAIRunner(this.app.container),
+        online: () => this.app.container.resolve(agentsToken).onlineAgent,
+        modelAvailable: async () =>
+          Boolean(
+            (
+              await this.app.container
+                .resolve(agentsToken)
+                .models.services.defaults()
+            ).effectiveChat,
+          ),
         // Absolute once an origin is known: a Feishu message has no base URL.
         publicUrl: (path) => this.feishuLink(path),
         // The configured Feishu app replaces the development mock channel.
@@ -410,7 +421,7 @@ export default class HrProvider extends ServiceProvider<Application> {
       const authz = container.resolve(authorizationToken);
       return createAiEntryService({
         database: container.resolve(databaseManagerToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
         timeZone: this.talentConfig().timeZone,
         holdersOf: (key) =>
           container.resolve(hrCoreServiceToken).holdersOf(key),
@@ -992,11 +1003,12 @@ export default class HrProvider extends ServiceProvider<Application> {
             : null;
         },
         structured: async (run, title, prompt, schema) => {
-          const { data, sessionId } = await createAIRunner(
+          const { data, sessionId } = await createNativeStructuredAI(
             container,
           ).structured({
             employee: 'recruitingAssistant',
             userId: run.owner.userId,
+            authorization: run.owner.authz,
             title,
             prompt,
             schema,
@@ -1230,7 +1242,7 @@ export default class HrProvider extends ServiceProvider<Application> {
         demoBatch: () => container.resolve(demoBatchServiceToken),
         industryPacks: () => container.resolve(industryPackServiceToken),
         automation: () => container.resolve(automationServiceToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
         titleText: (title) => {
           if (title && typeof title === 'object' && 'key' in title) {
             const descriptor = title as { key: string; ns?: string };
@@ -1271,7 +1283,7 @@ export default class HrProvider extends ServiceProvider<Application> {
     container.singleton(talentReviewServicesToken, () =>
       createTalentReviewServices({
         platform: container.resolve(platformToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
         automation: () => container.resolve(automationServiceToken),
         plans: () => container.resolve(planServiceToken),
         certifications: () => container.resolve(certificationServiceToken),
@@ -1296,7 +1308,7 @@ export default class HrProvider extends ServiceProvider<Application> {
     container.singleton(performanceServicesToken, () =>
       createPerformanceServices({
         platform: container.resolve(platformToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
         automation: () => container.resolve(automationServiceToken),
         plans: () => container.resolve(planServiceToken),
         customFields: () => container.resolve(customFieldServiceToken),
@@ -1323,7 +1335,7 @@ export default class HrProvider extends ServiceProvider<Application> {
       createRecruitingServices({
         container,
         platform: container.resolve(platformToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
         background: (label, run) => this.inBackground(label, run),
         production: process.env.NODE_ENV === 'production',
         // Candidate emails need an absolute link: config.app.publicOrigin (APP_PUBLIC_ORIGIN) and the base path.
@@ -1405,7 +1417,8 @@ export default class HrProvider extends ServiceProvider<Application> {
             .getLogger('hr-audit')
             .info(event, 'HR audit'),
         automation: () => container.resolve(automationServiceToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
+        reviewBill: createNativeBillReview(container),
       }),
     );
   }
@@ -2187,7 +2200,7 @@ export default class HrProvider extends ServiceProvider<Application> {
       return createProfileServices({
         container,
         platform: container.resolve(platformToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
         drive: () => container.resolve(driveManagerToken),
         users: () => container.resolve(userAdministrationServiceToken),
         customFields: () => container.resolve(customFieldServiceToken),
@@ -2230,7 +2243,7 @@ export default class HrProvider extends ServiceProvider<Application> {
       createAutomationTasks({
         container,
         automation: container.resolve(automationServiceToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
         platform: container.resolve(platformToken),
         organization: () => container.resolve(organizationServiceToken),
         locale: () => container.resolve(i18nToken).getDefaultLocale(),
@@ -2269,7 +2282,7 @@ export default class HrProvider extends ServiceProvider<Application> {
     container.singleton(practiceServiceToken, () =>
       createPracticeService({
         platform: container.resolve(platformToken),
-        ai: createAIRunner(container),
+        ai: createNativeStructuredAI(container),
         onPracticePassed: () => async (employeeId) => {
           await container.resolve(pathServiceToken).syncEmployee(employeeId);
           // V3-11: the practice may finish a training recommendation.
@@ -2854,8 +2867,14 @@ export default class HrProvider extends ServiceProvider<Application> {
           if (Date.now() - lastMailPoll < settings.pollMinutes * 60_000 - 5_000)
             return { state: 'completed', outcome: 'succeeded', result: {} };
           lastMailPoll = Date.now();
-          const counts = await container.resolve(mailServiceToken).poll();
-          return { state: 'completed', outcome: 'succeeded', result: counts };
+          try {
+            const counts = await container.resolve(mailServiceToken).poll();
+            return { state: 'completed', outcome: 'succeeded', result: counts };
+          } catch (error) {
+            if (!(error instanceof MailPollError)) throw error;
+            // The original errors remain in task history/logs; never expose mail content in the reason.
+            return { state: 'failed', reason: error.message };
+          }
         },
       });
       scheduler.defineSchedule({

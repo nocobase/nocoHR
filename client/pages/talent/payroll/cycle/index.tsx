@@ -12,7 +12,6 @@ import { CalculatorIcon, SendIcon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 import { Outlet, useParams, useSearchParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -91,7 +90,6 @@ export default function PayrollCyclePage(): ReactElement {
     <>
       <RouteChildPage>
         <PageContainer>
-          <Breadcrumbs />
           {detail.error ? (
             <LoadError error={detail.error} onRetry={detail.reload} />
           ) : !data || !cycle ? (

@@ -7,6 +7,15 @@ import {
   type AppApiRouteContribution,
 } from '@nocobase/app-server/router';
 import { Hono } from 'hono';
+import { z } from 'zod';
+import {
+  apiValidator,
+  describeRoute,
+  dataResponse,
+  apiErrorResponses,
+  ApiError,
+} from '@nocobase/app-server/router';
+import { nativeKnowledgeServiceToken } from '../../providers/native-knowledge/service.js';
 import { bodyLimit } from 'hono/body-limit';
 import type { Readable } from 'node:stream';
 
@@ -137,6 +146,72 @@ export const learningApiRoutes: AppApiRouteContribution<Application> =
         throw new HrError('INVALID_INPUT', 400);
       return value.active;
     };
+
+    const nativeKnowledge = app.container.resolve(nativeKnowledgeServiceToken);
+    routes.get(
+      '/kb/search',
+      describeRoute({
+        operationId: 'searchHrKnowledgeSources',
+        summary: 'Search authorized HR and native knowledge separately',
+        tags: ['Knowledge'],
+        responses: {
+          200: dataResponse(z.record(z.string(), z.unknown())),
+          ...apiErrorResponses,
+        },
+      }),
+      apiValidator('query', z.object({ q: z.string().trim().min(1).max(500) })),
+      async (c) => {
+        try {
+          return c.json({
+            data: await nativeKnowledge.search(
+              actor(c),
+              c.req.valid('query').q,
+            ),
+          });
+        } catch (error) {
+          if (error instanceof HrError)
+            throw new ApiError({
+              status:
+                error.status === 403
+                  ? 'PERMISSION_DENIED'
+                  : 'FAILED_PRECONDITION',
+              domain: 'nocohr',
+              reason: error.code,
+              message: 'Knowledge search is unavailable.',
+            });
+          throw error;
+        }
+      },
+    );
+    routes.get(
+      '/kb/spaces',
+      describeRoute({
+        operationId: 'listHrNativeKnowledgeSpaces',
+        summary: 'List explicitly authorized native knowledge spaces',
+        tags: ['Knowledge'],
+        responses: {
+          200: dataResponse(z.array(z.unknown())),
+          ...apiErrorResponses,
+        },
+      }),
+      async (c) => {
+        try {
+          return c.json({ data: await nativeKnowledge.spaces(actor(c)) });
+        } catch (error) {
+          if (error instanceof HrError)
+            throw new ApiError({
+              status:
+                error.status === 403
+                  ? 'PERMISSION_DENIED'
+                  : 'FAILED_PRECONDITION',
+              domain: 'nocohr',
+              reason: error.code,
+              message: 'Knowledge spaces are unavailable.',
+            });
+          throw error;
+        }
+      },
+    );
 
     // ---------- Knowledge base ----------
     routes.get('/kb/documents', async (c) =>

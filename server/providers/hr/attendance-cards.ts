@@ -149,7 +149,11 @@ function createKinds(deps: Deps) {
           en: d.label['en-US'] ?? d.label['zh-CN'],
           value:
             d.type === 'boolean'
-              ? t(shown[d.key] === true ? 'attendanceCards.yes' : 'attendanceCards.no')
+              ? t(
+                  shown[d.key] === true
+                    ? 'attendanceCards.yes'
+                    : 'attendanceCards.no',
+                )
               : displayValue(d, shown[d.key]),
         }),
       );

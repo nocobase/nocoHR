@@ -14,17 +14,27 @@
  * what disappeared. The run record keeps employee ids and issue types only.
  * The assistant changes no amount, formula, import, file or enrolment.
  *
- * 账单上传后处理 (`vendorReconciler.billReview`): the AI employee chosen in
- * 薪酬设置 (an administrator creates it in the AI employee plugin and binds
- * `getVendorBillReconciliation` and `saveVendorBillNotes`) is run as the task
- * owner with its own tools; without one, only hr.payroll is told. Without a
- * model, a rule-based note is written instead.
+ * 账单上传后处理 (`vendorReconciler.billReview`): a native tool-enabled
+ * background conversation runs as the current task owner. The retained
+ * vendorBill.aiEmployee setting is only the existing opt-in; official model
+ * configuration supplies the model. Only reconciliation reads and note writes
+ * are offered, never confirmation or external sending. If native generation
+ * fails, the existing rule fallback writes only when no tool already saved
+ * notes, and rechecks current business authorization first.
  */
+import type { StructuredAI } from '../../native-ai/structured.js';
 import { z } from 'zod';
 
-import { AIUnavailableError, type AIRunner } from '../ai-runner.js';
+import { AIUnavailableError } from '../ai-runner.js';
+import type { NativeBillReview } from '../../native-ai/vendor-bill.js';
+import { assertUnrestrictedNativeAIEntry } from '../../native-ai/access.js';
 import { guardedAnswer, mentionsInternals } from '../ai-text-guard.js';
-import { authorizeAction, policyOf, tryAuthorizeAction } from '../authorize.js';
+import {
+  authorizeAction,
+  policyOf,
+  tryAuthorizeAction,
+  scopeForUser,
+} from '../authorize.js';
 import type { AutomationService, AutomationRunContext } from '../automation.js';
 import { str } from '../shared.js';
 import type { AnomalyCheck, AnomalyReport } from './anomalies.js';
@@ -102,7 +112,8 @@ export function createPayrollAssistant(deps: {
   anomalies: AnomalyCheck;
   bills: VendorBillService;
   automation: () => AutomationService;
-  ai: AIRunner;
+  ai: StructuredAI;
+  reviewBill: NativeBillReview;
 }) {
   const { ctx, cycles, anomalies, bills } = deps;
   const { database } = ctx.platform;
@@ -338,6 +349,7 @@ export function createPayrollAssistant(deps: {
           const { data, sessionId } = await deps.ai.structured({
             employee: 'hrAssistant',
             userId: run.owner.userId,
+            authorization: run.owner.authz,
             title: `算薪异常检查 ${report.month}`,
             prompt: [
               `为 ${report.month} 的算薪异常逐条写说明（每条不超过 120 字），交给薪酬专员复核。`,
@@ -534,9 +546,18 @@ export function createPayrollAssistant(deps: {
   }
 
   async function billReview(run: AutomationRunContext, billId: string) {
+    assertUnrestrictedNativeAIEntry(run.owner.authz);
+    const currentOwner = async () => ({
+      userId: run.owner.userId,
+      authz: await scopeForUser(ctx.platform.authz, run.owner.userId),
+    });
     const settings = await ctx.settings();
+    // The retained setting enables review; its old label no longer selects an employee/model.
     const employee = settings.vendorBill.aiEmployee;
-    const reconciliation = await bills.reconciliationFor(run.owner, billId);
+    const reconciliation = await bills.reconciliationFor(
+      await currentOwner(),
+      billId,
+    );
     run.summarize(
       `${reconciliation.vendorName} ${reconciliation.month} 账单核对`,
     );
@@ -549,26 +570,23 @@ export function createPayrollAssistant(deps: {
     let wrote = false;
     if (employee) {
       try {
-        const reply = await deps.ai.reply({
-          employee,
+        const result = await deps.reviewBill({
           userId: run.owner.userId,
-          title: `派遣账单核对 ${reconciliation.vendorName} ${reconciliation.month}`,
-          text: `请核对派遣账单 ${billId}：调用 getVendorBillReconciliation 读取服务端核对结果，按人写出差异说明，再调用 saveVendorBillNotes 保存。不要确认账单，也不要对外发送。`,
+          authorization: run.owner.authz,
+          billId,
           timeZone: ctx.platform.timeZone,
         });
-        run.usedConversation(reply.sessionId);
-        const bill = await bills.get(run.owner, billId);
-        if (bill.aiNotes) wrote = true;
-        else if (reply.text.trim() && !reply.paused) {
-          await bills.saveNotes(run.owner, billId, reply.text);
-          wrote = true;
-        }
+        run.usedConversation(result.sessionId);
       } catch {
-        // No model, or the employee is missing: the rule-based note below.
+        // The existing rule fallback applies only when no native tool already saved notes.
         run.markFallback();
       }
+      // Refresh after the model: revocation must also stop the fallback write.
+      const owner = await currentOwner();
+      const bill = await bills.get(owner, billId);
+      wrote = Boolean(bill.aiNotes);
       if (!wrote) {
-        await bills.saveNotes(run.owner, billId, billNote(reconciliation));
+        await bills.saveNotes(owner, billId, billNote(reconciliation));
         wrote = true;
       }
     }

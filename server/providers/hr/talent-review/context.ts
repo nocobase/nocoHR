@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 
 import type { NocoBaseDriveManager } from '@nocobase/drive';
 
-import type { AIRunner } from '../ai-runner.js';
+import type { StructuredAI } from '../../native-ai/structured.js';
 import type { AutomationService } from '../automation.js';
 import type { CertificationService } from '../certification-service.js';
 import type { CustomFieldService } from '../custom-fields.js';
@@ -27,7 +27,7 @@ export { bool, json };
 
 export interface TalentReviewDeps {
   readonly platform: Platform;
-  readonly ai: AIRunner;
+  readonly ai: StructuredAI;
   readonly automation: () => AutomationService;
   readonly plans: () => PlanService;
   readonly certifications: () => CertificationService;
@@ -162,7 +162,13 @@ export function createTalentReviewContext(deps: TalentReviewDeps) {
       const rows = await database
         .query()
         .selectFrom('employeeCompetencies')
-        .select(['employeeId', 'competencyId', 'level', 'assessedAt', 'createdAt'])
+        .select([
+          'employeeId',
+          'competencyId',
+          'level',
+          'assessedAt',
+          'createdAt',
+        ])
         .where('employeeId', 'in', [...new Set(employeeIds)])
         .execute();
       const sorted = [...rows].sort(
@@ -173,7 +179,8 @@ export function createTalentReviewContext(deps: TalentReviewDeps) {
             new Date(str(b.createdAt)).getTime(),
       );
       for (const row of sorted) {
-        const map = result.get(str(row.employeeId)) ?? new Map<string, number>();
+        const map =
+          result.get(str(row.employeeId)) ?? new Map<string, number>();
         map.set(str(row.competencyId), Number(row.level));
         result.set(str(row.employeeId), map);
       }
@@ -206,7 +213,9 @@ export function createTalentReviewContext(deps: TalentReviewDeps) {
     async latestRatings(
       employeeIds: readonly string[],
       cycleId?: string | null,
-    ): Promise<Map<string, { rating: string; cycleId: string; cycleTitle: string }>> {
+    ): Promise<
+      Map<string, { rating: string; cycleId: string; cycleTitle: string }>
+    > {
       const map = new Map<
         string,
         { rating: string; cycleId: string; cycleTitle: string }

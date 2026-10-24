@@ -294,7 +294,8 @@ export function createWorkforceService(
     // A small shortfall the people on duty absorb with a little overtime (招聘设置 · absorbOvertimeHours) is no gap.
     const absorbHours =
       headcount > 0
-        ? ((shortfall / params.outputPerShift) * params.hoursPerShift) / headcount
+        ? ((shortfall / params.outputPerShift) * params.hoursPerShift) /
+          headcount
         : Infinity;
     const absorbed =
       shortfall > 0 && absorbHours <= settings.workforce.absorbOvertimeHours;
@@ -317,7 +318,9 @@ export function createWorkforceService(
       gapOutput,
       gapHeadcount,
       shortfall,
-      absorbedOvertimeHours: absorbed ? Math.round(absorbHours * 10) / 10 : null,
+      absorbedOvertimeHours: absorbed
+        ? Math.round(absorbHours * 10) / 10
+        : null,
       overtimeLimitHours: limit.hours,
       recruitingCycleDays: settings.workforce.recruitingCycleDays,
       onboardingDays: onboarding.days,
@@ -384,8 +387,7 @@ export function createWorkforceService(
           ? `最多可借调 ${total} 人，${total >= gapHeadcount ? '可以覆盖' : `不能覆盖 ${gapHeadcount} 人的缺口`}`
           : '招聘设置中没有可借调的部门',
       });
-      const days =
-        settings.workforce.recruitingCycleDays + onboarding.days;
+      const days = settings.workforce.recruitingCycleDays + onboarding.days;
       const weeks = Math.max(1, Math.round(days / 7));
       options.push({
         type: 'hire',
@@ -403,11 +405,14 @@ export function createWorkforceService(
       });
     }
     const hash = sha256(
-      JSON.stringify({ input, calculation, options: options.map((o) => o.detail) }),
+      JSON.stringify({
+        input,
+        calculation,
+        options: options.map((o) => o.detail),
+      }),
     );
     return { calculation, options, hash };
   }
-
 
   async function row(id: string) {
     const found = await database
@@ -537,14 +542,14 @@ export function createWorkforceService(
       const data = parsed.data;
       const departmentId = await resolveDepartment(data.department);
       const positionId = await resolvePosition(data.position);
-      const existing = (await database
+      const existing = await database
         .query()
         .selectFrom('workforcePlans')
         .selectAll()
         .where('departmentId', '=', departmentId)
         .where('positionId', '=', positionId)
         .where('month', '=', data.month)
-        .executeTakeFirst());
+        .executeTakeFirst();
       if (existing && str(existing.status) === 'cancelled')
         throw new HrError('WORKFORCE_PLAN_CANCELLED', 409);
       const result = await writeCalculated(existing, {
@@ -652,10 +657,7 @@ export function createWorkforceService(
       const managed = await platform.organization.managedDepartments(
         actor.userId,
       );
-      if (
-        !(await ctx.isHrAdmin(actor)) &&
-        !managed.includes(plan.departmentId)
-      )
+      if (!(await ctx.isHrAdmin(actor)) && !managed.includes(plan.departmentId))
         throw new HrError('WORKFORCE_PLAN_NOT_FOUND', 404);
       if (plan.status !== 'calculated')
         throw new HrError('WORKFORCE_PLAN_NOT_OPEN', 409);
@@ -678,7 +680,8 @@ export function createWorkforceService(
           const userId =
             entry?.coordinatorUserId ??
             (await ctx.headOfDepartment(s.departmentId));
-          if (userId) coordinators.push({ departmentId: s.departmentId, userId });
+          if (userId)
+            coordinators.push({ departmentId: s.departmentId, userId });
         }
       }
       const now = new Date();

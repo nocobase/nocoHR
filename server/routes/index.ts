@@ -1,3 +1,5 @@
+import { assistantRoutes } from './assistant.js';
+import { processRoutes } from './processes.js';
 import type { Application } from '@nocobase/app-server/application';
 import type { AppRouteContribution } from '@nocobase/app-server/router';
 
@@ -47,6 +49,7 @@ import { dataImportRoutes } from './hr/data-import.js';
 import { apiNotFoundRoutes } from './hr/not-found.js';
 
 const routes: readonly AppRouteContribution<Application>[] = [
+  processRoutes,
   // V4-13: the MCP endpoint authenticates its own bearer tokens, so it comes before routers guarding /talent/*.
   agentMcpRoutes,
   workbenchRoutes,
@@ -93,6 +96,7 @@ const routes: readonly AppRouteContribution<Application>[] = [
   // V3-10
   ...certificateScanRoutes,
   // Last: an unknown /api/talent, /api/public or /api/demo path is a JSON 404, not the client's index.html.
+  assistantRoutes,
   apiNotFoundRoutes,
 ];
 

@@ -154,7 +154,9 @@ export function OverviewTab({ detail }: { detail: CycleDetail }): ReactElement {
       {detail.can.calculate ? (
         <PayrollBonusCycleCard
           payrollCycleId={cycle.id}
-          bonusCycleId={(cycle as { bonusCycleId?: string | null }).bonusCycleId}
+          bonusCycleId={
+            (cycle as { bonusCycleId?: string | null }).bonusCycleId
+          }
           editable={['draft', 'calculated', 'reviewing'].includes(cycle.status)}
         />
       ) : null}

@@ -29,13 +29,22 @@ import { iso, json, num } from './context.js';
 import { superiorOf } from './record-access.js';
 
 const RESOURCE = 'talent.succession';
-export const READINESS = ['readyNow', 'oneToTwoYears', 'threePlusYears'] as const;
+export const READINESS = [
+  'readyNow',
+  'oneToTwoYears',
+  'threePlusYears',
+] as const;
 export type Readiness = (typeof READINESS)[number];
 
 export interface Candidate {
   employeeId: string;
   readiness: Readiness | null;
-  gaps: { competencyId: string; title: string; required: number; current: number }[];
+  gaps: {
+    competencyId: string;
+    title: string;
+    required: number;
+    current: number;
+  }[];
   developmentPlanId: string | null;
   source: 'ai' | 'manual';
   note: string;
@@ -229,7 +238,8 @@ export function createSuccessionService(
       .orderBy('decidedAt', 'desc')
       .execute();
     for (const r of rows)
-      if (!map.has(str(r.employeeId)) && r.box) map.set(str(r.employeeId), Number(r.box));
+      if (!map.has(str(r.employeeId)) && r.box)
+        map.set(str(r.employeeId), Number(r.box));
     return map;
   }
 
@@ -245,13 +255,19 @@ export function createSuccessionService(
       .execute();
     for (const r of rows) {
       const id = str(r.employeeId);
-      map.set(id, [...(map.get(id) ?? []), developmentRecordLabel(str(r.status))]);
+      map.set(id, [
+        ...(map.get(id) ?? []),
+        developmentRecordLabel(str(r.status)),
+      ]);
     }
     return map;
   }
 
   /** 继任候选匹配 (the analyst's `matchSuccessors`): trusted; callers authorize first. */
-  async function match(positionId: string, departmentId: string): Promise<SuccessorMatch[]> {
+  async function match(
+    positionId: string,
+    departmentId: string,
+  ): Promise<SuccessorMatch[]> {
     const departments = new Set(
       await platform.organization.descendantsOf(departmentId),
     );
@@ -277,7 +293,9 @@ export function createSuccessionService(
           employeeId: e.id,
           name: e.name,
           departmentTitle: titles.get(e.departmentId) ?? '',
-          positionTitle: e.positionId ? (positions.get(e.positionId) ?? '') : '',
+          positionTitle: e.positionId
+            ? (positions.get(e.positionId) ?? '')
+            : '',
           totalGap: gap.total,
           mandatoryGaps: gap.mandatory,
           gaps: gap.gaps,
@@ -316,7 +334,9 @@ export function createSuccessionService(
     );
     const requirements = await ctx.requirementsOf(plan.positionId);
     const competencyTitles = await ctx.competencyTitles();
-    const ratings = await ctx.latestRatings(plan.candidates.map((c) => c.employeeId));
+    const ratings = await ctx.latestRatings(
+      plan.candidates.map((c) => c.employeeId),
+    );
     const records = await developmentRecordsOf(
       plan.candidates.map((c) => c.employeeId),
     );
@@ -338,7 +358,9 @@ export function createSuccessionService(
           }
         : null,
       status: plan.status,
-      reviewedByName: plan.reviewedBy ? await ctx.userName(plan.reviewedBy) : null,
+      reviewedByName: plan.reviewedBy
+        ? await ctx.userName(plan.reviewedBy)
+        : null,
       reviewedAt: plan.reviewedAt,
       requirementsSet: requirements.length > 0,
       requirements: requirements.map((r) => ({
@@ -373,7 +395,11 @@ export function createSuccessionService(
 
   function risk(active: readonly Candidate[]): string | null {
     if (!active.length) return 'noCandidates';
-    if (!active.some((c) => c.readiness === 'readyNow' || c.readiness === 'oneToTwoYears'))
+    if (
+      !active.some(
+        (c) => c.readiness === 'readyNow' || c.readiness === 'oneToTwoYears',
+      )
+    )
       return 'noReadySuccessor';
     return null;
   }
@@ -469,7 +495,9 @@ export function createSuccessionService(
           filter: { id: positionId },
           values: {
             isKey: parsed.data.isKey,
-            keyReason: parsed.data.isKey ? (parsed.data.keyReason ?? null) : null,
+            keyReason: parsed.data.isKey
+              ? (parsed.data.keyReason ?? null)
+              : null,
             updatedAt: new Date(),
           },
         });
@@ -529,7 +557,9 @@ export function createSuccessionService(
       if (!parsed.success) throw new HrError('INVALID_INPUT', 400);
       if (
         plan.incumbentEmployeeId &&
-        parsed.data.candidates.some((c) => c.employeeId === plan.incumbentEmployeeId)
+        parsed.data.candidates.some(
+          (c) => c.employeeId === plan.incumbentEmployeeId,
+        )
       )
         throw new HrError('SUCCESSION_INCUMBENT_CANDIDATE', 400);
       const employees = await ctx.employees();
@@ -541,7 +571,9 @@ export function createSuccessionService(
       for (const input of parsed.data.candidates) {
         if (!employees.has(input.employeeId))
           throw new HrError('EMPLOYEE_NOT_FOUND', 404);
-        const current = plan.candidates.find((c) => c.employeeId === input.employeeId);
+        const current = plan.candidates.find(
+          (c) => c.employeeId === input.employeeId,
+        );
         next.push({
           employeeId: input.employeeId,
           readiness:
@@ -596,13 +628,20 @@ export function createSuccessionService(
     /** `saveSuccessorSuggestions`: AI candidates without readiness; manual ones stay untouched. */
     async saveSuggestions(
       planId: string,
-      suggestions: readonly { employeeId: string; note: string; gaps: Candidate['gaps'] }[],
+      suggestions: readonly {
+        employeeId: string;
+        note: string;
+        gaps: Candidate['gaps'];
+      }[],
     ): Promise<number> {
       const plan = await planRow(planId);
       const present = new Set(plan.candidates.map((c) => c.employeeId));
       const added: Candidate[] = [];
       for (const s of suggestions) {
-        if (present.has(s.employeeId) || s.employeeId === plan.incumbentEmployeeId)
+        if (
+          present.has(s.employeeId) ||
+          s.employeeId === plan.incumbentEmployeeId
+        )
           continue;
         present.add(s.employeeId);
         added.push({
@@ -660,7 +699,11 @@ export function createSuccessionService(
             plan.id,
             plan.candidates.map((c) =>
               c.employeeId === event.employeeId
-                ? { ...c, left: true, note: c.note ? `${c.note}（已离职）` : '已离职' }
+                ? {
+                    ...c,
+                    left: true,
+                    note: c.note ? `${c.note}（已离职）` : '已离职',
+                  }
                 : c,
             ),
           );

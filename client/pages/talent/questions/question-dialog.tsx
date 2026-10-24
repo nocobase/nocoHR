@@ -43,7 +43,8 @@ interface Draft {
   single: string;
   multiple: string[];
   judge: boolean;
-  blanks: string[];
+  blanks: { uiId: number; value: string }[];
+  nextBlankId: number;
   short: string;
   explanation: string;
   gradingNotes: string;
@@ -56,6 +57,10 @@ const letters = (count: number) =>
 
 function fromQuestion(question: Question | null): Draft {
   const answer = question?.answer;
+  const blanks =
+    question?.type === 'blank' && Array.isArray(answer)
+      ? answer.map((b) => (Array.isArray(b) ? b.join(' / ') : String(b)))
+      : [''];
   return {
     type: question?.type ?? 'single',
     stem: question?.stem ?? '',
@@ -69,10 +74,8 @@ function fromQuestion(question: Question | null): Draft {
         ? answer.map(String)
         : [],
     judge: question?.type === 'judge' ? answer === true : true,
-    blanks:
-      question?.type === 'blank' && Array.isArray(answer)
-        ? answer.map((b) => (Array.isArray(b) ? b.join(' / ') : String(b)))
-        : [''],
+    blanks: blanks.map((value, uiId) => ({ uiId, value })),
+    nextBlankId: blanks.length,
     short:
       question?.type === 'short' && typeof answer === 'string' ? answer : '',
     explanation: question?.explanation ?? '',
@@ -139,7 +142,7 @@ export function QuestionDialog({
         return draft.judge;
       case 'blank':
         return draft.blanks.map((b) =>
-          b
+          b.value
             .split('/')
             .map((a) => a.trim())
             .filter(Boolean),
@@ -377,17 +380,17 @@ export function QuestionDialog({
                 <FieldLabel>{t('talent.questions.fields.answer')}</FieldLabel>
                 <div className='space-y-2'>
                   {draft.blanks.map((blank, index) => (
-                    <div key={index} className='flex items-center gap-2'>
+                    <div key={blank.uiId} className='flex items-center gap-2'>
                       <span className='w-16 shrink-0 text-sm text-muted-foreground'>
                         {t('talent.questions.blankN', { index: index + 1 })}
                       </span>
                       <Input
-                        value={blank}
+                        value={blank.value}
                         onChange={(e) =>
                           set(
                             'blanks',
                             draft.blanks.map((b, i) =>
-                              i === index ? e.target.value : b,
+                              i === index ? { ...b, value: e.target.value } : b,
                             ),
                           )
                         }
@@ -413,7 +416,16 @@ export function QuestionDialog({
                     type='button'
                     size='sm'
                     variant='outline'
-                    onClick={() => set('blanks', [...draft.blanks, ''])}
+                    onClick={() =>
+                      setDraft((current) => ({
+                        ...current,
+                        blanks: [
+                          ...current.blanks,
+                          { uiId: current.nextBlankId, value: '' },
+                        ],
+                        nextBlankId: current.nextBlankId + 1,
+                      }))
+                    }
                   >
                     <PlusIcon data-icon='inline-start' />
                     {t('talent.questions.addBlank')}

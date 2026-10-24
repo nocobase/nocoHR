@@ -208,12 +208,7 @@ export const DEMO_QUESTIONS: readonly DemoQuestion[] = [
     id: 'q-record-04',
     type: 'multiple',
     stem: '开机点检不合格时应该怎么做？',
-    options: opts(
-      '不得开工',
-      '报告班组长',
-      '挂“待维修”状态牌',
-      '先开工再报修',
-    ),
+    options: opts('不得开工', '报告班组长', '挂“待维修”状态牌', '先开工再报修'),
     answer: ['A', 'B', 'C'],
     explanation: '见 5.1 开机点检。',
     difficulty: 'easy',

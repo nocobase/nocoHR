@@ -19,7 +19,6 @@ import {
   useSearchParams,
 } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -90,7 +89,6 @@ export default function ExamDetailPage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         {examId && exam.error ? (
           <LoadError error={exam.error} onRetry={exam.reload} />
         ) : examId && !exam.data ? (

@@ -51,6 +51,30 @@ const getStatus = (
         icon: LoaderCircle,
         tone: 'text-muted-foreground',
       };
+    case 'approval-requested':
+      return {
+        label: t('tool.status.approvalRequired', 'Approval required'),
+        icon: CircleAlert,
+        tone: 'text-foreground',
+      };
+    case 'approval-responded':
+      return part.approval.approved
+        ? {
+            label: t('tool.status.allowed', 'Allowed'),
+            icon: Check,
+            tone: 'text-foreground',
+          }
+        : {
+            label: t('tool.status.denied', 'Denied'),
+            icon: CircleAlert,
+            tone: 'text-muted-foreground',
+          };
+    case 'output-denied':
+      return {
+        label: t('tool.status.denied', 'Denied'),
+        icon: CircleAlert,
+        tone: 'text-muted-foreground',
+      };
     case 'output-error':
       return {
         label: t('tool.status.failed', 'Failed'),

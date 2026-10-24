@@ -16,9 +16,10 @@
  * marked so. Run records keep placement and plan ids and alert types only —
  * never a band, a rating, a name or an example.
  */
+import type { StructuredAI } from '../../native-ai/structured.js';
 import { z } from 'zod';
 
-import { AIUnavailableError, type AIRunner } from '../ai-runner.js';
+import { AIUnavailableError } from '../ai-runner.js';
 import {
   describesFormat,
   guardedAnswer,
@@ -107,7 +108,7 @@ const CHARACTER_WORDS = /性格|内向|外向|懒|态度差|情商|脾气|人品
 
 export function createTalentAnalyst(deps: {
   ctx: TalentReviewContext;
-  ai: AIRunner;
+  ai: StructuredAI;
   reviews: ReviewService;
   succession: SuccessionService;
   versions: ModelVersionService;
@@ -126,6 +127,7 @@ export function createTalentAnalyst(deps: {
       const { data, sessionId } = await ai.structured({
         employee,
         userId: run.owner.userId,
+        authorization: run.owner.authz,
         title,
         prompt,
         schema,
@@ -185,8 +187,12 @@ export function createTalentAnalyst(deps: {
       if (e) evidence.push(e);
     }
     run.summarize(`盘点预放置：${evidence.length} 个落位`);
-    run.reference({ reviewId, placementIds: evidence.map((e) => e.placementId) });
-    if (!evidence.length) return { status: 'skipped' as const, output: { reason: 'noPlacements' } };
+    run.reference({
+      reviewId,
+      placementIds: evidence.map((e) => e.placementId),
+    });
+    if (!evidence.length)
+      return { status: 'skipped' as const, output: { reason: 'noPlacements' } };
     const answer = await structured(
       run,
       'talentAnalyst',
@@ -206,12 +212,16 @@ ${JSON.stringify(
 )}`,
       preplacementSchema,
     );
-    const byId = new Map(answer?.placements.map((p) => [p.placementId, p]) ?? []);
+    const byId = new Map(
+      answer?.placements.map((p) => [p.placementId, p]) ?? [],
+    );
     for (const e of evidence) {
       const ai = byId.get(e.placementId);
       const lines = evidenceLines(e);
       await saveSuggestion(e.placementId, {
-        potentialEvidence: ai?.potentialEvidence.length ? ai.potentialEvidence : lines,
+        potentialEvidence: ai?.potentialEvidence.length
+          ? ai.potentialEvidence
+          : lines,
         notes:
           ai?.notes ??
           (e.performanceBand
@@ -233,7 +243,10 @@ ${JSON.stringify(
   /** After a potential assessment the suggested box follows the two bands (no model; the bands are not changed). */
   async function refreshSuggestedBox(placementId: string) {
     const row = await reviews.placementRow(placementId);
-    const suggestion = json<Record<string, unknown> | null>(row.aiSuggestion, null);
+    const suggestion = json<Record<string, unknown> | null>(
+      row.aiSuggestion,
+      null,
+    );
     if (!suggestion) return;
     const performanceBand = num(suggestion.performanceBand);
     await database
@@ -286,11 +299,19 @@ ${JSON.stringify(
     const settings = await ctx.settings();
     const matches = (await succession.match(plan.positionId, plan.departmentId))
       .filter((m) => m.employeeId !== plan.incumbentEmployeeId)
-      .filter((m) => !plan.candidates.some((c) => c.employeeId === m.employeeId))
+      .filter(
+        (m) => !plan.candidates.some((c) => c.employeeId === m.employeeId),
+      )
       .slice(0, settings.successorCount);
-    run.summarize(`继任候选推荐：${department}${position}，${matches.length} 人`);
+    run.summarize(
+      `继任候选推荐：${department}${position}，${matches.length} 人`,
+    );
     run.reference({ planId, candidates: matches.length });
-    if (!matches.length) return { status: 'skipped' as const, output: { planId, reason: 'noMatch' } };
+    if (!matches.length)
+      return {
+        status: 'skipped' as const,
+        output: { planId, reason: 'noMatch' },
+      };
     const answer = await guardedAnswer(
       () =>
         structured(
@@ -359,8 +380,14 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
       `继任风险提醒：${department}${position}，${RISK_REASON_LABELS[reason] ?? '有风险'}`,
     );
     run.reference({ planId, reason });
-    if (recent) return { status: 'skipped' as const, output: { planId, reason, cooldown: true } };
-    const matches = (await succession.match(plan.positionId, plan.departmentId)).slice(0, 3);
+    if (recent)
+      return {
+        status: 'skipped' as const,
+        output: { planId, reason, cooldown: true },
+      };
+    const matches = (
+      await succession.match(plan.positionId, plan.departmentId)
+    ).slice(0, 3);
     const active = plan.candidates.filter((c) => !c.left);
     const reasonText = RISK_REASON_LABELS[reason] ?? '继任安排有变化';
     const answer = await guardedAnswer(
@@ -405,7 +432,10 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
     const settings = await ctx.settings();
     const month = Number(ctx.today().slice(5, 7));
     if (run.trigger === 'schedule' && !settings.quarterMonths.includes(month))
-      return { status: 'skipped' as const, output: { reason: 'notQuarterStart' } };
+      return {
+        status: 'skipped' as const,
+        output: { reason: 'notQuarterStart' },
+      };
     const planIds = await succession.planIds();
     let count = 0;
     for (const planId of planIds) {
@@ -424,16 +454,24 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
     return { output: { plans: planIds.length, count } };
   }
 
-  async function versionChangeNote(run: AutomationRunContext, versionId: string) {
+  async function versionChangeNote(
+    run: AutomationRunContext,
+    versionId: string,
+  ) {
     const row = await versions.versionRow(versionId);
-    if (row.status !== 'draft') return { status: 'skipped' as const, output: { reason: 'notDraft' } };
+    if (row.status !== 'draft')
+      return { status: 'skipped' as const, output: { reason: 'notDraft' } };
     const current = await versions.currentOf(row.positionId);
     const hash = versions.contentHash(row, current?.snapshot ?? []);
     if (row.changeNoteSource === 'manual')
       return { status: 'skipped' as const, output: { reason: 'manualNote' } };
     if (row.changeNoteHash === hash)
       return { status: 'skipped' as const, output: { reason: 'unchanged' } };
-    const impact = await versions.impactOf(row.positionId, current?.snapshot ?? [], row.snapshot);
+    const impact = await versions.impactOf(
+      row.positionId,
+      current?.snapshot ?? [],
+      row.snapshot,
+    );
     const positions = await ctx.positionTitles();
     const courses = (
       await ctx.plans().searchContent({
@@ -442,7 +480,9 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
     )
       .filter((c) => c.type === 'course')
       .slice(0, 3);
-    run.summarize(`版本变更说明：${positions.get(row.positionId) ?? row.positionId} 第 ${row.versionNo} 版`);
+    run.summarize(
+      `版本变更说明：${positions.get(row.positionId) ?? row.positionId} 第 ${row.versionNo} 版`,
+    );
     run.reference({ versionId, changed: impact.changed.length });
     const answer = await structured(
       run,
@@ -472,7 +512,10 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
   }
 
   /** 学习教练：按发展建议起草学习计划 (trigger = talentReview), for the head to confirm. */
-  async function talentReviewPlan(run: AutomationRunContext, placementId: string) {
+  async function talentReviewPlan(
+    run: AutomationRunContext,
+    placementId: string,
+  ) {
     const row = await reviews.placementRow(placementId);
     if (!row.decidedAt)
       return { status: 'skipped' as const, output: { reason: 'notDecided' } };
@@ -481,15 +524,25 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
     const employee = await ctx.employee(str(row.employeeId));
     if (employee.status === 'leave')
       return { status: 'skipped' as const, output: { reason: 'left' } };
-    const actions = json<{ type: string; note: string }[]>(row.developmentActions, []);
+    const actions = json<{ type: string; note: string }[]>(
+      row.developmentActions,
+      [],
+    );
     const requirements = employee.positionId
       ? await ctx.requirementsOf(employee.positionId)
       : [];
-    const levels = (await ctx.currentLevels([employee.id])).get(employee.id) ?? new Map();
-    const weak = requirements.filter((r) => (levels.get(r.competencyId) ?? 0) < r.requiredLevel);
-    const competencyIds = (weak.length ? weak : requirements).map((r) => r.competencyId);
+    const levels =
+      (await ctx.currentLevels([employee.id])).get(employee.id) ?? new Map();
+    const weak = requirements.filter(
+      (r) => (levels.get(r.competencyId) ?? 0) < r.requiredLevel,
+    );
+    const competencyIds = (weak.length ? weak : requirements).map(
+      (r) => r.competencyId,
+    );
     const content = (await ctx.plans().searchContent({ competencyIds }))
-      .sort((a, b) => (a.type === 'course' ? 0 : 1) - (b.type === 'course' ? 0 : 1))
+      .sort(
+        (a, b) => (a.type === 'course' ? 0 : 1) - (b.type === 'course' ? 0 : 1),
+      )
       .slice(0, 3);
     run.summarize(`盘点发展计划：${employee.name}`);
     run.reference({ placementId });
@@ -525,11 +578,16 @@ ${matches.map((m) => `- ${successorFacts(m)}`).join('\n')}`,
       });
     } catch (error) {
       // An open draft for the person: the placement's items join it (recorded in its triggerRef).
-      if (!(error instanceof HrError) || error.code !== 'PLAN_DRAFT_EXISTS') throw error;
+      if (!(error instanceof HrError) || error.code !== 'PLAN_DRAFT_EXISTS')
+        throw error;
       plan = await ctx.plans().createDraft(
         run.owner,
         { ...input, mergeIntoDraft: true },
-        { source: 'ai', fallbackReviewerUserId: review.ownerUserId, automated: true },
+        {
+          source: 'ai',
+          fallbackReviewerUserId: review.ownerUserId,
+          automated: true,
+        },
       );
     }
     await database

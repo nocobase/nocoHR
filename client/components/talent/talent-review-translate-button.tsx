@@ -26,13 +26,18 @@ export function TranslateButton({
       variant='outline'
       disabled={action.busy}
       title={action.error}
-      onClick={() => { void (async () => {
-        const done = await action.run(
-          { method: 'POST', path: `talent/translations/${type}/${encodeURIComponent(id)}/request` },
-          t('talentReview.translations.requested'),
-        );
-        if (done) void navigate('/talent/translations');
-      })(); }}
+      onClick={() => {
+        void (async () => {
+          const done = await action.run(
+            {
+              method: 'POST',
+              path: `talent/translations/${type}/${encodeURIComponent(id)}/request`,
+            },
+            t('talentReview.translations.requested'),
+          );
+          if (done) void navigate('/talent/translations');
+        })();
+      }}
     >
       <LanguagesIcon data-icon='inline-start' />
       {t('talentReview.translations.request')}

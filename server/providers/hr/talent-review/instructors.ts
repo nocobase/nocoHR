@@ -67,7 +67,15 @@ export function createInstructorService(ctx: TalentReviewContext) {
     let query = database
       .query()
       .selectFrom('trainingSessions')
-      .select(['id', 'courseId', 'title', 'startAt', 'endAt', 'status', 'location'])
+      .select([
+        'id',
+        'courseId',
+        'title',
+        'startAt',
+        'endAt',
+        'status',
+        'location',
+      ])
       .where('status', '!=', 'cancelled');
     // An external instructor's session names the profile; its instructorUserId is the organizer.
     query =
@@ -81,13 +89,18 @@ export function createInstructorService(ctx: TalentReviewContext) {
               ]),
             )
         : query.where('instructorProfileId', '=', profile.id);
-    if (from) query = query.where('startAt', '>=', new Date(`${from}T00:00:00Z`));
+    if (from)
+      query = query.where('startAt', '>=', new Date(`${from}T00:00:00Z`));
     if (to) query = query.where('startAt', '<', new Date(`${to}T23:59:59Z`));
     return query.orderBy('startAt', 'desc').execute();
   }
 
   /** Statistics for a profile in a range (trusted; the callers authorize). */
-  async function statsOf(profile: Profile, from?: string, to?: string): Promise<InstructorStats> {
+  async function statsOf(
+    profile: Profile,
+    from?: string,
+    to?: string,
+  ): Promise<InstructorStats> {
     const sessions = await sessionsOf(profile, from, to);
     const hours =
       Math.round(
@@ -96,7 +109,8 @@ export function createInstructorService(ctx: TalentReviewContext) {
             sum +
             Math.max(
               0,
-              new Date(str(s.endAt)).getTime() - new Date(str(s.startAt)).getTime(),
+              new Date(str(s.endAt)).getTime() -
+                new Date(str(s.startAt)).getTime(),
             ) /
               3_600_000,
           0,
@@ -139,7 +153,10 @@ export function createInstructorService(ctx: TalentReviewContext) {
         .execute();
       const byPerson = new Map<string, boolean>();
       for (const a of attempts)
-        byPerson.set(str(a.employeeId), byPerson.get(str(a.employeeId)) || a.status === 'passed');
+        byPerson.set(
+          str(a.employeeId),
+          byPerson.get(str(a.employeeId)) || a.status === 'passed',
+        );
       attempted = byPerson.size;
       passed = [...byPerson.values()].filter(Boolean).length;
     }
@@ -147,7 +164,8 @@ export function createInstructorService(ctx: TalentReviewContext) {
       sessions: sessions.length,
       hours,
       satisfaction: scores.length
-        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
+        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) /
+          10
         : null,
       responses: scores.length,
       passRate: attempted ? Math.round((passed / attempted) * 100) : null,
@@ -180,7 +198,10 @@ export function createInstructorService(ctx: TalentReviewContext) {
       const out = [];
       for (const row of rows) {
         const profile = toProfile(row);
-        out.push({ ...profile, stats: await statsOf(profile, filters.from, filters.to) });
+        out.push({
+          ...profile,
+          stats: await statsOf(profile, filters.from, filters.to),
+        });
       }
       return {
         instructors: out.sort((a, b) => a.name.localeCompare(b.name)),
@@ -188,7 +209,11 @@ export function createInstructorService(ctx: TalentReviewContext) {
       };
     },
 
-    async detail(actor: ActorContext, id: string, filters: { from?: string; to?: string }) {
+    async detail(
+      actor: ActorContext,
+      id: string,
+      filters: { from?: string; to?: string },
+    ) {
       await authorizeAction(actor.authz, RESOURCE, 'view');
       const profile = await profileRow(id);
       const sessions = await sessionsOf(profile, filters.from, filters.to);
@@ -236,12 +261,19 @@ export function createInstructorService(ctx: TalentReviewContext) {
       if (id) {
         await profileRow(id);
         await repo.updateOne({ filter: { id }, values });
-      } else await repo.createOne({ values: { id: target, ...values, createdAt: now } });
+      } else
+        await repo.createOne({
+          values: { id: target, ...values, createdAt: now },
+        });
       return profileRow(target);
     },
 
     /** 分配讲师 to a session: exactly one of instructorUserId and instructorProfileId is set. */
-    async assignSession(actor: ActorContext, sessionId: string, input: unknown) {
+    async assignSession(
+      actor: ActorContext,
+      sessionId: string,
+      input: unknown,
+    ) {
       const policies = await authorizeAction(actor.authz, RESOURCE, 'manage');
       const profileId =
         input && typeof input === 'object'
@@ -264,7 +296,11 @@ export function createInstructorService(ctx: TalentReviewContext) {
           filter: { id: sessionId },
           values:
             profile.type === 'internal'
-              ? { instructorUserId: profile.userId, instructorProfileId: null, updatedAt: new Date() }
+              ? {
+                  instructorUserId: profile.userId,
+                  instructorProfileId: null,
+                  updatedAt: new Date(),
+                }
               : {
                   // instructorUserId is required: the organizer stays there, the profile names the instructor.
                   instructorUserId: str(session.ownerUserId),
@@ -289,7 +325,13 @@ export function createInstructorService(ctx: TalentReviewContext) {
       const rows = await database
         .query()
         .selectFrom('trainingSessions')
-        .select(['id', 'title', 'startAt', 'instructorUserId', 'instructorProfileId'])
+        .select([
+          'id',
+          'title',
+          'startAt',
+          'instructorUserId',
+          'instructorProfileId',
+        ])
         .where('status', '!=', 'cancelled')
         .orderBy('startAt', 'desc')
         .execute();
@@ -297,7 +339,9 @@ export function createInstructorService(ctx: TalentReviewContext) {
         id: str(r.id),
         title: str(r.title),
         startAt: iso(r.startAt),
-        instructorProfileId: r.instructorProfileId ? str(r.instructorProfileId) : null,
+        instructorProfileId: r.instructorProfileId
+          ? str(r.instructorProfileId)
+          : null,
       }));
     },
   };

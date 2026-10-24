@@ -93,7 +93,9 @@ const draftInput = z
   })
   .strict();
 
-export function normalizeSnapshot(items: readonly SnapshotItem[]): SnapshotItem[] {
+export function normalizeSnapshot(
+  items: readonly SnapshotItem[],
+): SnapshotItem[] {
   return [...items]
     .map((i) => ({
       competencyId: i.competencyId,
@@ -248,7 +250,12 @@ export function createModelVersionService(
     for (const id of new Set([...before.keys(), ...after.keys()])) {
       const a = before.get(id);
       const b = after.get(id);
-      if (a && b && a.requiredLevel === b.requiredLevel && a.mandatory === b.mandatory)
+      if (
+        a &&
+        b &&
+        a.requiredLevel === b.requiredLevel &&
+        a.mandatory === b.mandatory
+      )
         continue;
       changed.push({
         competencyId: id,
@@ -287,7 +294,9 @@ export function createModelVersionService(
       changeNote: row.changeNote,
       changeNoteSource: row.changeNoteSource,
       impactPreview: row.impactPreview,
-      publishedByName: row.publishedBy ? await ctx.userName(row.publishedBy) : null,
+      publishedByName: row.publishedBy
+        ? await ctx.userName(row.publishedBy)
+        : null,
       publishedAt: row.publishedAt,
       source: row.source,
       createdAt: row.createdAt,
@@ -299,7 +308,8 @@ export function createModelVersionService(
     const list = await ensureInitial(positionId, null);
     const published = [...list].reverse().find((r) => r.status === 'published');
     const current = normalizeSnapshot(await ctx.requirementsOf(positionId));
-    if (published && hashOf(published.snapshot) === hashOf(current)) return false;
+    if (published && hashOf(published.snapshot) === hashOf(current))
+      return false;
     const now = new Date();
     const versionNo = Math.max(...list.map((r) => r.versionNo)) + 1;
     // A pending draft keeps its number: the reconciled version takes the next one after it.
@@ -351,13 +361,20 @@ export function createModelVersionService(
       const draft = list.find((r) => r.status === 'draft');
       // The preview shows today's numbers.
       if (draft && current) {
-        draft.impactPreview = await impactOf(positionId, current.snapshot, draft.snapshot);
+        draft.impactPreview = await impactOf(
+          positionId,
+          current.snapshot,
+          draft.snapshot,
+        );
       }
       return {
         current: current ? await toView(current) : null,
         draft: draft ? await toView(draft) : null,
         history: await Promise.all(
-          list.filter((r) => r.status === 'archived').reverse().map(toView),
+          list
+            .filter((r) => r.status === 'archived')
+            .reverse()
+            .map(toView),
         ),
         can: {
           draft: await ctx.can(actor, RESOURCE, 'draftVersion'),
@@ -378,7 +395,11 @@ export function createModelVersionService(
       const list = await rows(positionId);
       const current = [...list].reverse().find((r) => r.status === 'published');
       const draft = list.find((r) => r.status === 'draft');
-      const impact = await impactOf(positionId, current?.snapshot ?? [], snapshot);
+      const impact = await impactOf(
+        positionId,
+        current?.snapshot ?? [],
+        snapshot,
+      );
       const now = new Date();
       const note =
         parsed.data.changeNote === undefined
@@ -429,7 +450,8 @@ export function createModelVersionService(
     async discardDraft(actor: ActorContext, versionId: string) {
       await authorizeAction(actor.authz, RESOURCE, 'draftVersion');
       const row = await versionRow(versionId);
-      if (row.status !== 'draft') throw new HrError('MODEL_VERSION_NOT_DRAFT', 409);
+      if (row.status !== 'draft')
+        throw new HrError('MODEL_VERSION_NOT_DRAFT', 409);
       await database
         .query()
         .deleteFrom('competencyModelVersions')
@@ -443,7 +465,8 @@ export function createModelVersionService(
     async publish(actor: ActorContext, versionId: string, input: unknown) {
       await authorizeAction(actor.authz, RESOURCE, 'publishVersion');
       const row = await versionRow(versionId);
-      if (row.status !== 'draft') throw new HrError('MODEL_VERSION_NOT_DRAFT', 409);
+      if (row.status !== 'draft')
+        throw new HrError('MODEL_VERSION_NOT_DRAFT', 409);
       const body = (input && typeof input === 'object' ? input : {}) as {
         changeNote?: unknown;
       };
@@ -454,7 +477,11 @@ export function createModelVersionService(
       await assertSnapshot(row.snapshot);
       const list = await rows(row.positionId);
       const current = [...list].reverse().find((r) => r.status === 'published');
-      const impact = await impactOf(row.positionId, current?.snapshot ?? [], row.snapshot);
+      const impact = await impactOf(
+        row.positionId,
+        current?.snapshot ?? [],
+        row.snapshot,
+      );
       const existing = await database
         .query()
         .selectFrom('positionRequirements')
@@ -524,7 +551,11 @@ export function createModelVersionService(
     },
 
     /** 按日期查询当日生效的要求 (also used by the audit export). */
-    async requirementsAt(actor: ActorContext, positionId: string, date: string) {
+    async requirementsAt(
+      actor: ActorContext,
+      positionId: string,
+      date: string,
+    ) {
       await authorizeAction(actor.authz, RESOURCE, 'view');
       if (!isDateOnly(date)) throw new HrError('INVALID_DATE', 400);
       await assertPosition(positionId);
@@ -559,14 +590,19 @@ export function createModelVersionService(
         .execute();
       const held = events
         .filter((e) => e.toPositionId && (day(e.effectiveDate) ?? '') <= date)
-        .sort((a, b) => str(a.effectiveDate).localeCompare(str(b.effectiveDate)))
+        .sort((a, b) =>
+          str(a.effectiveDate).localeCompare(str(b.effectiveDate)),
+        )
         .at(-1);
       const employee = await ctx.employee(employeeId);
       const positionId = held?.toPositionId
         ? str(held.toPositionId)
         : employee.positionId;
       if (!positionId) return { date, positionId: null, version: null };
-      return { positionId, ...(await service.requirementsAtTrusted(positionId, date)) };
+      return {
+        positionId,
+        ...(await service.requirementsAtTrusted(positionId, date)),
+      };
     },
 
     /** Every position with confirmed requirements gets version 1 (the required seed does the same on install). */
@@ -591,7 +627,12 @@ export function createModelVersionService(
       return [...list].reverse().find((r) => r.status === 'published') ?? null;
     },
 
-    async writeNote(versionId: string, note: string, source: 'ai' | 'rule', hash: string) {
+    async writeNote(
+      versionId: string,
+      note: string,
+      source: 'ai' | 'rule',
+      hash: string,
+    ) {
       await database
         .query()
         .updateTable('competencyModelVersions')

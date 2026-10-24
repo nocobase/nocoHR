@@ -7,7 +7,6 @@ import { useLocale, useTranslation } from '@nocobase/i18n/client';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -45,7 +44,6 @@ export default function EvaluationRespondPage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         {evaluation.error ? (
           <LoadError error={evaluation.error} onRetry={evaluation.reload} />
         ) : !data ? (
@@ -56,13 +54,17 @@ export default function EvaluationRespondPage(): ReactElement {
               title={data.targetTitle}
               description={
                 data.level === 'l3'
-                  ? t('talentReview.evaluations.l3Intro', { name: data.employeeName })
+                  ? t('talentReview.evaluations.l3Intro', {
+                      name: data.employeeName,
+                    })
                   : t('talentReview.evaluations.l1Intro')
               }
               actions={<TrStatusBadge status={data.status} />}
             />
             <p className='text-muted-foreground text-sm'>
-              {t('talentReview.evaluations.due', { date: formatDate(locale, data.dueAt) })}
+              {t('talentReview.evaluations.due', {
+                date: formatDate(locale, data.dueAt),
+              })}
             </p>
             {action.error ? (
               <Alert variant='destructive'>
@@ -74,13 +76,19 @@ export default function EvaluationRespondPage(): ReactElement {
               initial={data.answers}
               disabled={!data.mine || data.status !== 'pending'}
               busy={action.busy}
-              onSubmit={(answers) => { void (async () => {
-                const done = await action.run(
-                  { method: 'POST', path: `${path}/submit`, json: { answers } },
-                  t('talentReview.evaluations.thanks'),
-                );
-                if (done) evaluation.reload();
-              })(); }}
+              onSubmit={(answers) => {
+                void (async () => {
+                  const done = await action.run(
+                    {
+                      method: 'POST',
+                      path: `${path}/submit`,
+                      json: { answers },
+                    },
+                    t('talentReview.evaluations.thanks'),
+                  );
+                  if (done) evaluation.reload();
+                })();
+              }}
             />
           </>
         )}

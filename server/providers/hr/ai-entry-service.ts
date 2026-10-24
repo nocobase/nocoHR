@@ -1,10 +1,10 @@
 /**
  * 统一 AI 入口 (V1-04): one entry — the header's "AI 助手", the 问答 page and
  * office-suite bots — that hands a question to one AI employee by an
- * administrator-adjustable routing table. The AI employee plugin has no
- * routing between employees, so this is the application's routing step: a
- * model classifies the question into one row key (no business tools), with
- * a keyword rule when no model is available.
+ * administrator-adjustable routing table. Native structured generation
+ * classifies the question into one authorized row key (no business tools),
+ * with a keyword rule when no model is available. Retained employee labels
+ * name routing destinations; they do not select old model configurations.
  *
  * Routing never widens access: a row the user is not in the audience of
  * takes no part, and the chosen employee still runs its own tools with the
@@ -14,7 +14,9 @@
 import type { DatabaseManager } from '@nocobase/db';
 import { z } from 'zod';
 
-import { AIUnavailableError, type AIRunner } from './ai-runner.js';
+import { AIUnavailableError } from './ai-runner.js';
+import type { StructuredAI } from '../native-ai/structured.js';
+import { assertUnrestrictedNativeAIEntry } from '../native-ai/access.js';
 import { authorizeAction } from './authorize.js';
 import type { ActorContext } from './framework-service.js';
 import { HrError, isRecord } from './shared.js';
@@ -260,7 +262,7 @@ export function routeKeyFromText(
 
 export function createAiEntryService(deps: {
   readonly database: DatabaseManager;
-  readonly ai: AIRunner;
+  readonly ai: StructuredAI;
   readonly timeZone: string;
   /** Everyone who holds a permission set now. */
   readonly holdersOf: (setKey: string) => Promise<string[]>;
@@ -421,6 +423,7 @@ export function createAiEntryService(deps: {
 
     /** Picks one row for a question: the model classifies, keywords decide without one. */
     async route(ctx: ActorContext, question: unknown) {
+      assertUnrestrictedNativeAIEntry(ctx.authz);
       await authorizeAction(ctx.authz, AI_ASSISTANT, 'use');
       if (typeof question !== 'string' || !question.trim())
         throw new HrError('INVALID_INPUT', 400);
@@ -436,15 +439,15 @@ export function createAiEntryService(deps: {
         const { data } = await deps.ai.structured({
           employee: 'knowledgeAssistant',
           userId: ctx.userId,
+          authorization: ctx.authz,
           title: 'AI 入口路由',
           // A question about someone's own data (a balance, how many days are left, a date, a record) goes to
           // the row that reads that data, even when a rules row names the same subject ("年假规则").
-          prompt: `把用户的问题归到下面其中一行，只输出该行的 key。问的是提问者本人或某个人的具体数据（余额、还剩几天、日期、次数、记录）时，选处理这些数据的行；只问制度、规定或计算方法本身时，才选讲制度的行。\n${JSON.stringify(
+          prompt: `把用户的问题归到下面其中一行，按 JSON schema 返回该行的 key。问的是提问者本人或某个人的具体数据（余额、还剩几天、日期、次数、记录）时，选处理这些数据的行；只问制度、规定或计算方法本身时，才选讲制度的行。\n${JSON.stringify(
             routes.map((r) => ({ key: r.key, description: r.description })),
           )}\n问题：${question.trim().slice(0, 500)}`,
-          // The model must name one of these rows; `fromText` reads a key it gave as plain text.
+          // Only a validated native structured key can select one of these authorized rows.
           schema: z.object({ key: z.enum(keys as [string, ...string[]]) }),
-          fromText: (text) => routeKeyFromText(text, keys),
           timeZone: deps.timeZone,
           timeoutMs: 30_000,
         });

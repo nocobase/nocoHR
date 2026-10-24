@@ -7,6 +7,7 @@
  * The provider (server/providers/hr/index.ts, V2-07 block) builds it once
  * with the container; nothing here runs at import time.
  */
+import type { StructuredAI } from '../../native-ai/structured.js';
 import { notificationServiceToken } from '@nocobase/app-plugin-notification';
 import { authenticationToken } from '@nocobase/app-plugin-authentication';
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
@@ -15,7 +16,6 @@ import { i18nToken } from '@nocobase/app-server/i18n';
 import { loggingToken } from '@nocobase/app-server/logging';
 import type { ServiceContainer } from '@nocobase/service-provider';
 
-import type { AIRunner } from '../ai-runner.js';
 import { tryAuthorizeAction } from '../authorize.js';
 import { HR_ADMIN_SETTINGS } from '../core-service.js';
 import type { ActorContext } from '../framework-service.js';
@@ -40,7 +40,7 @@ export type Translate = (
 export interface RecruitingDeps {
   readonly container: ServiceContainer;
   readonly platform: Platform;
-  readonly ai: AIRunner;
+  readonly ai: StructuredAI;
   /** Runs work after the request answers; failures are logged, never thrown. */
   readonly background: (label: string, run: () => Promise<unknown>) => void;
   readonly production: boolean;

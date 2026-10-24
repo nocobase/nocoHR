@@ -33,6 +33,7 @@ export function ChatMessages({
     historyError,
     interactionError,
     retryMessage,
+    continueReply,
     decideToolCall,
     startEditingMessage,
     focusComposer,
@@ -47,6 +48,7 @@ export function ChatMessages({
       historyError={historyError}
       interactionError={interactionError}
       onToolCallDecision={onToolCallDecision}
+      continueReply={continueReply}
       retryMessage={retryMessage}
       decideToolCall={decideToolCall}
       startEditingMessage={startEditingMessage}
@@ -71,6 +73,7 @@ export type AIChatMessageListProps = {
   showMessageActions?: boolean;
   /** Render history without mounting interactive tool renderers or task controls. */
   readOnly?: boolean;
+  continueReply?: () => Promise<void>;
   retryMessage?: (message: AIChatMessage) => Promise<void>;
   decideToolCall?: (decision: AIToolCallDecision) => Promise<void>;
   startEditingMessage?: (message: AIChatMessage) => Promise<void>;
@@ -100,6 +103,7 @@ export function AIChatMessageList({
   showMessageActions = true,
   readOnly = false,
   retryMessage,
+  continueReply,
   decideToolCall,
   startEditingMessage,
   focusComposer,
@@ -285,6 +289,17 @@ export function AIChatMessageList({
                 </div>
               )))
             )}
+            {continueReply && showMessageActions && !readOnly ? (
+              <div className='mx-auto my-3'>
+                <Button
+                  variant='outline'
+                  disabled={status === 'submitted' || status === 'streaming'}
+                  onClick={() => void continueReply()}
+                >
+                  {t('chat.continueReply', 'Continue reply')}
+                </Button>
+              </div>
+            ) : null}
             {error ? (
               <div
                 role='alert'

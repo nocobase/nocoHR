@@ -28,6 +28,7 @@ import {
   type StandaloneServer,
 } from '../../server/standalone.ts';
 import { signedHeaders } from '../helpers/callback-signature.ts';
+import { nativeIMHookResponse } from '../fixtures/native-im-hook.js';
 
 // See tests/logic/v1-feishu-cards.test.ts: map a seed's relative `.js` import to its `.ts` source after a miss.
 registerHooks({
@@ -804,7 +805,12 @@ describe('请假冲突与顶班邀请', () => {
     const bot = createImChannel({
       platform: container.resolve(t.platformToken),
       entry: () => container.resolve(t.aiEntryServiceToken),
-      ai: ai as never,
+      online: () =>
+        nativeIMHookResponse(ai.reply, {
+          provider: 'feishu',
+          externalUserId: BOUND.emp_njl_3,
+        }),
+      modelAvailable: async () => true,
       core: () => container.resolve(t.hrCoreServiceToken),
       publicUrl: (p) => p,
       translate: () => channel.cards.translate(),

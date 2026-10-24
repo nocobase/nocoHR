@@ -144,7 +144,10 @@ export class NocoBaseChatTransport implements ChatTransport<AIChatMessage> {
     return createNocoBaseUIMessageStream(stream);
   }
 
-  async reconnectToStream() {
+  async reconnectToStream(
+    options?: Parameters<ChatTransport<AIChatMessage>['reconnectToStream']>[0],
+  ) {
+    const abortSignal = options?.abortSignal;
     const pendingToolResume = this.pendingToolResume;
     this.pendingToolResume = undefined;
     const pendingConversationResume = this.pendingConversationResume;
@@ -157,21 +160,25 @@ export class NocoBaseChatTransport implements ChatTransport<AIChatMessage> {
     if (!pendingToolResume) {
       const stream = await this.options.service.resumeConversationStream(
         context.sessionId,
+        abortSignal,
       );
       return createNocoBaseUIMessageStream(stream, null, {
         seedMessage: pendingConversationResume?.message,
       });
     }
-    const stream = await this.options.service.resumeToolCallStream({
-      sessionId: context.sessionId,
-      messageId: pendingToolResume.messageId,
-      toolCallResults: pendingToolResume.toolCallResults,
-      model: {
-        llmService: context.model.llmService,
-        model: context.model.value,
+    const stream = await this.options.service.resumeToolCallStream(
+      {
+        sessionId: context.sessionId,
+        messageId: pendingToolResume.messageId,
+        toolCallResults: pendingToolResume.toolCallResults,
+        model: {
+          llmService: context.model.llmService,
+          model: context.model.value,
+        },
+        webSearch: context.task?.webSearch,
       },
-      webSearch: context.task?.webSearch,
-    });
+      abortSignal,
+    );
     return createNocoBaseUIMessageStream(
       stream,
       pendingToolResume.responseMessageId,

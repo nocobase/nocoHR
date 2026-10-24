@@ -11,7 +11,11 @@ import { Link, Outlet } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
-import { BlockSkeleton, EmptyState, LoadError } from '@/components/talent/states';
+import {
+  BlockSkeleton,
+  EmptyState,
+  LoadError,
+} from '@/components/talent/states';
 import { TrStatusBadge } from '@/components/talent/talent-review-shared';
 import { useRemote } from '@/components/talent/use-remote';
 import {
@@ -37,7 +41,10 @@ export default function TranslationsPage(): ReactElement {
   const list = useRemote<{ items: Item[] }>('talent/translations');
   return (
     <PageContainer>
-      <PageHeader title={t('talentReview.translations.title')} description={t('talentReview.translations.description')} />
+      <PageHeader
+        title={t('talentReview.translations.title')}
+        description={t('talentReview.translations.description')}
+      />
       {list.error ? (
         <LoadError error={list.error} onRetry={list.reload} />
       ) : !list.data ? (
@@ -66,11 +73,17 @@ export default function TranslationsPage(): ReactElement {
                       {item.originalTitle}
                     </Link>
                   </TableCell>
-                  <TableCell>{t(`talentReview.translations.types.${item.type}`)}</TableCell>
-                  <TableCell className='max-w-72 truncate'>{item.title}</TableCell>
+                  <TableCell>
+                    {t(`talentReview.translations.types.${item.type}`)}
+                  </TableCell>
+                  <TableCell className='max-w-72 truncate'>
+                    {item.title}
+                  </TableCell>
                   <TableCell className='flex gap-1'>
                     <TrStatusBadge status={item.reviewStatus} />
-                    {item.translationStatus === 'outdated' ? <TrStatusBadge status='outdated' /> : null}
+                    {item.translationStatus === 'outdated' ? (
+                      <TrStatusBadge status='outdated' />
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))}

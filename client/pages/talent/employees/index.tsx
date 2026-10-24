@@ -110,8 +110,8 @@ export default function EmployeesPage(): ReactElement {
     quick: params.get('quick') ?? '',
   };
   const [text, setText] = useState(filters.search);
-  const timer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const timerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timerRef.current), []);
   const update = (key: string, value: string) => {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
@@ -469,8 +469,8 @@ export default function EmployeesPage(): ReactElement {
             onChange={(event) => {
               const value = event.target.value;
               setText(value);
-              window.clearTimeout(timer.current);
-              timer.current = window.setTimeout(
+              window.clearTimeout(timerRef.current);
+              timerRef.current = window.setTimeout(
                 () => update('q', value.trim()),
                 300,
               );
@@ -604,7 +604,7 @@ export default function EmployeesPage(): ReactElement {
           <Button
             variant='ghost'
             onClick={() => {
-              window.clearTimeout(timer.current);
+              window.clearTimeout(timerRef.current);
               setText('');
               setParams(new URLSearchParams(), { replace: true });
             }}

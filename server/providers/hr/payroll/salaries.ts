@@ -721,8 +721,11 @@ export function createSalaryService(
       }
       // V4-12: only a published review result of this employee may be cited.
       if (data.relatedReviewResultId) {
-        if (!ctx.performance) throw new HrError('ADJUSTMENT_REVIEW_RESULT_INVALID', 400);
-        await ctx.performance().resultForAdjustment(data.relatedReviewResultId, employee.id);
+        if (!ctx.performance)
+          throw new HrError('ADJUSTMENT_REVIEW_RESULT_INVALID', 400);
+        await ctx
+          .performance()
+          .resultForAdjustment(data.relatedReviewResultId, employee.id);
       }
       const range = await rangeCheck(
         employee,

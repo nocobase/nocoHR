@@ -74,7 +74,8 @@ const en = {
     scope: 'Departments (with sub-departments)',
   },
   detail: {
-    description: 'Scope: {{scope}} · Performance: {{cycle}} · HR owner: {{owner}}',
+    description:
+      'Scope: {{scope}} · Performance: {{cycle}} · HR owner: {{owner}}',
     advanced: 'Stage updated',
     advance: {
       draft: 'Start preparing',
@@ -110,7 +111,8 @@ const en = {
   },
   move: {
     title: 'Move {{name}}',
-    description: 'From box {{from}} to box {{to}}. The reason is kept with the placement.',
+    description:
+      'From box {{from}} to box {{to}}. The reason is kept with the placement.',
     reason: 'Reason',
     confirm: 'Move',
     saved: 'Card moved',
@@ -212,7 +214,8 @@ const en = {
     draftFromDocument: 'Draft from a work instruction',
     draft: 'Draft',
     drafted: 'The examiner drafted a form; confirm it before use',
-    draftHint: 'The examiner drafts check items with the quoted text; a drafted form cannot be used until confirmed.',
+    draftHint:
+      'The examiner drafts check items with the quoted text; a drafted form cannot be used until confirmed.',
     newTemplate: 'New form',
     templates: 'Forms',
     records: 'Records',
@@ -223,7 +226,8 @@ const en = {
     itemCount: '{{count}} items, {{critical}} critical',
     document: 'Work instruction',
     review: 'Review',
-    draftNotice: 'Drafted by the examiner: check every item and its quoted text, then confirm.',
+    draftNotice:
+      'Drafted by the examiner: check every item and its quoted text, then confirm.',
     competencies: 'Competency ids (comma separated)',
     item: 'Item {{no}}',
     excerpt: 'Source: {{text}}',
@@ -255,7 +259,11 @@ const en = {
     files: 'Photos and videos: {{list}}',
     structure: 'Let the examiner structure',
     suggestion: 'Examiner: {{value}}',
-    suggestionValue: { pass: 'pass', fail: 'not passed', notRecorded: 'not recorded' },
+    suggestionValue: {
+      pass: 'pass',
+      fail: 'not passed',
+      notRecorded: 'not recorded',
+    },
     resultFor: 'Result of {{item}}',
     pass: 'Pass',
     fail: 'Fail',
@@ -272,7 +280,8 @@ const en = {
   },
   instructors: {
     title: 'Instructors',
-    description: 'Internal and external instructors with teaching hours, sessions, satisfaction and the exam pass rate of their learners.',
+    description:
+      'Internal and external instructors with teaching hours, sessions, satisfaction and the exam pass rate of their learners.',
     create: 'New instructor',
     assign: 'Assign to a session',
     assigned: 'Instructor assigned',
@@ -307,7 +316,8 @@ const en = {
     level: { l1: 'Satisfaction', l3: 'Behavior change' },
     due: 'Due {{date}}',
     l1Intro: 'Three quick questions about the training you completed.',
-    l3Intro: '{{name}} completed this training 30 days ago. Have you seen a change in their work?',
+    l3Intro:
+      '{{name}} completed this training 30 days ago. Have you seen a change in their work?',
     scaleValue: '{{value}} of 5',
     scaleLow: 'Disagree',
     scaleHigh: 'Agree',
@@ -330,7 +340,8 @@ const en = {
   },
   translations: {
     title: 'Translation review',
-    description: 'English versions drafted by the content writer; confirm them before English readers see them.',
+    description:
+      'English versions drafted by the content writer; confirm them before English readers see them.',
     empty: 'No translations to review.',
     original: 'Original',
     english: 'English',
@@ -351,7 +362,8 @@ const en = {
       situation: 'Situation',
       openingLine: 'Opening line',
     },
-    detailDescription: 'Keep numbers, units, document codes and clause numbers as in the original.',
+    detailDescription:
+      'Keep numbers, units, document codes and clause numbers as in the original.',
     lessonTitle: 'Lesson {{no}} title',
     lessonContent: 'Lesson {{no}} content',
     saved: 'Translation saved',
@@ -366,7 +378,8 @@ const en = {
     owner: 'Owner: {{name}}',
     sources: 'Sources',
     conflicts: 'Left out: conflicts with a controlled document',
-    conflictLine: '{{id}}: “{{sentence}}” conflicts with {{document}}: “{{rule}}”',
+    conflictLine:
+      '{{id}}: “{{sentence}}” conflicts with {{document}}: “{{rule}}”',
     confirm: 'Confirm',
     discard: 'Discard',
     confirmed: 'FAQ confirmed; it now answers questions',
@@ -475,7 +488,10 @@ const en = {
       ignore: 'Ignore',
     },
     translation: { title: 'Translations', draft: 'Draft', review: 'Review' },
-    agentClient: { title: 'External AI assistants', issueToken: 'Issue own tokens' },
+    agentClient: {
+      title: 'External AI assistants',
+      issueToken: 'Issue own tokens',
+    },
   },
   collections: {
     talentReviews: 'Talent reviews',
@@ -496,7 +512,8 @@ const en = {
     teamDescription:
       'Placements of the people in the departments I head (not my own), while the review is preparing or in session.',
     superior: 'Plans I am the incumbent’s superior of',
-    superiorDescription: 'Succession plans whose incumbent reports to me; never my own position.',
+    superiorDescription:
+      'Succession plans whose incumbent reports to me; never my own position.',
     assessorOwn: 'Records I conduct',
     assessorOwnDescription: 'Practical records where I am the assessor.',
     witness: 'Records I witness',
@@ -504,13 +521,16 @@ const en = {
     respondent: 'My evaluation tasks',
     respondentDescription: 'Evaluations I am asked to answer.',
     evaluationTeam: 'My departments’ evaluations',
-    evaluationTeamDescription: 'Evaluations about the people in the departments I head.',
+    evaluationTeamDescription:
+      'Evaluations about the people in the departments I head.',
     evaluationInstructor: 'My courses and sessions',
-    evaluationInstructorDescription: 'Evaluations of the courses I own and the sessions I teach.',
+    evaluationInstructorDescription:
+      'Evaluations of the courses I own and the sessions I teach.',
     tokenOwn: 'My tokens',
     tokenOwnDescription: 'Personal access tokens I created.',
     contentOwner: 'My content',
-    contentOwnerDescription: 'Courses, lessons, questions, documents and scenarios I own.',
+    contentOwnerDescription:
+      'Courses, lessons, questions, documents and scenarios I own.',
   },
 };
 
@@ -647,7 +667,8 @@ const zh: Shape = {
   },
   succession: {
     title: '继任计划',
-    description: '关键岗位的现任、候选人数、最高准备度和风险。候选人由人才分析师推荐，准备度由人选择。',
+    description:
+      '关键岗位的现任、候选人数、最高准备度和风险。候选人由人才分析师推荐，准备度由人选择。',
     markKey: '关键岗位',
     keyReason: '关键岗位的理由',
     isKey: '{{title}} 为关键岗位',
@@ -658,7 +679,10 @@ const zh: Shape = {
     candidates: '候选人数',
     bestReadiness: '最高准备度',
     risk: '风险',
-    riskType: { noCandidates: '没有候选人', noReadySuccessor: '没有近期可接任的人' },
+    riskType: {
+      noCandidates: '没有候选人',
+      noReadySuccessor: '没有近期可接任的人',
+    },
     detailDescription: '现任：{{incumbent}}',
     requirements: '岗位当前要求',
     candidate: '候选人',
@@ -694,7 +718,8 @@ const zh: Shape = {
     mandatory: '必备',
     mandatoryFor: '{{competency}}为必备',
     impact: '发布后新增差距 {{count}} 人',
-    impactLine: '{{name}}：{{competency}} 当前 {{current}} 级，要求 {{required}} 级',
+    impactLine:
+      '{{name}}：{{competency}} 当前 {{current}} 级，要求 {{required}} 级',
     removed: '不再要求：{{list}}',
     changeNote: '变更说明',
     history: '历史版本',
@@ -705,7 +730,8 @@ const zh: Shape = {
   },
   practicals: {
     title: '实操考核',
-    description: '按考核表现场考评：关键项、通过规则；考官整理考评员的现场记录，考评员与见证人签字。',
+    description:
+      '按考核表现场考评：关键项、通过规则；考官整理考评员的现场记录，考评员与见证人签字。',
     start: '开始考核',
     begin: '开始',
     draftFromDocument: '从作业文件起草',
@@ -795,7 +821,8 @@ const zh: Shape = {
   },
   evaluations: {
     title: '培训评估',
-    description: '课后满意度（一级）、考试（二级）和 30 天后主管评价的行为改变（三级）。',
+    description:
+      '课后满意度（一级）、考试（二级）和 30 天后主管评价的行为改变（三级）。',
     mine: '待我填写',
     summary: '评估结果',
     rules: '规则',
@@ -833,7 +860,12 @@ const zh: Shape = {
     original: '原文',
     english: '英文',
     type: '内容',
-    types: { course: '课程', question: '题目', document: '文档', scenario: '陪练场景' },
+    types: {
+      course: '课程',
+      question: '题目',
+      document: '文档',
+      scenario: '陪练场景',
+    },
     fields: {
       title: '标题',
       description: '简介',
@@ -867,7 +899,8 @@ const zh: Shape = {
   },
   certPracticals: {
     title: '实操要求',
-    description: '在有效期内有一条通过、且考评员（需要见证的还有见证人）已签字的实操记录，才能发证或续发。',
+    description:
+      '在有效期内有一条通过、且考评员（需要见证的还有见证人）已签字的实操记录，才能发证或续发。',
     requiredFor: '适用于',
     for: { initial: '首次发证', recert: '复审续发', both: '首次与复审' },
     validMonths: '通过记录的有效期（月）',
@@ -877,7 +910,8 @@ const zh: Shape = {
   },
   agents: {
     title: '外部 AI 助手',
-    description: '公司的 Claude 工作区等外部助手，用员工本人的个人访问令牌调用 NocoHR，权限与本人一致；每次调用都有记录。',
+    description:
+      '公司的 Claude 工作区等外部助手，用员工本人的个人访问令牌调用 NocoHR，权限与本人一致；每次调用都有记录。',
     create: '新建客户端',
     saved: '已保存客户端',
     clients: '客户端',
@@ -923,7 +957,8 @@ const zh: Shape = {
   },
   connect: {
     title: '连接 AI 助手',
-    description: '为 Claude 等 AI 助手生成个人访问令牌。令牌只代表你本人、按你的权限；起草的单据须回到 NocoHR 提交。',
+    description:
+      '为 Claude 等 AI 助手生成个人访问令牌。令牌只代表你本人、按你的权限；起草的单据须回到 NocoHR 提交。',
     client: '助手',
     days: '有效期（天，最长 {{max}} 天）',
     issue: '生成令牌',
@@ -955,7 +990,11 @@ const zh: Shape = {
     },
     instructor: { title: '讲师' },
     trainingEvaluation: { title: '培训评估', respond: '填写' },
-    knowledgeCandidate: { title: '知识候选', ingest: '推送候选', ignore: '忽略' },
+    knowledgeCandidate: {
+      title: '知识候选',
+      ingest: '推送候选',
+      ignore: '忽略',
+    },
     translation: { title: '内容译文', draft: '起草', review: '审核' },
     agentClient: { title: '外部 AI 助手', issueToken: '为本人生成令牌' },
   },
@@ -975,7 +1014,8 @@ const zh: Shape = {
   },
   scopes: {
     team: '盘点期间本范围',
-    teamDescription: '我负责的部门（含下级）员工的落位，不含本人；只在盘点准备与盘点会期间。',
+    teamDescription:
+      '我负责的部门（含下级）员工的落位，不含本人；只在盘点准备与盘点会期间。',
     superior: '我是现任上级的继任计划',
     superiorDescription: '现任向我汇报的继任计划；不含我本人的岗位。',
     assessorOwn: '我考评的记录',
@@ -1012,13 +1052,16 @@ const enShared = {
   errors: {
     TALENT_REVIEW_NOT_FOUND: 'This talent review is not available.',
     TALENT_REVIEW_NOT_DRAFT: 'Only a draft review can be edited.',
-    TALENT_REVIEW_CYCLE_NOT_PUBLISHED: 'Publish the review cycle before the talent review starts.',
-    TALENT_REVIEW_STAGE_CHANGED: 'Someone else changed the stage. Reload the page.',
+    TALENT_REVIEW_CYCLE_NOT_PUBLISHED:
+      'Publish the review cycle before the talent review starts.',
+    TALENT_REVIEW_STAGE_CHANGED:
+      'Someone else changed the stage. Reload the page.',
     TALENT_REVIEW_STAGE_CLOSED: 'This stage is closed.',
     TALENT_REVIEW_NOT_IN_SESSION: 'Cards are placed during the review session.',
     TALENT_REVIEW_CONCLUDED: 'The talent review has concluded.',
     PLACEMENT_NOT_FOUND: 'This placement is not available.',
-    TALENT_POTENTIAL_INCOMPLETE: 'Score every item and write an example for each.',
+    TALENT_POTENTIAL_INCOMPLETE:
+      'Score every item and write an example for each.',
     TALENT_REASON_REQUIRED: 'Write the reason.',
     TALENT_BOX_UNCHANGED: 'The card is already in that box.',
     TALENT_BOX_REQUIRED: 'Place the card in a box first.',
@@ -1028,7 +1071,8 @@ const enShared = {
     SUCCESSION_NO_CANDIDATES: 'Add candidates first.',
     SUCCESSION_INCUMBENT_CANDIDATE: 'The incumbent cannot be a candidate.',
     MODEL_VERSION_NOT_FOUND: 'This version is not available.',
-    MODEL_VERSION_NOT_DRAFT: 'Only the draft version can be changed or published.',
+    MODEL_VERSION_NOT_DRAFT:
+      'Only the draft version can be changed or published.',
     MODEL_VERSION_DUPLICATE: 'A competency appears twice.',
     PRACTICAL_ASSESSMENT_NOT_FOUND: 'This assessment form is not available.',
     PRACTICAL_ASSESSMENT_NOT_CONFIRMED: 'Confirm the form before using it.',
@@ -1040,11 +1084,15 @@ const enShared = {
     PRACTICAL_RECORD_VOIDED: 'The record is already voided.',
     PRACTICAL_SELF_ASSESSMENT: 'You cannot assess yourself.',
     PRACTICAL_WITNESS_REQUIRED: 'This form needs a witness.',
-    PRACTICAL_WITNESS_INVALID: 'The witness must be someone other than the assessor and the person assessed.',
-    PRACTICAL_RESULTS_INCOMPLETE: 'Confirm the result of every item before signing.',
-    PRACTICAL_RESULT_UNKNOWN_ITEM: 'A result names an item the form does not have.',
+    PRACTICAL_WITNESS_INVALID:
+      'The witness must be someone other than the assessor and the person assessed.',
+    PRACTICAL_RESULTS_INCOMPLETE:
+      'Confirm the result of every item before signing.',
+    PRACTICAL_RESULT_UNKNOWN_ITEM:
+      'A result names an item the form does not have.',
     PRACTICAL_NOTES_REQUIRED: 'Write the observation notes first.',
-    PRACTICAL_NOT_AWAITING_WITNESS: 'The record does not wait for a witness signature.',
+    PRACTICAL_NOT_AWAITING_WITNESS:
+      'The record does not wait for a witness signature.',
     PRACTICAL_VOID_REASON_REQUIRED: 'Write why the record is voided.',
     INSTRUCTOR_NOT_FOUND: 'This instructor is not available.',
     INSTRUCTOR_ACCOUNT_REQUIRED: 'An internal instructor needs an account.',
@@ -1054,7 +1102,8 @@ const enShared = {
     EVALUATION_ANSWERS_REQUIRED: 'Answer every question.',
     KNOWLEDGE_CANDIDATE_NOT_FOUND: 'This candidate is not available.',
     TRANSLATION_NOT_FOUND: 'This translation is not available.',
-    TRANSLATION_NOT_DRAFT: 'Only a draft translation can be changed or confirmed.',
+    TRANSLATION_NOT_DRAFT:
+      'Only a draft translation can be changed or confirmed.',
     TRANSLATION_OF_TRANSLATION: 'Translate the original, not a translation.',
     CONTENT_NOT_FOUND: 'This content is not available.',
     AGENT_CLIENT_NOT_FOUND: 'This client is not available.',
@@ -1088,15 +1137,18 @@ const enShared = {
     },
     'frameworkAdvisor.versionChangeNote': {
       title: 'Version change note',
-      description: 'When a draft competency model version is saved: what changed, how many people, suggested courses; once per draft content.',
+      description:
+        'When a draft competency model version is saved: what changed, how many people, suggested courses; once per draft content.',
     },
     'examiner.structureObservation': {
       title: 'Practical assessment notes',
-      description: 'When the assessor asks: each checklist item with a suggestion and the quoted notes; unrecorded items are never suggested as passed.',
+      description:
+        'When the assessor asks: each checklist item with a suggestion and the quoted notes; unrecorded items are never suggested as passed.',
     },
     'examiner.draftPracticalChecklist': {
       title: 'Practical form draft',
-      description: 'From a work instruction: check items with quoted text, as a draft an instructor confirms.',
+      description:
+        'From a work instruction: check items with quoted text, as a draft an instructor confirms.',
     },
     'knowledgeAssistant.knowledgeDistill': {
       title: 'Knowledge from tickets and forums',
@@ -1105,11 +1157,13 @@ const enShared = {
     },
     'contentWriter.translationDraft': {
       title: 'English translation draft',
-      description: 'On request and after the original changes: an English draft keeping codes and numbers, with the glossary; once per original version.',
+      description:
+        'On request and after the original changes: an English draft keeping codes and numbers, with the glossary; once per original version.',
     },
     'learningCoach.talentReviewPlans': {
       title: 'Learning plan from the talent review',
-      description: 'When a placement is confirmed: a learning plan from the development actions for the head to confirm.',
+      description:
+        'When a placement is confirmed: a learning plan from the development actions for the head to confirm.',
     },
   },
 };
@@ -1186,27 +1240,33 @@ const zhShared: typeof enShared = {
   automationTasks: {
     'talentAnalyst.prePlacement': {
       title: '盘点预放置',
-      description: '盘点进入准备阶段时，为每位员工写预放置建议和潜力方面的事实证据（不评价性格、不给潜力分、不引用考核评语），并通知负责 HR。',
+      description:
+        '盘点进入准备阶段时，为每位员工写预放置建议和潜力方面的事实证据（不评价性格、不给潜力分、不引用考核评语），并通知负责 HR。',
     },
     'talentAnalyst.successorRecommend': {
       title: '继任候选推荐',
-      description: '关键岗位新标记时和每季度首日：挑出与岗位要求差距最小的 3 人（不含现任）作为 AI 候选人，不填准备度。',
+      description:
+        '关键岗位新标记时和每季度首日：挑出与岗位要求差距最小的 3 人（不含现任）作为 AI 候选人，不填准备度。',
     },
     'talentAnalyst.successionRisk': {
       title: '继任风险提醒',
-      description: '现任或候选人离职时、每季度首日检查没有近期可接任人选的关键岗位：通知 hr01 与现任的上级负责人，同一原因 7 天内只发一次。',
+      description:
+        '现任或候选人离职时、每季度首日检查没有近期可接任人选的关键岗位：通知 hr01 与现任的上级负责人，同一原因 7 天内只发一次。',
     },
     'talentAnalyst.trainingEffectReport': {
       title: '培训效果季报',
-      description: '每季度首日：汇总各课程与讲师的满意度、考试通过率和行为改变，指出偏低的项并给出可能原因，发给 hr01 与相关讲师。',
+      description:
+        '每季度首日：汇总各课程与讲师的满意度、考试通过率和行为改变，指出偏低的项并给出可能原因，发给 hr01 与相关讲师。',
     },
     'frameworkAdvisor.versionChangeNote': {
       title: '版本变更说明',
-      description: '能力模型草稿版本保存时：写明改了什么、影响多少人、建议配套的课程；同一草稿内容只生成一次。',
+      description:
+        '能力模型草稿版本保存时：写明改了什么、影响多少人、建议配套的课程；同一草稿内容只生成一次。',
     },
     'examiner.structureObservation': {
       title: '实操考核辅助记录',
-      description: '考评员发起时：把现场记录对应到检查项，给出建议结果并引用记录；未记录的项不会被建议为通过。',
+      description:
+        '考评员发起时：把现场记录对应到检查项，给出建议结果并引用记录；未记录的项不会被建议为通过。',
     },
     'examiner.draftPracticalChecklist': {
       title: '起草实操考核表',
@@ -1214,15 +1274,18 @@ const zhShared: typeof enShared = {
     },
     'knowledgeAssistant.knowledgeDistill': {
       title: '知识沉淀',
-      description: '每周一在知识缺口周报之后：同一主题的已解决问题达到阈值时起草常见问题文档并附来源链接；与受控文件冲突的内容不写入并列出。',
+      description:
+        '每周一在知识缺口周报之后：同一主题的已解决问题达到阈值时起草常见问题文档并附来源链接；与受控文件冲突的内容不写入并列出。',
     },
     'contentWriter.translationDraft': {
       title: '英文译文起草',
-      description: '讲师发起或原文更新后：按术语表起草英文译文，保留编号与数字；同一原文版本只起草一次。',
+      description:
+        '讲师发起或原文更新后：按术语表起草英文译文，保留编号与数字；同一原文版本只起草一次。',
     },
     'learningCoach.talentReviewPlans': {
       title: '盘点发展计划',
-      description: '落位确认后：按发展建议起草学习计划（来源记为“人才盘点”），交主管确认。',
+      description:
+        '落位确认后：按发展建议起草学习计划（来源记为“人才盘点”），交主管确认。',
     },
   },
 };

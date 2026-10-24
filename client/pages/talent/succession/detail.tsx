@@ -9,7 +9,6 @@ import { useTranslation } from '@nocobase/i18n/client';
 import { useState, type ReactElement } from 'react';
 import { useOutletContext, useParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -21,9 +20,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 
-import { SuccessionCandidateTable, type SuccessionCandidate as Candidate } from './candidate-table.js';
+import {
+  SuccessionCandidateTable,
+  type SuccessionCandidate as Candidate,
+} from './candidate-table.js';
 interface Plan {
   id: string;
   positionTitle: string;
@@ -33,7 +38,12 @@ interface Plan {
   reviewedByName: string | null;
   /** False when the position has no requirements: gaps cannot be compared. */
   requirementsSet: boolean;
-  requirements: { competencyId: string; title: string; requiredLevel: number; mandatory: boolean }[];
+  requirements: {
+    competencyId: string;
+    title: string;
+    requiredLevel: number;
+    mandatory: boolean;
+  }[];
   candidates: Candidate[];
   risk: string | null;
   can: { manage: boolean; confirm: boolean };
@@ -50,12 +60,18 @@ export default function SuccessionDetailPage(): ReactElement {
   const { t } = useTranslation();
   const { planId = '' } = useParams();
   const outlet = useOutletContext<{ reload?: () => void } | undefined>();
-  const detail = useRemote<Plan>(`talent/succession/${encodeURIComponent(planId)}`);
+  const detail = useRemote<Plan>(
+    `talent/succession/${encodeURIComponent(planId)}`,
+  );
   const matches = useRemote<Match[]>(
-    detail.data?.can.manage ? `talent/succession/${encodeURIComponent(planId)}/matches` : null,
+    detail.data?.can.manage
+      ? `talent/succession/${encodeURIComponent(planId)}/matches`
+      : null,
   );
   const action = useTrAction();
-  const [edits, setEdits] = useState<Record<string, { readiness?: string | null; note?: string }>>({});
+  const [edits, setEdits] = useState<
+    Record<string, { readiness?: string | null; note?: string }>
+  >({});
   const plan = detail.data;
   const reload = () => {
     setEdits({});
@@ -66,7 +82,10 @@ export default function SuccessionDetailPage(): ReactElement {
     (plan?.candidates ?? [])
       .map((c) => ({
         employeeId: c.employeeId,
-        readiness: edits[c.employeeId]?.readiness !== undefined ? edits[c.employeeId].readiness : c.readiness,
+        readiness:
+          edits[c.employeeId]?.readiness !== undefined
+            ? edits[c.employeeId].readiness
+            : c.readiness,
         note: edits[c.employeeId]?.note ?? c.note,
       }))
       .concat(extra ? [{ employeeId: extra, readiness: null, note: '' }] : []);
@@ -75,7 +94,11 @@ export default function SuccessionDetailPage(): ReactElement {
       {
         method: 'PUT',
         path: `talent/succession/${encodeURIComponent(planId)}/candidates`,
-        json: { candidates: candidatesPayload(extra).filter((c) => c.employeeId !== drop) },
+        json: {
+          candidates: candidatesPayload(extra).filter(
+            (c) => c.employeeId !== drop,
+          ),
+        },
       },
       t('talentReview.succession.saved'),
     );
@@ -84,7 +107,6 @@ export default function SuccessionDetailPage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         {detail.error ? (
           <LoadError error={detail.error} onRetry={detail.reload} />
         ) : !plan ? (
@@ -99,20 +121,27 @@ export default function SuccessionDetailPage(): ReactElement {
               actions={
                 <div className='flex items-center gap-2'>
                   {plan.risk ? (
-                    <Badge variant='destructive'>{t(`talentReview.succession.riskType.${plan.risk}`)}</Badge>
+                    <Badge variant='destructive'>
+                      {t(`talentReview.succession.riskType.${plan.risk}`)}
+                    </Badge>
                   ) : null}
                   <TrStatusBadge status={plan.status} />
                   {plan.can.confirm ? (
                     <Button
                       size='sm'
                       disabled={action.busy}
-                      onClick={() => { void (async () => {
-                        const done = await action.run(
-                          { method: 'POST', path: `talent/succession/${encodeURIComponent(planId)}/confirm` },
-                          t('talentReview.succession.confirmed'),
-                        );
-                        if (done) reload();
-                      })(); }}
+                      onClick={() => {
+                        void (async () => {
+                          const done = await action.run(
+                            {
+                              method: 'POST',
+                              path: `talent/succession/${encodeURIComponent(planId)}/confirm`,
+                            },
+                            t('talentReview.succession.confirmed'),
+                          );
+                          if (done) reload();
+                        })();
+                      }}
                     >
                       {t('talentReview.succession.confirm')}
                     </Button>
@@ -127,14 +156,21 @@ export default function SuccessionDetailPage(): ReactElement {
             ) : null}
             <Card>
               <CardHeader>
-                <CardTitle>{t('talentReview.succession.requirements')}</CardTitle>
+                <CardTitle>
+                  {t('talentReview.succession.requirements')}
+                </CardTitle>
               </CardHeader>
               <CardContent className='flex flex-wrap gap-2'>
                 {plan.requirementsSet ? null : (
-                  <p className='text-sm text-muted-foreground'>{t('talentReview.succession.noRequirements')}</p>
+                  <p className='text-sm text-muted-foreground'>
+                    {t('talentReview.succession.noRequirements')}
+                  </p>
                 )}
                 {plan.requirements.map((r) => (
-                  <Badge key={r.competencyId} variant={r.mandatory ? 'default' : 'outline'}>
+                  <Badge
+                    key={r.competencyId}
+                    variant={r.mandatory ? 'default' : 'outline'}
+                  >
                     {r.title} {r.requiredLevel}
                   </Badge>
                 ))}
@@ -145,33 +181,60 @@ export default function SuccessionDetailPage(): ReactElement {
               requirementsSet={plan.requirementsSet}
               canManage={plan.can.manage}
               readinessOf={(c) =>
-                edits[c.employeeId]?.readiness !== undefined ? (edits[c.employeeId].readiness ?? null) : c.readiness
+                edits[c.employeeId]?.readiness !== undefined
+                  ? (edits[c.employeeId].readiness ?? null)
+                  : c.readiness
               }
               onReadiness={(employeeId, readiness) =>
-                setEdits((x) => ({ ...x, [employeeId]: { ...x[employeeId], readiness } }))
+                setEdits((x) => ({
+                  ...x,
+                  [employeeId]: { ...x[employeeId], readiness },
+                }))
               }
-              onRemove={(employeeId) => void saveCandidates(undefined, employeeId)}
+              onRemove={(employeeId) =>
+                void saveCandidates(undefined, employeeId)
+              }
             />
             {plan.can.manage ? (
               <div className='flex flex-wrap items-center justify-end gap-2'>
                 <NativeSelect
                   aria-label={t('talentReview.succession.add')}
                   value=''
-                  onChange={(e) => void (e.target.value ? saveCandidates(e.target.value) : undefined)}
+                  onChange={(e) =>
+                    void (e.target.value
+                      ? saveCandidates(e.target.value)
+                      : undefined)
+                  }
                 >
-                  <NativeSelectOption value=''>{t('talentReview.succession.add')}</NativeSelectOption>
+                  <NativeSelectOption value=''>
+                    {t('talentReview.succession.add')}
+                  </NativeSelectOption>
                   {(matches.data ?? [])
-                    .filter((m) => !plan.candidates.some((c) => c.employeeId === m.employeeId))
+                    .filter(
+                      (m) =>
+                        !plan.candidates.some(
+                          (c) => c.employeeId === m.employeeId,
+                        ),
+                    )
                     .slice(0, 20)
                     .map((m) => (
-                      <NativeSelectOption key={m.employeeId} value={m.employeeId}>
+                      <NativeSelectOption
+                        key={m.employeeId}
+                        value={m.employeeId}
+                      >
                         {plan.requirementsSet
-                          ? t('talentReview.succession.matchOption', { name: m.name, gap: m.totalGap })
+                          ? t('talentReview.succession.matchOption', {
+                              name: m.name,
+                              gap: m.totalGap,
+                            })
                           : m.name}
                       </NativeSelectOption>
                     ))}
                 </NativeSelect>
-                <Button disabled={action.busy || !Object.keys(edits).length} onClick={() => void saveCandidates()}>
+                <Button
+                  disabled={action.busy || !Object.keys(edits).length}
+                  onClick={() => void saveCandidates()}
+                >
                   {t('talentReview.common.save')}
                 </Button>
               </div>

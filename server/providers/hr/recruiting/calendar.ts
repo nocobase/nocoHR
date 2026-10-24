@@ -53,16 +53,14 @@ export function createCalendar(ctx: RecruitingContext) {
       const others = await database
         .query()
         .selectFrom('interviews')
-        .select([
-          'id',
-          'scheduledAt',
-          'durationMinutes',
-          'interviewerUserIds',
-        ])
+        .select(['id', 'scheduledAt', 'durationMinutes', 'interviewerUserIds'])
         .where('status', '=', 'scheduled')
         .execute();
       for (const other of others) {
-        if (input.ignoreInterviewId && str(other.id) === input.ignoreInterviewId)
+        if (
+          input.ignoreInterviewId &&
+          str(other.id) === input.ignoreInterviewId
+        )
           continue;
         const s = new Date(str(other.scheduledAt)).getTime();
         const e = s + Number(other.durationMinutes ?? 60) * MINUTE;

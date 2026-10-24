@@ -5,6 +5,7 @@
  * request that caused it has answered; every run goes through the automation
  * framework (switch, owner, run record) and is deduplicated there.
  */
+import { assertUnrestrictedNativeAIEntry } from '../../native-ai/access.js';
 import { z } from 'zod';
 
 import { authorizeAction } from '../authorize.js';
@@ -91,8 +92,12 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
     work: Work,
     trigger: 'event' | 'manual' = 'event',
   ) => deps.automation().run(key, trigger, { dedupeKey, triggerRef }, work);
-  const later = (key: string, dedupeKey: string, ref: Record<string, unknown>, work: Work) =>
-    deps.background(key, () => run(key, dedupeKey, ref, work));
+  const later = (
+    key: string,
+    dedupeKey: string,
+    ref: Record<string, unknown>,
+    work: Work,
+  ) => deps.background(key, () => run(key, dedupeKey, ref, work));
 
   const holder: { analyst?: ReturnType<typeof createTalentAnalyst> } = {};
   const analyst = () => {
@@ -102,7 +107,9 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
 
   const reviews = createReviewService(ctx, {
     onPreparing: (reviewId) =>
-      later(A.prePlacement, reviewId, { reviewId }, (r) => analyst().prePlacement(r, reviewId)),
+      later(A.prePlacement, reviewId, { reviewId }, (r) =>
+        analyst().prePlacement(r, reviewId),
+      ),
     onPotentialAssessed: (placementId) =>
       deps.background('talentReview.refreshSuggestion', () =>
         analyst().refreshSuggestedBox(placementId),
@@ -128,12 +135,21 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
         const row = await versions.versionRow(versionId);
         const current = await versions.currentOf(row.positionId);
         const hash = versions.contentHash(row, current?.snapshot ?? []);
-        return run(A.versionChangeNote, `${versionId}:${hash}`, { versionId }, (r) =>
-          analyst().versionChangeNote(r, versionId),
+        return run(
+          A.versionChangeNote,
+          `${versionId}:${hash}`,
+          { versionId },
+          (r) => analyst().versionChangeNote(r, versionId),
         );
       }),
   });
-  holder.analyst = createTalentAnalyst({ ctx, ai: deps.ai, reviews, succession, versions });
+  holder.analyst = createTalentAnalyst({
+    ctx,
+    ai: deps.ai,
+    reviews,
+    succession,
+    versions,
+  });
   const practicals = createPracticalService(ctx, {
     ai: deps.ai,
     // 实操记录签字完成: 发证与复审续发 (the certification service asks practicalGate).
@@ -149,10 +165,17 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
     ai: deps.ai,
     onRequested: async (type, id, hash) => {
       // The instructor waits for the draft; the run is recorded, and done directly when switched off or unowned.
-      const outcome = await run(A.translationDraft, `${type}:${id}:${hash}`, { type, id }, (r) =>
-        translations.draft(r, type, id),
+      const outcome = await run(
+        A.translationDraft,
+        `${type}:${id}:${hash}`,
+        { type, id },
+        (r) => translations.draft(r, type, id),
       );
-      if (outcome.status === 'disabled' || (outcome.status === 'skipped' && !('output' in outcome && outcome.output)))
+      if (
+        outcome.status === 'disabled' ||
+        (outcome.status === 'skipped' &&
+          !('output' in outcome && outcome.output))
+      )
         await translations.draft(null, type, id);
     },
   });
@@ -164,23 +187,35 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
     const today = ctx.today();
     const month = Number(today.slice(5, 7));
     if (r.trigger === 'schedule' && !settings.quarterMonths.includes(month))
-      return { status: 'skipped' as const, output: { reason: 'notQuarterStart' } };
+      return {
+        status: 'skipped' as const,
+        output: { reason: 'notQuarterStart' },
+      };
     const from = new Date(`${today}T00:00:00Z`);
     from.setUTCMonth(from.getUTCMonth() - 3);
-    const rows = (await ctx.database
+    const rows = await ctx.database
       .query()
       .selectFrom('trainingEvaluations')
       .selectAll()
       .where('completedAt', '>=', from)
-      .execute());
+      .execute();
     const summary = await evaluations.aggregate(rows);
     const rated = summary.courses.filter((c) => c.l1Average !== null);
-    r.summarize(`培训效果季报：${summary.courses.length} 门课程，${summary.instructors.length} 位讲师`);
+    r.summarize(
+      `培训效果季报：${summary.courses.length} 门课程，${summary.instructors.length} 位讲师`,
+    );
     if (!rated.length && !summary.courses.length)
-      return { status: 'skipped' as const, output: { reason: 'noEvaluations' } };
+      return {
+        status: 'skipped' as const,
+        output: { reason: 'noEvaluations' },
+      };
     const lowest = [...rated].sort((a, b) => a.l1Average! - b.l1Average!)[0];
-    const lowPass = summary.courses.filter((c) => c.examPassRate !== null && c.examPassRate < 70);
-    const lowChange = summary.courses.filter((c) => c.l3Average !== null && c.l3Average < 3);
+    const lowPass = summary.courses.filter(
+      (c) => c.examPassRate !== null && c.examPassRate < 70,
+    );
+    const lowChange = summary.courses.filter(
+      (c) => c.l3Average !== null && c.l3Average < 3,
+    );
     const answer = await analyst().structured(
       r,
       'talentAnalyst',
@@ -209,19 +244,24 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
       .filter((u): u is string => Boolean(u));
     const quarter = `${today.slice(0, 4)}Q${Math.floor((month - 1) / 3) + 1}`;
     const recipients = [...new Set([r.owner.userId, ...instructorUsers])];
-    const sent = await ctx.platform.reminderOnce(`trainingReport:${quarter}`, () =>
-      ctx.platform.notify({
-        key: `trainingReport:${quarter}`,
-        userIds: recipients,
-        message: 'trainingEffectReport',
-        params: { quarter, summary: content.slice(0, 400) },
-        path: '/talent/training-evaluations?tab=summary',
-      }),
+    const sent = await ctx.platform.reminderOnce(
+      `trainingReport:${quarter}`,
+      () =>
+        ctx.platform.notify({
+          key: `trainingReport:${quarter}`,
+          userIds: recipients,
+          message: 'trainingEffectReport',
+          params: { quarter, summary: content.slice(0, 400) },
+          path: '/talent/training-evaluations?tab=summary',
+        }),
     );
     r.reference({ quarter, courses: summary.courses.length });
     return sent
       ? { output: { quarter, recipients: recipients.length } }
-      : { status: 'skipped' as const, output: { quarter, reason: 'alreadySent' } };
+      : {
+          status: 'skipped' as const,
+          output: { quarter, reason: 'alreadySent' },
+        };
   }
 
   const scheduled: Record<string, Work> = {
@@ -231,15 +271,29 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
     [A.knowledgeDistill]: (r) => knowledge.distill(r),
   };
 
-  async function writeSettings(actor: ActorContext, section: string, input: unknown) {
+  async function writeSettings(
+    actor: ActorContext,
+    section: string,
+    input: unknown,
+  ) {
     const spec = SECTIONS[section];
     if (!spec) throw new HrError('INVALID_INPUT', 400);
     await authorizeAction(actor.authz, spec.resource, spec.action);
     const current = await readTalentReviewSettings(ctx.database);
-    const patch = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-    if (Object.keys(patch).some((k) => !spec.keys.includes(k as keyof TalentReviewSettings)))
+    const patch =
+      input && typeof input === 'object'
+        ? (input as Record<string, unknown>)
+        : {};
+    if (
+      Object.keys(patch).some(
+        (k) => !spec.keys.includes(k as keyof TalentReviewSettings),
+      )
+    )
       throw new HrError('INVALID_INPUT', 400);
-    const parsed = talentReviewSettingsSchema.safeParse({ ...current.value, ...patch });
+    const parsed = talentReviewSettingsSchema.safeParse({
+      ...current.value,
+      ...patch,
+    });
     if (!parsed.success) throw new HrError('INVALID_INPUT', 400);
     const now = new Date();
     const exists = await ctx.database
@@ -252,14 +306,26 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
       await ctx.database
         .query()
         .updateTable('personnelSettings')
-        .set({ value: parsed.data, revision: current.revision + 1, updatedBy: actor.userId, updatedAt: now })
+        .set({
+          value: parsed.data,
+          revision: current.revision + 1,
+          updatedBy: actor.userId,
+          updatedAt: now,
+        })
         .where('id', '=', SETTINGS_ID)
         .execute();
     else
       await ctx.database
         .query()
         .insertInto('personnelSettings')
-        .values({ id: SETTINGS_ID, value: parsed.data, revision: 1, updatedBy: actor.userId, createdAt: now, updatedAt: now })
+        .values({
+          id: SETTINGS_ID,
+          value: parsed.data,
+          revision: 1,
+          updatedBy: actor.userId,
+          createdAt: now,
+          updatedAt: now,
+        })
         .execute();
     return readTalentReviewSettings(ctx.database);
   }
@@ -283,7 +349,9 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
 
     async readSettings(actor: ActorContext) {
       const allowed = await Promise.all(
-        Object.values(SECTIONS).map((s) => ctx.can(actor, s.resource, s.action)),
+        Object.values(SECTIONS).map((s) =>
+          ctx.can(actor, s.resource, s.action),
+        ),
       );
       if (!allowed.some(Boolean)) throw new HrError('FORBIDDEN', 403);
       return readTalentReviewSettings(ctx.database);
@@ -325,7 +393,8 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
               ownerUserId: ref('ownerUserId'),
             });
         case A.translationDraft:
-          return (r) => translations.draft(r, ref('type') as ContentType, ref('id'));
+          return (r) =>
+            translations.draft(r, ref('type') as ContentType, ref('id'));
         default:
           return undefined;
       }
@@ -333,7 +402,10 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
 
     /** 让考官整理: the assessor's click; unchanged notes are answered as they are. */
     async structureRecord(actor: ActorContext, recordId: string) {
-      const { unchanged, notesHash } = await practicals.prepareStructure(actor, recordId);
+      const { unchanged, notesHash } = await practicals.prepareStructure(
+        actor,
+        recordId,
+      );
       if (!unchanged) {
         const outcome = await run(
           A.structureObservation,
@@ -341,14 +413,23 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
           { recordId },
           (r) => practicals.structure(r, recordId),
         );
-        if (outcome.status === 'disabled' || outcome.status === 'failed' || (outcome.status === 'skipped' && !('output' in outcome && outcome.output)))
+        if (
+          outcome.status === 'disabled' ||
+          outcome.status === 'failed' ||
+          (outcome.status === 'skipped' &&
+            !('output' in outcome && outcome.output))
+        )
           await practicals.structure(null, recordId);
       }
-      return { ...(await practicals.getRecord(actor, recordId)), restructured: !unchanged };
+      return {
+        ...(await practicals.getRecord(actor, recordId)),
+        restructured: !unchanged,
+      };
     },
 
     /** 考官起草考核表 from a work instruction (instructor or hr.admin). */
     async draftChecklist(actor: ActorContext, input: unknown) {
+      assertUnrestrictedNativeAIEntry(actor.authz);
       await authorizeAction(actor.authz, 'talent.practical', 'manageTemplates');
       const parsed = z
         .object({
@@ -375,6 +456,7 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
 
     /** 手动触发 (hr.admin): the quarterly and weekly work, as the automation's owner. */
     async runNow(actor: ActorContext, task: string) {
+      assertUnrestrictedNativeAIEntry(actor.authz);
       await deps.automation().assertCanRun(actor, task);
       const work = scheduled[task];
       if (!work) throw new HrError('AUTOMATION_EVENT_ONLY', 400);
@@ -393,8 +475,11 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
     async runHourly() {
       const redraft = await translations.scanOutdated();
       for (const item of redraft)
-        await run(A.translationDraft, `${item.type}:${item.id}:${item.hash}`, { type: item.type, id: item.id }, (r) =>
-          translations.draft(r, item.type, item.id),
+        await run(
+          A.translationDraft,
+          `${item.type}:${item.id}:${item.hash}`,
+          { type: item.type, id: item.id },
+          (r) => translations.draft(r, item.type, item.id),
         );
       return { redrafted: redraft.length };
     },
@@ -408,4 +493,6 @@ export function createTalentReviewServices(deps: TalentReviewDeps) {
   };
 }
 
-export type TalentReviewServices = ReturnType<typeof createTalentReviewServices>;
+export type TalentReviewServices = ReturnType<
+  typeof createTalentReviewServices
+>;

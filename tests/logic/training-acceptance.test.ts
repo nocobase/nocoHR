@@ -16,6 +16,10 @@ import {
   it,
   vi,
 } from 'vitest';
+import { databaseManagerToken } from '@nocobase/db';
+
+import { observeFixtureClose } from '../helpers/close-diagnostics.ts';
+import { observeSchedulerClose } from '../helpers/scheduler-close-diagnostics.ts';
 
 import {
   createStandaloneServer,
@@ -52,6 +56,7 @@ const PASSWORD = 'talent-acceptance-test-password';
 type Json = Record<string, any>;
 
 let server: StandaloneServer;
+let diagnostics: ReturnType<typeof observeSchedulerClose>;
 let directory: string;
 let base: string;
 const cookies = new Map<string, string>();
@@ -144,11 +149,25 @@ beforeAll(async () => {
       storageDir: path.join(directory, 'storage'),
     },
   });
+  diagnostics = observeSchedulerClose(
+    server.application,
+    'training-acceptance',
+  );
   base = `http://localhost${server.application.publicBasePath}`;
 }, 180_000);
 
 afterAll(async () => {
-  await server?.close();
+  try {
+    await observeFixtureClose({
+      suite: 'training-acceptance',
+      stage: 'application',
+      application: server?.application,
+      state: () => diagnostics?.snapshot() ?? {},
+      close: () => server?.close(),
+    });
+  } finally {
+    diagnostics?.restore();
+  }
   delete process.env.HR_DEMO_PASSWORD;
   if (directory) rmSync(directory, { recursive: true, force: true });
 });
@@ -842,17 +861,252 @@ describe('practice', () => {
 });
 
 describe('reports and cancelling', () => {
-  it('adds path, attendance, practice and plan figures within the viewer’s scope', async () => {
+  it('keeps authorized detail identity stable for repeated display rows and filtered scopes', async () => {
+    const db = server.application.container.resolve(databaseManagerToken);
+    const reportDate = new Date();
+    const reportDay = reportDate.toISOString().slice(0, 10);
+    const certificate = await db
+      .query()
+      .selectFrom('employeeCertificates')
+      .selectAll()
+      .where('id', '=', 'certificate-qianjin-cnc')
+      .executeTakeFirstOrThrow();
+    await db
+      .query()
+      .insertInto('employeeCertificates')
+      .values({
+        ...certificate,
+        id: 'test-training-report-duplicate-certificate',
+        certificateNo: `${certificate.certificateNo}-duplicate`,
+      })
+      .execute();
+    await db.repository('employees').updateOne({
+      filter: { id: 'emp-qianjin' },
+      values: { name: '王磊' },
+    });
+
+    const assignmentTemplate = await db
+      .query()
+      .selectFrom('assignments')
+      .selectAll()
+      .where('id', '=', 'assign-wanglei-cnc')
+      .executeTakeFirstOrThrow();
+    for (const [id, employeeId] of [
+      ['test-training-report-path-east', 'emp-wanglei'],
+      ['test-training-report-path-outside', 'emp-zhaoyang'],
+    ]) {
+      await db
+        .query()
+        .insertInto('assignments')
+        .values({
+          ...assignmentTemplate,
+          id,
+          employeeId,
+          courseId: null,
+          examId: null,
+          certificateId: null,
+          learningPathId: PATH,
+          parentAssignmentId: null,
+          pathStepId: null,
+          practiceScenarioId: null,
+          learningPlanId: null,
+          jobEventId: null,
+          dueDate: reportDay,
+          status: 'notStarted',
+          progress: 0,
+          source: 'path',
+          completedAt: null,
+          cancelledAt: null,
+          createdAt: reportDate,
+          updatedAt: reportDate,
+        })
+        .execute();
+    }
+    for (const [id, employeeId] of [
+      ['test-training-report-practice-east', 'emp-wanglei'],
+      ['test-training-report-practice-outside', 'emp-zhaoyang'],
+    ]) {
+      await db
+        .query()
+        .insertInto('practiceSessions')
+        .values({
+          id,
+          scenarioId: 'scenario-first-article-check',
+          employeeId,
+          assignmentId: null,
+          transcript: JSON.stringify([
+            {
+              role: 'coach',
+              text: 'Review the first article.',
+              at: reportDate.toISOString(),
+            },
+            {
+              role: 'employee',
+              text: 'I verified the dimensions.',
+              at: reportDate.toISOString(),
+            },
+          ]),
+          turnCount: 1,
+          status: 'completed',
+          score: 85,
+          rubricResults: null,
+          feedback: 'Synthetic completed practice fixture.',
+          rehearsal: false,
+          conversationSessionId: null,
+          startedAt: reportDate,
+          completedAt: reportDate,
+          lastActivityAt: reportDate,
+          createdAt: reportDate,
+          updatedAt: reportDate,
+        })
+        .execute();
+    }
+
     const report = await call('hr01', 'GET', '/training-report');
     expect(report.status).toBe(200);
     const metrics = report.json.data.metrics;
     expect(metrics.attendanceRate).not.toBeNull();
     expect(metrics.planAdoptionRate).toBe(100);
+
+    const categories = Object.entries(report.json.data.details) as [
+      string,
+      Json[],
+    ][];
+    for (const [category, rows] of categories) {
+      expect(rows.length).toBeGreaterThan(0);
+      const keys = rows.map((row) => row.rowKey);
+      expect(keys.every((rowKey) => rowKey.startsWith(`${category}:`))).toBe(
+        true,
+      );
+      expect(new Set(keys).size).toBe(keys.length);
+      const sorted = [...rows].sort((a, b) =>
+        JSON.stringify(a).localeCompare(JSON.stringify(b)),
+      );
+      expect(sorted.map((row) => row.rowKey).sort()).toEqual([...keys].sort());
+    }
+
+    const pathEastKey = 'paths:["test-training-report-path-east"]';
+    const pathOutsideKey = 'paths:["test-training-report-path-outside"]';
+    const practiceEastKey = 'practice:["test-training-report-practice-east"]';
+    const practiceOutsideKey =
+      'practice:["test-training-report-practice-outside"]';
+    const pathRows = report.json.data.details.paths as Json[];
+    expect(pathRows).toHaveLength(2);
+    expect(pathRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rowKey: pathEastKey,
+          employee: '王磊',
+          status: 'notStarted',
+        }),
+        expect.objectContaining({
+          rowKey: pathOutsideKey,
+          employee: '赵阳',
+          status: 'notStarted',
+        }),
+      ]),
+    );
+    const practiceRows = report.json.data.details.practice as Json[];
+    expect(practiceRows).toHaveLength(2);
+    expect(practiceRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rowKey: practiceEastKey,
+          employee: '王磊',
+          completedAt: expect.any(String),
+        }),
+        expect.objectContaining({
+          rowKey: practiceOutsideKey,
+          employee: '赵阳',
+          completedAt: expect.any(String),
+        }),
+      ]),
+    );
+
+    const duplicateDisplayRows = report.json.data.details.expiring.filter(
+      (row: Json) => row.employee === '王磊',
+    );
+    expect(duplicateDisplayRows).toHaveLength(2);
+    expect(
+      new Set(duplicateDisplayRows.map((row: Json) => row.rowKey)).size,
+    ).toBe(2);
+
+    const filtered = await call(
+      'hr01',
+      'GET',
+      '/training-report?departmentId=sz-mc',
+    );
+    expect(filtered.status).toBe(200);
+    for (const [category, rows] of Object.entries(
+      filtered.json.data.details,
+    ) as [string, Json[]][]) {
+      const allKeys = new Set(
+        (report.json.data.details[category] as Json[]).map((row) => row.rowKey),
+      );
+      expect(rows.every((row) => allKeys.has(row.rowKey))).toBe(true);
+    }
+    expect(
+      (filtered.json.data.details.paths as Json[]).map((row) => row.rowKey),
+    ).toContain(pathEastKey);
+    expect(
+      (filtered.json.data.details.paths as Json[]).map((row) => row.rowKey),
+    ).not.toContain(pathOutsideKey);
+    expect(
+      (filtered.json.data.details.practice as Json[]).map((row) => row.rowKey),
+    ).toContain(practiceEastKey);
+    expect(
+      (filtered.json.data.details.practice as Json[]).map((row) => row.rowKey),
+    ).not.toContain(practiceOutsideKey);
+
     const east = await call('mgr_east', 'GET', '/training-report');
     const names = (east.json.data.details.attendance as Json[]).map(
       (a) => a.employee,
     );
     expect(names).not.toContain('赵阳');
+    for (const [category, rows] of Object.entries(east.json.data.details) as [
+      string,
+      Json[],
+    ][]) {
+      const allKeys = new Set(
+        (report.json.data.details[category] as Json[]).map((row) => row.rowKey),
+      );
+      expect(rows.every((row) => allKeys.has(row.rowKey))).toBe(true);
+    }
+    expect(
+      (east.json.data.details.paths as Json[]).map((row) => row.rowKey),
+    ).toContain(pathEastKey);
+    expect(
+      (east.json.data.details.paths as Json[]).map((row) => row.rowKey),
+    ).not.toContain(pathOutsideKey);
+    expect(
+      (east.json.data.details.practice as Json[]).map((row) => row.rowKey),
+    ).toContain(practiceEastKey);
+    expect(
+      (east.json.data.details.practice as Json[]).map((row) => row.rowKey),
+    ).not.toContain(practiceOutsideKey);
+
+    const outsideEast = await call(
+      'mgr_east',
+      'GET',
+      '/training-report?departmentId=cd-mc',
+    );
+    expect(outsideEast.status).toBe(200);
+    for (const category of [
+      'completion',
+      'overdue',
+      'exams',
+      'coverageMissing',
+      'expiring',
+      'expired',
+      'paths',
+      'attendance',
+      'practice',
+    ]) {
+      expect(outsideEast.json.data.details[category]).toHaveLength(0);
+    }
+    expect(outsideEast.json.data.details.gaps.map((row) => row.rowKey)).toEqual(
+      east.json.data.details.gaps.map((row) => row.rowKey),
+    );
   });
 
   it('cancels the unfinished steps with the path', async () => {

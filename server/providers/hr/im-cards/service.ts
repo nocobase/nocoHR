@@ -8,6 +8,7 @@
 import type { AppAuthorization } from '@nocobase/app-plugin-authorization/server';
 import type { DatabaseManager } from '@nocobase/db';
 
+import { NATIVE_APPROVAL_CARD } from './native-approval-card.js';
 import { scopeForUser } from '../authorize.js';
 import { HrError, newId, str } from '../shared.js';
 import type { ImTransport } from './transport.js';
@@ -458,7 +459,13 @@ export function createImCards(deps: {
           card: null,
         };
       const card = toCard(row);
-      if (card.recipientUserId !== operator)
+      if (
+        card.recipientUserId !== operator ||
+        (card.kind === NATIVE_APPROVAL_CARD &&
+          (card.externalUserId !== input.operatorId ||
+            (await bindings.externalOf(input.provider, operator)) !==
+              input.operatorId))
+      )
         return {
           ok: false,
           code: 'notRecipient',

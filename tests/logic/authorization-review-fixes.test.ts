@@ -14,6 +14,8 @@
 // - Middleware of routers mounted at /talent stays on their own paths (org-sync's 64 KB body limit).
 // - Practical photos are capped and typed by their bytes; downloads carry nosniff and an encoded name.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { observeFixtureClose } from '../helpers/close-diagnostics.ts';
+import { observeSchedulerClose } from '../helpers/scheduler-close-diagnostics.ts';
 
 import {
   PASSWORD,
@@ -23,16 +25,31 @@ import {
 } from './talent-review-harness.ts';
 
 let h: Harness;
+let diagnostics: ReturnType<typeof observeSchedulerClose>;
 const ALL = 'allRecords';
 const MANAGED = 'talent.managedDepartments';
 const cookies = new Map<string, string>();
 
 beforeAll(async () => {
   h = await startHarness('authorization-review-fixes');
+  diagnostics = observeSchedulerClose(
+    h.server.application,
+    'authorization-review-fixes',
+  );
 }, 240_000);
 
 afterAll(async () => {
-  await h?.close();
+  try {
+    await observeFixtureClose({
+      suite: 'authorization-review-fixes',
+      stage: 'application',
+      application: h?.server.application,
+      state: () => diagnostics?.snapshot() ?? {},
+      close: () => h?.close(),
+    });
+  } finally {
+    diagnostics?.restore();
+  }
 });
 
 async function cookieOf(username: string): Promise<string> {

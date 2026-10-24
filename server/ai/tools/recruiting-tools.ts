@@ -1,4 +1,4 @@
-import { defineTools, type AIEmployeeOptions } from '@nocobase/ai-employee';
+import { defineTools, type AIEmployeeOptions } from '../contracts.js';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { z } from 'zod';
 
@@ -174,7 +174,7 @@ export const parseResume = tool({
       throw new HrError('APPLICATION_NOT_FOUND', 404);
     const result = await s.assistant.parseResume(
       null,
-      actor.userId,
+      actor,
       application.candidateId,
     );
     return { status: result.status };
@@ -225,7 +225,10 @@ export const saveScreeningSuggestion = tool({
       a.posting.requirements,
     );
     await s.assistant.writeSuggestion(args.applicationId, suggestion);
-    return { applicationId: args.applicationId, matchLevel: suggestion.matchLevel };
+    return {
+      applicationId: args.applicationId,
+      matchLevel: suggestion.matchLevel,
+    };
   },
 });
 
@@ -289,7 +292,9 @@ export const saveInterviewSummary = tool({
   }),
   invoke: async (s, actor, args) => {
     const interview = await s.interviews.get(args.interviewId);
-    const application = await s.candidates.applicationRow(interview.applicationId);
+    const application = await s.candidates.applicationRow(
+      interview.applicationId,
+    );
     if (!(await s.candidates.access(actor, application)).recruiter)
       throw new HrError('INTERVIEW_NOT_FOUND', 404);
     if (/(建议录用|建议淘汰|录用建议)/u.test(args.summary.text))
@@ -304,7 +309,7 @@ export const draftCandidateMessage = tool({
   title: 'Draft a candidate message',
   about: 'A draft the recruiter confirms before it is sent.',
   description:
-    'Save a draft message to a candidate of the user\'s requisitions (invitation, rejection, offer, aiInterviewInvitation). It is only a draft: the recruiter reviews and sends it from the candidate page. A rejection never compares the candidate with others.',
+    "Save a draft message to a candidate of the user's requisitions (invitation, rejection, offer, aiInterviewInvitation). It is only a draft: the recruiter reviews and sends it from the candidate page. A rejection never compares the candidate with others.",
   schema: z.object({
     applicationId: id,
     type: z.enum(['invitation', 'rejection', 'offer', 'aiInterviewInvitation']),
@@ -499,7 +504,9 @@ const HR_ASSISTANT_PROMPT = `
 3. 回访语气像 HR 同事的关心，问题简短，一次只问一件事；员工提到问题时，先按制度说明能怎么办（用 searchKnowledge，附出处），再用 saveCheckInIssues 保存并告诉他已经转给谁跟进。
 4. 回访内容不告诉部门负责人以外的人；员工表示不想回答时结束回访（declined=true）。不代员工提交任何申请。`;
 
-export function withRecruitingTools(employee: AIEmployeeOptions): AIEmployeeOptions {
+export function withRecruitingTools(
+  employee: AIEmployeeOptions,
+): AIEmployeeOptions {
   const names = new Set((employee.tools ?? []).map((t) => t.name));
   const extra = [
     { name: 'getWorkforcePlan', autoCall: true },

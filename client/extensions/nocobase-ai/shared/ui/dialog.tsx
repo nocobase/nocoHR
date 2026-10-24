@@ -46,7 +46,7 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
 }) {
-  const { t } = useTranslation('@nocobase/app-plugin-ai-employee');
+  const { t } = useTranslation();
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -71,9 +71,7 @@ function DialogContent({
             }
           >
             <XIcon />
-            <span className='sr-only'>
-              {t('Close', { defaultValue: 'Close' })}
-            </span>
+            <span className='sr-only'>{t('actions.close')}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -99,7 +97,7 @@ function DialogFooter({
 }: React.ComponentProps<'div'> & {
   showCloseButton?: boolean;
 }) {
-  const { t } = useTranslation('@nocobase/app-plugin-ai-employee');
+  const { t } = useTranslation();
   return (
     <div
       data-slot='dialog-footer'
@@ -112,7 +110,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant='outline' />}>
-          {t('Close', { defaultValue: 'Close' })}
+          {t('actions.close')}
         </DialogPrimitive.Close>
       )}
     </div>

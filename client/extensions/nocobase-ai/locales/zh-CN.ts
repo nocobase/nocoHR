@@ -22,6 +22,7 @@ const zhCN = {
   'actions.disableWebSearch': '停用联网搜索',
   'actions.webSearchUnsupported': '当前模型不支持联网搜索',
 
+  'chat.continueReply': '继续回复',
   'chat.aiEmployee': 'AI 员工',
   'chat.newConversation': '新对话',
   'chat.conversationList': '对话列表',

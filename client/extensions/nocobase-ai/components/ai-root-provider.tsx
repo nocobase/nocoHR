@@ -2,7 +2,7 @@ import { useApiClient } from '@nocobase/app-client';
 import { useMemo } from 'react';
 
 import { AIProvider, type AIProviderProps } from '../providers/ai-provider.js';
-import { NocoBaseAIService } from '../services/index.js';
+import { RuntimeAIService } from '../services/runtime-ai-service.js';
 import { AIPageElementProvider } from './page-elements/page-element-provider.js';
 import {
   AIToolRendererProvider,
@@ -24,7 +24,7 @@ export function NocoBaseAIRootProvider({
 }: NocoBaseAIRootProviderProps) {
   const api = useApiClient();
   const service = useMemo(
-    () => providedService ?? new NocoBaseAIService(api),
+    () => providedService ?? new RuntimeAIService(api),
     [api, providedService],
   );
   return (

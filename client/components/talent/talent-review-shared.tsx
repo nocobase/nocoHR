@@ -7,7 +7,10 @@ import type { ReactElement } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 
-const TONE: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
+const TONE: Record<
+  string,
+  'default' | 'secondary' | 'outline' | 'destructive'
+> = {
   draft: 'outline',
   preparing: 'secondary',
   inSession: 'default',
@@ -39,4 +42,3 @@ export function TrStatusBadge({ status }: { status: string }): ReactElement {
     </Badge>
   );
 }
-

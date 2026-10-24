@@ -1,3 +1,5 @@
+import { realtimeClientToken } from '@nocobase/app-client';
+import { createRealtimeFixture } from '../fixtures/realtime-client.js';
 import {
   apiClientToken,
   ClientApplicationContext,
@@ -20,6 +22,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import type { ComponentType, ReactElement } from 'react';
 import { Outlet, MemoryRouter } from 'react-router';
@@ -51,19 +54,28 @@ describe('application shell', () => {
     expect(
       await screen.findByRole('navigation', { name: 'Application navigation' }),
     ).toBeVisible();
-    expect(await screen.findByRole('link', { name: 'Home' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    expect(
+      await within(
+        await screen.findByRole('navigation', {
+          name: 'Application navigation',
+        }),
+      ).findByRole('link', { name: 'Home' }),
+    ).toHaveAttribute('aria-current', 'page');
     expect(
       screen
         .getByRole('complementary', { name: 'Application navigation' })
         .querySelector('[data-sidebar="sidebar"]'),
     ).toHaveClass('bg-sidebar');
-    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
-      'data-active',
-    );
-    expect(screen.getByRole('link', { name: 'Home' })).toHaveClass(
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Application navigation' }),
+      ).getByRole('link', { name: 'Home' }),
+    ).toHaveAttribute('data-active');
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Application navigation' }),
+      ).getByRole('link', { name: 'Home' }),
+    ).toHaveClass(
       'data-active:bg-sidebar-primary',
       'data-active:text-sidebar-primary-foreground',
       'ring-sidebar-ring',
@@ -155,12 +167,15 @@ describe('application shell', () => {
     expect(await screen.findByText('Order detail')).toBeVisible();
     expect(screen.getByText('Orders layout')).toBeVisible();
     expect(
-      screen.getByRole('link', { name: 'Orders' }).querySelector('svg'),
+      within(screen.getByRole('navigation', { name: 'Application navigation' }))
+        .getByRole('link', { name: 'Orders' })
+        .querySelector('svg'),
     ).toBeNull();
-    expect(screen.getByRole('link', { name: 'Orders' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Application navigation' }),
+      ).getByRole('link', { name: 'Orders' }),
+    ).toHaveAttribute('aria-current', 'page');
   });
 
   it('keeps a parent page link clickable independently of its menu disclosure', async () => {
@@ -181,16 +196,23 @@ describe('application shell', () => {
       children: [child],
     };
     renderApplication('/orders', true, [parent]);
-    expect(await screen.findByRole('link', { name: 'Orders' })).toHaveAttribute(
-      'href',
-      '/orders',
-    );
+    expect(
+      await within(
+        await screen.findByRole('navigation', {
+          name: 'Application navigation',
+        }),
+      ).findByRole('link', { name: 'Orders' }),
+    ).toHaveAttribute('href', '/orders');
     const toggle = screen.getByRole('button', { name: 'Orders' });
     fireEvent.click(toggle);
     expect(
       screen.queryByRole('link', { name: 'Reports' }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Orders' })).toBeVisible();
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Application navigation' }),
+      ).getByRole('link', { name: 'Orders' }),
+    ).toBeVisible();
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole('link', { name: 'Reports' }));
     expect(await screen.findByText('Reports page')).toBeVisible();
@@ -290,6 +312,7 @@ function renderApplication(
   const clientRoutes = [
     createRoute('home', '/', 'required', HomePage, 'application'),
     ...routes,
+    ...(options.settingsRouteTree ?? []),
   ];
   const authClient = createTestAuthClient(authenticated);
   const authorizationClient = new AuthorizationClient({
@@ -304,15 +327,17 @@ function renderApplication(
     }),
   };
   const registered = new Map<unknown, unknown>([
+    [realtimeClientToken, createRealtimeFixture()],
     [apiClientToken, apiClient],
     [authenticationClientToken, authClient],
     [authorizationClientToken, authorizationClient],
   ]);
   const app = {
     config: createAppClientConfig({ rawConfig: {} }),
-    runtime: { settingsRouteTree: options.settingsRouteTree ?? [] },
+    runtime: { routes: clientRoutes },
     services: {
       has: (token: unknown) => registered.has(token),
+      resolveIfCreated: (token: unknown) => registered.get(token),
       resolve: (token: unknown) => {
         if (registered.has(token)) return registered.get(token);
         throw new Error(`Unexpected service token: ${String(token)}`);
@@ -324,11 +349,7 @@ function renderApplication(
       <AuthenticationProvider>
         <MemoryRouter initialEntries={[initialEntry]}>
           <AppThemeProvider>
-            <AppRouter
-              devRouteTree={[]}
-              clientRoutes={clientRoutes}
-              settingsRouteTree={options.settingsRouteTree ?? []}
-            />
+            <AppRouter clientRoutes={clientRoutes} />
           </AppThemeProvider>
         </MemoryRouter>
       </AuthenticationProvider>
@@ -341,7 +362,7 @@ function createTestAuthClient(authenticated: boolean) {
     getSession: vi.fn().mockResolvedValue({
       data: authenticated
         ? {
-            session: null,
+            session: { id: 'test-session', userId: '1' },
             user: {
               email: 'alice@example.com',
               id: '1',

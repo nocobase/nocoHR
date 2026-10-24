@@ -16,6 +16,7 @@
  *   ranking; protected characteristics a candidate mentions are left out.
  *   The stage never changes here.
  */
+import { scopeForUser } from '../authorize.js';
 import { z } from 'zod';
 
 import { AIUnavailableError } from '../ai-runner.js';
@@ -35,7 +36,12 @@ const MAX_MINUTES = 30;
 
 export interface AiPlan {
   status: 'draft' | 'confirmed';
-  questions: { requirementKey: string; question: string; lookFor: string; maxFollowUps: number }[];
+  questions: {
+    requirementKey: string;
+    question: string;
+    lookFor: string;
+    maxFollowUps: number;
+  }[];
   confirmedBy?: string | null;
   confirmedAt?: string | null;
 }
@@ -71,7 +77,11 @@ export interface ReportItem {
 export function scrub(text: string): string {
   return text
     .split(/(?<=[。！？!?；;])/u)
-    .filter((s) => !PROTECTED_LINE.test(s) && !/(结婚|怀孕|孩子|生小孩|老家|籍贯|对象)/u.test(s))
+    .filter(
+      (s) =>
+        !PROTECTED_LINE.test(s) &&
+        !/(结婚|怀孕|孩子|生小孩|老家|籍贯|对象)/u.test(s),
+    )
     .join('')
     .trim();
 }
@@ -147,12 +157,15 @@ export function createAiInterview(
     return posting;
   }
 
-  function plan(posting: { aiInterviewPlan: Record<string, unknown> | null }): AiPlan | null {
+  function plan(posting: {
+    aiInterviewPlan: Record<string, unknown> | null;
+  }): AiPlan | null {
     return (posting.aiInterviewPlan as AiPlan | null) ?? null;
   }
 
   async function sessionOf(token: string) {
-    if (!/^[\w-]{20,64}$/u.test(token)) throw new HrError('AI_INTERVIEW_LINK_INVALID', 404);
+    if (!/^[\w-]{20,64}$/u.test(token))
+      throw new HrError('AI_INTERVIEW_LINK_INVALID', 404);
     const row = await database
       .query()
       .selectFrom('applications')
@@ -178,28 +191,48 @@ export function createAiInterview(
       application,
       posting,
       plan: p,
-      interview: interview ? await deps.interviews.get(str(interview.id)) : null,
+      interview: interview
+        ? await deps.interviews.get(str(interview.id))
+        : null,
     };
   }
 
-  type Turn = { role: 'assistant' | 'candidate'; text: string; at: string; questionIndex: number };
+  type Turn = {
+    role: 'assistant' | 'candidate';
+    text: string;
+    at: string;
+    questionIndex: number;
+  };
 
   function nextQuestion(p: AiPlan, transcript: Turn[]) {
     const asked = transcript.filter((t) => t.role === 'assistant').length;
-    return asked < p.questions.length ? { index: asked, text: p.questions[asked].question } : null;
+    return asked < p.questions.length
+      ? { index: asked, text: p.questions[asked].question }
+      : null;
   }
 
-  async function report(p: AiPlan, transcript: Turn[], userId: string): Promise<ReportItem[]> {
+  async function report(
+    p: AiPlan,
+    transcript: Turn[],
+    userId: string,
+  ): Promise<ReportItem[]> {
     const items = p.questions.map((q, index) => {
       const answers = transcript
         .filter((t) => t.role === 'candidate' && t.questionIndex === index)
         .map((t) => scrub(t.text))
         .filter(Boolean);
       const quote = answers.join(' ').slice(0, 120);
-      const words = q.lookFor.split(/[，、,；;\s]+/u).filter((w) => w.length >= 2);
+      const words = q.lookFor
+        .split(/[，、,；;\s]+/u)
+        .filter((w) => w.length >= 2);
       const hits = words.filter((w) => answers.join(' ').includes(w)).length;
       const length = answers.join('').length;
-      const score = !length ? 1 : Math.min(5, 2 + (length > 30 ? 1 : 0) + (length > 80 ? 1 : 0) + (hits ? 1 : 0));
+      const score = !length
+        ? 1
+        : Math.min(
+            5,
+            2 + (length > 30 ? 1 : 0) + (length > 80 ? 1 : 0) + (hits ? 1 : 0),
+          );
       return {
         requirementKey: q.requirementKey,
         question: q.question,
@@ -213,10 +246,17 @@ export function createAiInterview(
       const { data } = await ctx.ai.structured({
         employee: 'recruitingAssistant',
         userId,
+        authorization: await scopeForUser(platform.authz, userId),
         title: 'AI 初面报告',
         prompt: [
           '把下面的初面问答整理成报告：每道题写要点、引用候选人原话（quotes 必须是候选人说过的原话）、1–5 的建议分和需人工核实的事项。不写总体结论、不排名、不建议淘汰；候选人提到的婚育、家庭、籍贯等与岗位无关的信息不写入报告。',
-          JSON.stringify({ questions: p.questions, transcript: transcript.map((t) => ({ ...t, text: t.role === 'candidate' ? scrub(t.text) : t.text })) }),
+          JSON.stringify({
+            questions: p.questions,
+            transcript: transcript.map((t) => ({
+              ...t,
+              text: t.role === 'candidate' ? scrub(t.text) : t.text,
+            })),
+          }),
         ].join('\n'),
         schema: z.object({
           items: z.array(
@@ -245,7 +285,10 @@ export function createAiInterview(
       const posting = await manage(actor, postingId);
       const base = posting.requirements.slice(0, 8);
       const questions = [...base];
-      while (questions.length < 6 && posting.requirements.length) questions.push(posting.requirements[questions.length % posting.requirements.length]);
+      while (questions.length < 6 && posting.requirements.length)
+        questions.push(
+          posting.requirements[questions.length % posting.requirements.length],
+        );
       const drafted: AiPlan = {
         status: 'draft',
         questions: questions.slice(0, 8).map((r, i) => ({
@@ -263,7 +306,11 @@ export function createAiInterview(
       await database
         .query()
         .updateTable('jobPostings')
-        .set({ aiInterviewPlan: drafted, aiInterviewEnabled: false, updatedAt: new Date() })
+        .set({
+          aiInterviewPlan: drafted,
+          aiInterviewEnabled: false,
+          updatedAt: new Date(),
+        })
         .where('id', '=', postingId)
         .execute();
       return deps.postings.detail(actor, postingId);
@@ -279,7 +326,14 @@ export function createAiInterview(
       await database
         .query()
         .updateTable('jobPostings')
-        .set({ aiInterviewPlan: { status: 'draft', questions: parsed.data.questions }, aiInterviewEnabled: false, updatedAt: new Date() })
+        .set({
+          aiInterviewPlan: {
+            status: 'draft',
+            questions: parsed.data.questions,
+          },
+          aiInterviewEnabled: false,
+          updatedAt: new Date(),
+        })
         .where('id', '=', postingId)
         .execute();
       return deps.postings.detail(actor, postingId);
@@ -288,17 +342,29 @@ export function createAiInterview(
     /** 须招聘负责人确认初面题后才能开启. */
     async setEnabled(actor: ActorContext, postingId: string, input: unknown) {
       const posting = await manage(actor, postingId);
-      const body = (input ?? {}) as { enabled?: unknown; confirmPlan?: unknown };
+      const body = (input ?? {}) as {
+        enabled?: unknown;
+        confirmPlan?: unknown;
+      };
       const current = plan(posting);
       let next = current;
       if (body.confirmPlan === true && current)
-        next = { ...current, status: 'confirmed', confirmedBy: actor.userId, confirmedAt: new Date().toISOString() };
+        next = {
+          ...current,
+          status: 'confirmed',
+          confirmedBy: actor.userId,
+          confirmedAt: new Date().toISOString(),
+        };
       if (body.enabled === true && next?.status !== 'confirmed')
         throw new HrError('AI_INTERVIEW_PLAN_NOT_CONFIRMED', 409);
       await database
         .query()
         .updateTable('jobPostings')
-        .set({ aiInterviewPlan: next, aiInterviewEnabled: body.enabled === true, updatedAt: new Date() })
+        .set({
+          aiInterviewPlan: next,
+          aiInterviewEnabled: body.enabled === true,
+          updatedAt: new Date(),
+        })
         .where('id', '=', postingId)
         .execute();
       return deps.postings.detail(actor, postingId);
@@ -309,14 +375,21 @@ export function createAiInterview(
       const posting = await manage(actor, postingId);
       if (!posting.aiInterviewEnabled || plan(posting)?.status !== 'confirmed')
         throw new HrError('AI_INTERVIEW_PLAN_NOT_CONFIRMED', 409);
-      const ids = z.object({ applicationIds: z.array(z.string().min(1).max(64)).min(1).max(200) }).strict().safeParse(input);
+      const ids = z
+        .object({
+          applicationIds: z.array(z.string().min(1).max(64)).min(1).max(200),
+        })
+        .strict()
+        .safeParse(input);
       if (!ids.success) throw new HrError('INVALID_INPUT', 400);
       const template = await deps.templates.get('aiInterviewInvitation');
       const results = [];
       for (const applicationId of ids.data.applicationIds) {
         const application = await deps.candidates.applicationRow(applicationId);
         if (application.postingId !== postingId) continue;
-        const candidate = await deps.candidates.candidateRow(application.candidateId);
+        const candidate = await deps.candidates.candidateRow(
+          application.candidateId,
+        );
         if (!candidate.email) {
           results.push({ applicationId, delivery: 'noEmail' });
           continue;
@@ -325,10 +398,19 @@ export function createAiInterview(
         await database
           .query()
           .updateTable('applications')
-          .set({ aiInterviewTokenHash: hash, aiInterviewTokenIssuedAt: new Date(), updatedAt: new Date() })
+          .set({
+            aiInterviewTokenHash: hash,
+            aiInterviewTokenIssuedAt: new Date(),
+            updatedAt: new Date(),
+          })
           .where('id', '=', applicationId)
           .execute();
-        const values = { name: candidate.name, position: posting.title, link: ctx.publicUrl(`/jobs/ai-interview/${token}`), minutes: '20' };
+        const values = {
+          name: candidate.name,
+          position: posting.title,
+          link: ctx.publicUrl(`/jobs/ai-interview/${token}`),
+          minutes: '20',
+        };
         const delivery = await ctx.sendEmail({
           key: `aiInterview:${applicationId}:${hash.slice(0, 10)}`,
           applicationId,
@@ -338,7 +420,12 @@ export function createAiInterview(
         });
         results.push({ applicationId, delivery });
       }
-      ctx.audit({ event: 'recruiting.aiInterviewInvite', postingId, by: actor.userId, count: results.length });
+      ctx.audit({
+        event: 'recruiting.aiInterviewInvite',
+        postingId,
+        by: actor.userId,
+        count: results.length,
+      });
       return { results };
     },
 
@@ -374,7 +461,14 @@ export function createAiInterview(
         .updateTable('interviews')
         .set({
           consentAt: new Date(),
-          transcript: [{ role: 'assistant', text: first.question, at: new Date().toISOString(), questionIndex: 0 }],
+          transcript: [
+            {
+              role: 'assistant',
+              text: first.question,
+              at: new Date().toISOString(),
+              questionIndex: 0,
+            },
+          ],
           updatedAt: new Date(),
         })
         .where('id', '=', id)
@@ -385,24 +479,51 @@ export function createAiInterview(
     /** conductAiInterviewTurn: one answer; the next question, or the end. */
     async turn(token: string, text: string) {
       const s = await sessionOf(token);
-      if (!s.interview?.consentAt) throw new HrError('AI_INTERVIEW_CONSENT_REQUIRED', 409);
+      if (!s.interview?.consentAt)
+        throw new HrError('AI_INTERVIEW_CONSENT_REQUIRED', 409);
       if (s.interview.aiReport) throw new HrError('AI_INTERVIEW_FINISHED', 409);
-      if (Date.now() - new Date(s.interview.consentAt).getTime() > MAX_MINUTES * 60_000)
+      if (
+        Date.now() - new Date(s.interview.consentAt).getTime() >
+        MAX_MINUTES * 60_000
+      )
         throw new HrError('AI_INTERVIEW_TIME_UP', 409);
       const clean = text.trim().slice(0, 2000);
       if (!clean) throw new HrError('INVALID_INPUT', 400);
       const transcript = [...((s.interview.transcript ?? []) as Turn[])];
-      const current = transcript.filter((t) => t.role === 'assistant').length - 1;
-      transcript.push({ role: 'candidate', text: clean, at: new Date().toISOString(), questionIndex: current });
+      const current =
+        transcript.filter((t) => t.role === 'assistant').length - 1;
+      transcript.push({
+        role: 'candidate',
+        text: clean,
+        at: new Date().toISOString(),
+        questionIndex: current,
+      });
       const next = nextQuestion(s.plan, transcript);
-      if (next) transcript.push({ role: 'assistant', text: next.text, at: new Date().toISOString(), questionIndex: next.index });
-      const items = next ? null : await report(s.plan, transcript, (await ctx.hrAdministrators())[0] ?? 'system');
+      if (next)
+        transcript.push({
+          role: 'assistant',
+          text: next.text,
+          at: new Date().toISOString(),
+          questionIndex: next.index,
+        });
+      const items = next
+        ? null
+        : await report(
+            s.plan,
+            transcript,
+            (await ctx.hrAdministrators())[0] ?? 'system',
+          );
       await database
         .query()
         .updateTable('interviews')
         .set({
           transcript,
-          ...(items ? { aiReport: { items, at: new Date().toISOString() }, status: 'completed' } : {}),
+          ...(items
+            ? {
+                aiReport: { items, at: new Date().toISOString() },
+                status: 'completed',
+              }
+            : {}),
           updatedAt: new Date(),
         })
         .where('id', '=', s.interview.id)
@@ -422,10 +543,16 @@ export function createAiInterview(
         declined: s.application.aiInterviewDeclined,
         consentAt: s.interview?.consentAt ?? null,
         finished: Boolean(s.interview?.aiReport),
-        transcript: transcript.map((t) => ({ role: t.role, text: t.text, at: t.at })),
+        transcript: transcript.map((t) => ({
+          role: t.role,
+          text: t.text,
+          at: t.at,
+        })),
         // The question waiting for an answer: the last turn, when it is the assistant's.
         next:
-          s.interview && !s.interview.aiReport && transcript.at(-1)?.role === 'assistant'
+          s.interview &&
+          !s.interview.aiReport &&
+          transcript.at(-1)?.role === 'assistant'
             ? transcript.at(-1)!.text
             : null,
       };

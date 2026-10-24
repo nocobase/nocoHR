@@ -28,7 +28,9 @@ const TABLES = [
 ];
 
 it('applies V4-13, converges and reverses', async () => {
-  const directory = mkdtempSync(path.join(tmpdir(), 'hr-talent-review-schema-'));
+  const directory = mkdtempSync(
+    path.join(tmpdir(), 'hr-talent-review-schema-'),
+  );
   const db = createDatabaseManager({
     default: 'main',
     connections: {
@@ -41,7 +43,10 @@ it('applies V4-13, converges and reverses', async () => {
   });
   try {
     const migrator = db.createMigrator({
-      directory: path.resolve(import.meta.dirname, '../../database/main/migrations'),
+      directory: path.resolve(
+        import.meta.dirname,
+        '../../database/main/migrations',
+      ),
       packageName: 'hr',
     });
     await migrator.upTo('202610100001_create_performance');

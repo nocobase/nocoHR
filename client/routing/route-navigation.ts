@@ -48,13 +48,13 @@ export function selectedNavigationId(
           route.navigation &&
           visible.has(routeKey(route)),
       ) ??
-    (matches
-      ? undefined
-      : pages
-          .filter((route) =>
-            matchPath({ path: route.path, end: false }, pathname),
-          )
-          .sort((a, b) => b.path.length - a.path.length)[0]);
+    pages
+      .filter(
+        (route) =>
+          (!matches || route.path !== '/') &&
+          matchPath({ path: route.path, end: false }, pathname),
+      )
+      .sort((a, b) => b.path.length - a.path.length)[0];
   return selected ? routeKey(selected) : undefined;
 }
 

@@ -1,0 +1,53 @@
+# Leave fixture and file-security shutdown follow-up
+
+The leave scenario now succeeds with an explicit synthetic working shift; the same date as a rest day still refuses to create a draft. File-security shutdown remains open. A controlled real Scheduler/Mail replay identifies an outstanding mail-poll handler during dependency cleanup; this delivery changes tests and records only. The PR remains draft and cannot merge or deploy.
+
+## Verified behavior
+
+- The original Friday calculation, tool arguments, draft/status/owner assertion and all existing permission/audit/rate-limit assertions remain. One employee's published shift cell is saved, set to rest for the negative control, set to an early working shift for the original call, and restored in `finally`. A read-back verifies restoration. The harness owns and removes its synthetic database; no historical seed or production leave rule changes.
+- A pre-fix targeted run reproduces the original assertion (**5 passed / 1 failed**, exit 1), and separately times out in application close at the existing 30-second budget. Both failures are retained. After the fixture change, the two real API suites and original Scheduler observer self-check pass **17 cases**. Application close takes **24 ms** for agent clients and **35 ms** for file security, with no observed pending calls.
+- The two suites now retain correlated provider, Scheduler and public Mail-call diagnostics. The new observer returns each original promise, receiver, result and failure; it never delays or cancels work. It records only opaque run/account IDs, status, phase and counts, excluding message bodies, addresses and credential fields. Three new observer self-checks plus the three existing Scheduler self-checks pass.
+
+## Same-window controlled replay
+
+The isolated copy uses the real file-security suite's **eight unchanged business cases**, real SQLite, native authentication, official Scheduler/Jobs and application-owned local-files Mail. A test-only Provider registers a one-shot, second-resolution schedule through public `defineSchedule`, targeting the existing `app.hr-mail-poll`. No private executor state/handler is used to trigger it. A gate on the first public `startSync` controls entry, and then delegates to the original method. This gate is a causal test intervention, separate from the passive observers committed to the application.
+
+| Interleaving                                                                | Result                                             | Same-window evidence                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Original order; release the first synchronization 300 ms after close begins | 8 cases pass; afterAll fails at 30 seconds, exit 1 | One real firing/handler/`target.start` remains pending; executor `shutdown` waits in `backend.close` with one running handler. Application `poll` remains pending, while accepted sync runs stay pending after Mail has shut down. |
+| Original order; release and finish the same poll before close               | 8 cases pass; normal close, exit 0                 | All three newly requested syncs reach completed; poll, target, backend persistence, event delivery and close settle.                                                                                                               |
+
+The registry closes providers sequentially in reverse registration order. In the original replay, entry into Scheduler backend close precedes gate release; Mail precedes Scheduler in that reverse shutdown order and has already finished shutdown. The 5-second snapshots continue to show Scheduler shutting down and no live Mail provider. Pending run IDs come from the same public service calls, not a later database inspection. `ScheduleStart` recording/delivery has completed; there is no pending `state.write` or terminal-event delivery in the failed snapshot. The outstanding chain is **Scheduler backend → handler → HR mail target → business poll → synchronization-status wait**.
+
+`mail/service.ts` waits up to 100 × 100 ms per mailbox and processes enabled mailboxes serially (three in this fixture). After Mail closes, new synchronization can be accepted without progressing. The failed replay reaches the original hook limit before the poll finishes. This reproduces an application dependency-order problem under a specified interleaving; it does not establish the exact call involved in the earlier uninstrumented full-run failure, or a common cause for every historical timeout.
+
+The initial probe used a nonexistent Provider export and failed before any test/application started. Its log is retained as probe calibration, not a product failure. The corrected probe and all complete failing windows are included with the delivery evidence.
+
+## Minimum next lifecycle proposal — superseded prerequisite result
+
+The subsequent [nonempty business prerequisite](mail-business-dependency-unit.md) rejects the two-plugin swap for installation: Mail stays live but Agents closes before a real recruiting reply can generate its draft. The empty-inbox pass below remains historical evidence for the synchronization edge only. No production order change is installed.
+
+### Earlier proposal — not installed
+
+For this specific Mail dependency edge, evaluate registering Mail before Scheduler in `server/plugins.ts`, so ordinary reverse cleanup waits for the Scheduler executor while Mail is still available. A temporary copy changing only that plugin registration order passes the same late-entry replay: **8 cases**, natural close in **2.85 seconds**, exit 0; all three observed new syncs complete before cleanup. The gate, one-shot definition and all eight cases are identical. This is an application composition change requiring a separate scoped implementation and independent review; shared production source is unchanged here.
+
+Before adopting that narrow change, verify actual plugin dependency/startup ordering, all mail target dependencies, late/already-running sync, original errors and terminal states, idle and repeated close, source/build startup, and the originally failing suites. Do not replace it with the rejected Jobs-only early adapter. Merely reordering these plugins does **not** join Scheduler reconciliation, inspections, completion reports or all derived work; the existing [public-contract gap](shutdown-drain-contract.md) remains a separate limitation. No complete background-quiescence or safe active-work backup guarantee is proposed from this pair.
+
+## Costs and remaining checks
+
+Passive diagnostics add no request, SQL statement, model call or business write; they inspect in-memory metadata and write diagnostic logs. Resolving public Mail facades adds no synchronization call. The leave negative control adds one MCP request, three direct fixture UPDATEs and three direct fixture SELECTs (save/restore checks and unchanged-draft count). Its business authorization/audit SQL and the existing successful draft cost were not separately metered and are not zero. No model is configured.
+
+The controlled replay meters main-connection SQL from hook entry after the gated call is admitted until close or the last retained deadline snapshot. Initialization, eight business cases, account connection and work before that window are outside it. Successful and failed windows have different lengths and pending work; they are not a performance comparison. The failed original-order window at its last retained deadline sample (about 30 seconds) is **654 SELECT / 6 INSERT / 3 UPDATE / 0 DELETE / 3 transactions**. The release-before-close control is **392 / 9 / 44 / 9 / 9**, and the plugin-order candidate is **385 / 9 / 43 / 9 / 9**, each through successful close. Native status lists are respectively **284 at the last snapshot / 29 / 26**, with three sync submissions in each; raw counts and terminal-state boundaries are in the attached evidence; local-file synchronization does not contact real mail users or external models.
+
+Changed-test lint/format and the new helper/self-check/file-security TypeScript scope pass. Expanding the temporary type scope to the old agent-client file also exposes its unchanged `Response.json(): unknown` access at the unknown-route assertion; standard application projects do not include that test. The original broad-scope diagnostic failure is retained rather than silently claimed green. The three application type projects, build, real HTTP lifecycle and isolated restore from `b322004` are reused for unchanged production source, pending independent review. No full-suite rerun, browser run or new production build is performed in this test-only step.
+
+The original complete run remains **236 files passed / 2 failed, 1988 cases passed / 1 failed, exit 1**, including the independent afterAll timeout. This local fixture correction does not replace that result. Full shutdown stability, independent review of this increment and the previous HTTP/restore evidence, and owner acceptance remain open. Persistent Knowledge Q&A stays deferred. External models and alternative deployment backends require their activation-specific checks; used old-environment migration is not applicable.
+
+## Reproduce
+
+```sh
+pnpm exec vitest run tests/logic/v4-agent-clients.test.ts tests/logic/hr-file-security.test.ts tests/logic/scheduler-close-diagnostics.test.ts tests/logic/mail-close-diagnostics.test.ts --maxWorkers=1
+pnpm exec eslint tests/logic/v4-agent-clients.test.ts tests/logic/hr-file-security.test.ts tests/logic/mail-close-diagnostics.test.ts tests/helpers/mail-close-diagnostics.ts --max-warnings 0
+```
+
+Run controlled patches only in an owned tracked-source copy with isolated synthetic storage and local-files providers. The evidence includes the additional Provider/fixture patch and gate helper; neither belongs in production or the ordinary suite. Preserve the 30-second hook and every business assertion. Failed stores may be removed only after their test worker has ended; that cleanup is not successful application shutdown. Fixed packages, lock, 138 historical sources, 284-path ledger, preflight, closed gates and `.54` are preserved.

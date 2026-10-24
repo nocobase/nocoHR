@@ -28,6 +28,13 @@ const REPORT = 'talent.trainingReport';
 const STEWARD = 'talent.certificationSteward';
 const REMIND_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+function trainingReportRowKey(
+  category: string,
+  ...sourceIds: unknown[]
+): string {
+  return `${category}:${JSON.stringify(sourceIds.map(String))}`;
+}
+
 export interface RequiredCertificationState {
   readonly certificationId: string;
   readonly title: string;
@@ -117,43 +124,51 @@ export interface TrainingReport {
   }[];
   readonly details: {
     readonly completion: readonly {
+      readonly rowKey: string;
       employee: string;
       target: string;
       status: string;
       dueDate: string | null;
     }[];
     readonly overdue: readonly {
+      readonly rowKey: string;
       employee: string;
       target: string;
       dueDate: string | null;
     }[];
     readonly exams: readonly {
+      readonly rowKey: string;
       employee: string;
       exam: string;
       firstPassed: boolean;
       passed: boolean;
     }[];
     readonly coverageMissing: readonly {
+      readonly rowKey: string;
       employee: string;
       position: string;
       certification: string;
     }[];
     readonly expiring: readonly {
+      readonly rowKey: string;
       employee: string;
       certification: string;
       expiresAt: string | null;
     }[];
     readonly expired: readonly {
+      readonly rowKey: string;
       employee: string;
       certification: string;
       expiresAt: string | null;
     }[];
     readonly gaps: readonly {
+      readonly rowKey: string;
       question: string;
       askCount: number;
       lastAskedAt: string;
     }[];
     readonly paths: readonly {
+      readonly rowKey: string;
       employee: string;
       path: string;
       status: string;
@@ -162,6 +177,7 @@ export interface TrainingReport {
       onTime: boolean;
     }[];
     readonly attendance: readonly {
+      readonly rowKey: string;
       employee: string;
       session: string;
       startAt: string | null;
@@ -169,6 +185,7 @@ export interface TrainingReport {
       method: string | null;
     }[];
     readonly practice: readonly {
+      readonly rowKey: string;
       employee: string;
       scenario: string;
       score: number | null;
@@ -795,6 +812,7 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
               'trainingEnrollments.sessionId',
             )
             .select([
+              'trainingEnrollments.id as id',
               'trainingEnrollments.employeeId as employeeId',
               'trainingEnrollments.status as status',
               'trainingEnrollments.checkInMethod as checkInMethod',
@@ -818,6 +836,7 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
               'practiceSessions.scenarioId',
             )
             .select([
+              'practiceSessions.id as id',
               'practiceSessions.employeeId as employeeId',
               'practiceSessions.score as score',
               'practiceSessions.completedAt as completedAt',
@@ -941,7 +960,7 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
       }
       const gaps = await query
         .selectFrom('knowledgeGaps')
-        .select(['question', 'askCount', 'lastAskedAt'])
+        .select(['id', 'question', 'askCount', 'lastAskedAt'])
         .where('status', '=', 'open')
         .orderBy('lastAskedAt', 'desc')
         .execute();
@@ -1025,6 +1044,7 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
         details: {
           completion: await Promise.all(
             inPeriod.map(async (a) => ({
+              rowKey: trainingReportRowKey('completion', a.id),
               employee: names.get(String(a.employeeId)) ?? '',
               target: await titleOf(a.courseId, a.examId),
               status: String(a.status),
@@ -1033,6 +1053,7 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
           ),
           overdue: await Promise.all(
             overdue.map(async (a) => ({
+              rowKey: trainingReportRowKey('overdue', a.id),
               employee: names.get(String(a.employeeId)) ?? '',
               target: await titleOf(a.courseId, a.examId),
               dueDate: dateOnly(a.dueDate),
@@ -1040,6 +1061,11 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
           ),
           exams: await Promise.all(
             candidates.map(async ([key, first]) => ({
+              rowKey: trainingReportRowKey(
+                'exams',
+                first.employeeId,
+                first.examId,
+              ),
               employee: names.get(String(first.employeeId)) ?? '',
               exam: await titleOf(null, first.examId),
               firstPassed: first.status === 'passed',
@@ -1052,6 +1078,11 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
           ),
           coverageMissing: coverageRows.flatMap((row) =>
             row.missing.map((m) => ({
+              rowKey: trainingReportRowKey(
+                'coverageMissing',
+                row.employee.id,
+                m.id,
+              ),
               employee: String(row.employee.name),
               position:
                 positionTitles.get(String(row.employee.positionId)) ?? '',
@@ -1059,23 +1090,27 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
             })),
           ),
           expiring: expiring.map((c) => ({
+            rowKey: trainingReportRowKey('expiring', c.id),
             employee: names.get(String(c.employeeId)) ?? '',
             certification:
               certificationTitles.get(String(c.certificationId)) ?? '',
             expiresAt: dateOnly(c.expiresAt),
           })),
           expired: expired.map((c) => ({
+            rowKey: trainingReportRowKey('expired', c.id),
             employee: names.get(String(c.employeeId)) ?? '',
             certification:
               certificationTitles.get(String(c.certificationId)) ?? '',
             expiresAt: dateOnly(c.expiresAt),
           })),
           gaps: gaps.slice(0, 5).map((g) => ({
+            rowKey: trainingReportRowKey('gaps', g.id),
             question: String(g.question),
             askCount: Number(g.askCount),
             lastAskedAt: iso(g.lastAskedAt),
           })),
           paths: pathRows.map((a) => ({
+            rowKey: trainingReportRowKey('paths', a.id),
             employee: names.get(String(a.employeeId)) ?? '',
             path: pathTitles.get(String(a.learningPathId)) ?? '',
             status: String(a.status),
@@ -1084,6 +1119,7 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
             onTime: onTime(a),
           })),
           attendance: sessionRows.map((e) => ({
+            rowKey: trainingReportRowKey('attendance', e.id),
             employee: names.get(String(e.employeeId)) ?? '',
             session: String(e.title),
             startAt: iso(e.startAt),
@@ -1091,6 +1127,7 @@ export function createInsightService(deps: InsightServiceDeps): InsightService {
             method: e.checkInMethod == null ? null : str(e.checkInMethod),
           })),
           practice: practiceRows.map((p) => ({
+            rowKey: trainingReportRowKey('practice', p.id),
             employee: names.get(String(p.employeeId)) ?? '',
             scenario: String(p.title),
             score: p.score == null ? null : Number(p.score),

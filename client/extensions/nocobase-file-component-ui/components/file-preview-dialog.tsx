@@ -8,13 +8,19 @@ import type {
   FileUiLabels,
 } from '../types';
 import {
+  isActiveMarkupMimeType,
   resolveFilePreviewKind,
   type FilePreviewKind,
 } from '../lib/file-preview';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '#components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from '#components/ui/dialog';
 import { fileUrlCredentials, resolveSafeFileUrl } from '../lib/file-url';
 import { FilePreviewContent } from './previewers/file-preview-content';
+
+const PDF_MIME_TYPE = 'application/pdf';
+const PDF_PREVIEW_ERROR = 'Unable to load the PDF preview.';
+const PDF_MARKUP_RESPONSE_ERROR =
+  'The file URL returned HTML or XML instead of a PDF.';
 
 export function FilePreviewDialog({
   files,
@@ -70,7 +76,7 @@ function OpenFilePreviewDialog(
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent
-        className='flex max-h-[calc(100vh-2rem)] max-w-[calc(100%-2rem)] flex-col overflow-auto sm:max-w-4xl'
+        className='flex max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col sm:max-w-4xl'
         showCloseButton
       >
         <div className='flex items-center justify-between gap-3 pr-10'>
@@ -126,18 +132,21 @@ function OpenFilePreviewDialog(
             ) : null}
           </div>
         </div>
-        <PreviewBody
-          key={`${file.id}:${String(file.updatedAt)}:${file.contentUrl}`}
-          file={file}
-          onDownload={
-            allowDownload
-              ? () =>
-                  void downloadFile(file).catch((error: unknown) =>
-                    reportDownloadError(onError, error),
-                  )
-              : undefined
-          }
-        />
+        {/* Only the preview scrolls; the title and its actions stay in view. */}
+        <div className='-mx-4 min-h-0 flex-1 overflow-auto px-4'>
+          <PreviewBody
+            key={`${file.id}:${String(file.updatedAt)}:${file.contentUrl}`}
+            file={file}
+            onDownload={
+              allowDownload
+                ? () =>
+                    void downloadFile(file).catch((error: unknown) =>
+                      reportDownloadError(onError, error),
+                    )
+                : undefined
+            }
+          />
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -161,6 +170,14 @@ function reportDownloadError(
   onError?.(
     error instanceof Error ? error : new Error('File download failed.'),
   );
+}
+
+// A blob URL is same-origin, so the frame must receive PDF bytes as a PDF and
+// never as a document the browser could render and run.
+function asPdfBlob(blob: Blob): Blob {
+  return blob.type.toLowerCase() === PDF_MIME_TYPE
+    ? blob
+    : blob.slice(0, blob.size, PDF_MIME_TYPE);
 }
 
 function PreviewBody({
@@ -190,19 +207,17 @@ function PreviewBody({
       signal: controller.signal,
     })
       .then(async (response) => {
-        if (!response.ok) throw new Error('Unable to load the PDF preview.');
+        if (!response.ok) throw new Error(PDF_PREVIEW_ERROR);
         const blob = await response.blob();
         if (controller.signal.aborted) return;
-        objectUrl = URL.createObjectURL(blob);
+        if (isActiveMarkupMimeType(blob.type))
+          throw new Error(PDF_MARKUP_RESPONSE_ERROR);
+        objectUrl = URL.createObjectURL(asPdfBlob(blob));
         setBlobUrl(objectUrl);
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : 'Unable to load the PDF preview.',
-          );
+          setError(cause instanceof Error ? cause.message : PDF_PREVIEW_ERROR);
       });
     return () => {
       controller.abort();

@@ -40,8 +40,14 @@ it('applies V2-07, enforces its unique keys and reverses cleanly', async () => {
     metadataStore: new InMemoryCollectionMetadataStore(),
   });
   try {
-    const directoryOfMigrations = path.resolve(import.meta.dirname, '../../database/main/migrations');
-    const migrator = db.createMigrator({ directory: directoryOfMigrations, packageName: 'hr' });
+    const directoryOfMigrations = path.resolve(
+      import.meta.dirname,
+      '../../database/main/migrations',
+    );
+    const migrator = db.createMigrator({
+      directory: directoryOfMigrations,
+      packageName: 'hr',
+    });
     // Everything before V2-07 in one batch, V2-07 alone in the next, so a rollback reverses only it.
     const names = readdirSync(directoryOfMigrations)
       .filter((f) => /^\d{12}_.*\.ts$/u.test(f))
@@ -53,14 +59,45 @@ it('applies V2-07, enforces its unique keys and reverses cleanly', async () => {
     for (const table of tables)
       expect(await db.collections().getPhysical(table)).toBeDefined();
     await db.repository('departments').createOne({
-      values: { id: 'd', code: 'D', title: 'D', parentId: null, managerId: null, active: true, sortOrder: 0, ...stamp },
+      values: {
+        id: 'd',
+        code: 'D',
+        title: 'D',
+        parentId: null,
+        managerId: null,
+        active: true,
+        sortOrder: 0,
+        ...stamp,
+      },
     });
-    await db.repository('jobFamilies').createOne({
-      values: { id: 'f', code: 'f', title: 'F', description: null, sortOrder: 0, ...stamp },
-    }).catch(() => undefined);
-    await db.repository('positions').createOne({
-      values: { id: 'p', code: 'p', title: 'P', jobFamilyId: 'f', grade: null, active: true, sortOrder: 0, ...stamp },
-    }).catch(() => undefined);
+    await db
+      .repository('jobFamilies')
+      .createOne({
+        values: {
+          id: 'f',
+          code: 'f',
+          title: 'F',
+          description: null,
+          sortOrder: 0,
+          ...stamp,
+        },
+      })
+      .catch(() => undefined);
+    await db
+      .repository('positions')
+      .createOne({
+        values: {
+          id: 'p',
+          code: 'p',
+          title: 'P',
+          jobFamilyId: 'f',
+          grade: null,
+          active: true,
+          sortOrder: 0,
+          ...stamp,
+        },
+      })
+      .catch(() => undefined);
     const plan = {
       departmentId: 'd',
       positionId: 'p',
@@ -72,9 +109,13 @@ it('applies V2-07, enforces its unique keys and reverses cleanly', async () => {
       status: 'calculated',
       ...stamp,
     };
-    await db.repository('workforcePlans').createOne({ values: { id: 'w1', ...plan } });
+    await db
+      .repository('workforcePlans')
+      .createOne({ values: { id: 'w1', ...plan } });
     await expect(
-      db.repository('workforcePlans').createOne({ values: { id: 'w2', ...plan } }),
+      db
+        .repository('workforcePlans')
+        .createOne({ values: { id: 'w2', ...plan } }),
     ).rejects.toThrow();
     const candidate = {
       name: 'C',
@@ -85,8 +126,12 @@ it('applies V2-07, enforces its unique keys and reverses cleanly', async () => {
       lastActivityAt: stamp.createdAt,
       ...stamp,
     };
-    await db.repository('candidates').createOne({ values: { id: 'c1', ...candidate } });
-    const created = await db.repository('candidates').findOne({ filter: { id: 'c1' } });
+    await db
+      .repository('candidates')
+      .createOne({ values: { id: 'c1', ...candidate } });
+    const created = await db
+      .repository('candidates')
+      .findOne({ filter: { id: 'c1' } });
     expect(created).toMatchObject({ parseStatus: 'none' });
     expect((await migrator.rollback()).rolledBack).toContain(MIGRATION);
     for (const table of tables)

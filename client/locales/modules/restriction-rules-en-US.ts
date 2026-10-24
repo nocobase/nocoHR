@@ -1,0 +1,130 @@
+export default {
+  page: {
+    title: 'Restriction rules',
+    description:
+      'Limit the records listed subjects may reach. Each rule intersects other authorization sources and never grants an action or widens access.',
+    refreshing: 'Refreshing rules…',
+  },
+  search: {
+    label: 'Search restriction rules',
+    placeholder: 'Search rule, resource, subject or action',
+    group: 'Resource group',
+    allGroups: 'All resource groups',
+    clear: 'Clear filters',
+  },
+  columns: {
+    rule: 'Rule',
+    resource: 'Resource',
+    subjects: 'Applies to',
+    actions: 'Allowed actions and records',
+    rowActions: 'Rule actions',
+  },
+  actions: {
+    new: 'New restriction rule',
+    edit: 'Edit',
+    delete: 'Delete',
+    save: 'Save rule',
+    saving: 'Saving…',
+    cancel: 'Cancel',
+    forRule: 'Actions for {{name}}',
+    addSubject: 'Add subject',
+    removeSubject: 'Remove {{name}}',
+    addAction: 'Add action and scope',
+    removeAction: 'Remove this action',
+    addRecords: 'Choose specific records',
+    removeRecord: 'Remove record {{id}}',
+    configureFilter: 'Configure filter',
+    addCondition: 'Add condition',
+  },
+  empty: {
+    title: 'No restriction rules yet',
+    description:
+      'Create a rule to limit a subject’s access to specific records.',
+    readOnly: 'No restriction rules are configured.',
+    noResults: 'No matching restriction rules',
+    noResultsDescription: 'Clear the search or resource group filter.',
+  },
+  labels: {
+    noActions: 'No actions selected',
+    noRecordsSelected: 'No records selected',
+    customFilter: 'Custom filter',
+    required: 'Required',
+    ruleKey: 'Rule key',
+    title: 'Rule name',
+    resource: 'Resource',
+    resourceGroup: 'Resource group',
+    reason: 'Reason',
+    subjects: 'Applies to',
+    subjectHelp: 'Add the users, teams or other subjects this rule limits.',
+    subjectType: 'Subject type',
+    subjectSearch: 'Search subjects',
+    subjectResults: 'Subject results',
+    selectedSubjects: 'Selected subjects',
+    noSubjectTypes: 'No subject types are available.',
+    noSubjects: 'No subjects match this search.',
+    fixedSubject: 'This rule uses a fixed subject type.',
+    action: 'Action',
+    actions: 'Allowed actions and record scopes',
+    actionHelp:
+      'For each action, choose the records that remain allowed for the listed subjects.',
+    scope: 'Data scope',
+    selection: 'Allowed records',
+    selectedRecords: 'Selected allowed records',
+    recordDirectory: 'Available records',
+    noRecords: 'No records are available on this page.',
+    recordPolicy: 'Record access policy',
+    noCompatiblePolicies:
+      'No registered record access policies support this collection.',
+    unsupportedSelection:
+      'This saved selection is not supported by the current options. It will be retained until you change or remove it.',
+    unknownAction:
+      'This action or data scope is no longer registered. It will be retained until you remove it.',
+    selectAction: 'Choose an action and data scope',
+    selectResource: 'Choose a resource',
+    selectSubject: 'Choose a subject type',
+    selectRecords: 'Choose specific records',
+    allRecords: 'All records',
+    allSelectionDescription:
+      'All records remain eligible through this rule. This selection does not narrow the other authorization sources.',
+    restrictionSemantics:
+      'The selected records are the records that remain allowed. Restrictions only narrow access already granted by other authorization sources. “All records” leaves those sources unchanged.',
+    previousPage: 'Previous records',
+    nextPage: 'Next records',
+    pageOf: 'Page {{page}} of {{pages}}',
+    recordCount: '{{count}} selected: {{records}}',
+    removeRecord: 'Remove record {{id}}',
+    filterSummary: 'Custom filter with {{count}} condition(s).',
+  },
+  confirm: {
+    deleteTitle: 'Delete restriction rule “{{name}}”?',
+    deleteDescription:
+      'This permanently removes the rule and its subject assignments. The change cannot be undone.',
+    changeResourceTitle: 'Change resource for “{{name}}”?',
+    changeResourceDescription:
+      'Changing the resource clears every action and allowed-record scope in this rule. You will need to add them again.',
+    changeResource: 'Change resource and clear actions',
+  },
+  feedback: {
+    created: 'Restriction rule “{{name}}” was created.',
+    saved: 'Restriction rule “{{name}}” was saved.',
+    deleted: 'Restriction rule “{{name}}” was deleted.',
+  },
+  errors: {
+    listReloadFailed: 'The latest rules could not be confirmed.',
+    required: 'Complete all required fields before saving.',
+    atLeastOneSubject: 'Add at least one subject.',
+    atLeastOneAction: 'Add at least one action and allowed-record selection.',
+    unsupportedResource:
+      'Choose a registered resource that supports record access.',
+    invalidRecordSelection:
+      'Select one or more specific records or a registered record access policy.',
+    duplicateSubject: 'This subject has already been added.',
+    keyExists: 'This rule key is reserved or already in use.',
+    changedElsewhere:
+      'One or more fields you changed were updated by someone else. Reload the latest rule and review it before saving.',
+    savedUnconfirmed:
+      'The change was sent, but the latest rules could not be confirmed. Reload before making another change.',
+    subjectDirectory: 'Subjects could not be loaded. Retry the request.',
+    recordDirectory: 'Records could not be loaded. Retry the request.',
+  },
+};

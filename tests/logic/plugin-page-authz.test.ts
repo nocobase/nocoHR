@@ -1,54 +1,48 @@
 // @vitest-environment node
-
 import {
   resolveAppClientContributions,
   type AppClientRegisteredRoute,
 } from '@nocobase/app-client/plugins';
 import { describe, expect, it } from 'vitest';
-
-import clientPlugins from '../../client/plugins.js';
-
-// The plugins whose pages the permission workspace offers as page grants.
-const PAGE_GRANT_PLUGINS = [
-  '@nocobase/app-plugin-users',
-  '@nocobase/app-plugin-notification',
-  '@nocobase/app-plugin-ai-employee',
-  '@nocobase/app-plugin-api-keys',
-  '@nocobase/app-plugin-database-explorer',
-];
-
-describe('plugin page authorization', () => {
-  it('offers a page grant for each listed plugin', () => {
-    const resolved = resolveAppClientContributions(
-      clientPlugins.plugins.map((plugin) => ({
+import applicationRoutes from '../../client/routes.js';
+const flatten = (
+  routes: readonly AppClientRegisteredRoute[],
+): AppClientRegisteredRoute[] =>
+  routes.flatMap((route) => [route, ...flatten(route.children ?? [])]);
+describe('management page authorization', () => {
+  const composition = async () => {
+    const { default: clientPlugins } = await import('../../client/plugins.js');
+    const resolved = resolveAppClientContributions([
+      { packageName: 'hr', source: 'application', routes: applicationRoutes },
+      ...clientPlugins.plugins.map((plugin) => ({
         packageName: plugin.packageName,
         source: 'plugin' as const,
         routes: plugin.routes,
       })),
+    ]);
+    return flatten(resolved.routes);
+  };
+  it('protects native model settings with the official model-service read grant', async () => {
+    const models = (await composition()).find(
+      (route) => route.name === 'models',
     );
-    const pages = entryPages([
-      ...resolved.routes,
-      ...resolved.settingsRouteTree,
-    ]).filter((route) => PAGE_GRANT_PLUGINS.includes(route.packageName));
-
-    // A page may check another resource type; each plugin still offers a page grant.
-    const granted = pages.filter(
-      (route) =>
-        typeof route.authz === 'object' &&
-        route.authz.resource.type === 'page' &&
-        route.authz.action === 'access',
+    expect(models?.componentLoader).toBeTypeOf('function');
+    expect(models?.auth).toBe('required');
+    expect(models?.authz).toEqual({
+      resource: { type: 'settings', id: 'agents.services' },
+      action: 'read',
+    });
+  });
+  it('retains the notification logs URL and its existing page grant', async () => {
+    const logs = (await composition()).find(
+      (route) => route.name === 'notifications.logs',
     );
-    expect(new Set(granted.map((route) => route.packageName))).toEqual(
-      new Set(PAGE_GRANT_PLUGINS),
-    );
+    expect(logs?.path).toBe('/settings/notifications/logs');
+    expect(logs?.componentLoader).toBeTypeOf('function');
+    expect(logs?.auth).toBe('required');
+    expect(logs?.authz).toEqual({
+      resource: { type: 'page', id: 'notification.logs' },
+      action: 'access',
+    });
   });
 });
-
-/** Pages without a page above them: nested pages share their parent's check. */
-function entryPages(
-  routes: readonly AppClientRegisteredRoute[],
-): AppClientRegisteredRoute[] {
-  return routes.flatMap((route) =>
-    route.componentLoader ? [route] : entryPages(route.children ?? []),
-  );
-}

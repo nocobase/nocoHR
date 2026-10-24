@@ -1,8 +1,12 @@
+import nativeKnowledge from './native-knowledge.js';
 import {
   defaultAppConfigs,
   type AppConfigFactory,
 } from '@nocobase/app-server/config';
 import auth from './auth.js';
+import secrets from './secrets.js';
+import users from './users.js';
+import processes from './processes.js';
 import authorization from './authorization.js';
 import notification from './notification.js';
 import session from './session.js';
@@ -20,6 +24,7 @@ import api from './api.js';
 import database from './database.js';
 import snowflake from './snowflake.js';
 import ai from './ai.js';
+import assistant from './assistant.js';
 import workflow from './workflow.js';
 import talent from './talent.js';
 // V3-11
@@ -36,7 +41,10 @@ import contentSecurityPolicy from './content-security-policy.js';
 import publicEndpoints from './public-endpoints.js';
 
 const defaultConfigs: AppConfigFactory<{
+  nativeKnowledge: ReturnType<typeof nativeKnowledge>;
   auth: ReturnType<typeof auth>;
+  secrets: ReturnType<typeof secrets>;
+  users: ReturnType<typeof users>;
   authorization: ReturnType<typeof authorization>;
   notification: ReturnType<typeof notification>;
   session: ReturnType<typeof session>;
@@ -54,6 +62,8 @@ const defaultConfigs: AppConfigFactory<{
   database: ReturnType<typeof database>;
   snowflake: ReturnType<typeof snowflake>;
   ai: ReturnType<typeof ai>;
+  assistant: ReturnType<typeof assistant>;
+  processes: ReturnType<typeof processes>;
   workflow: ReturnType<typeof workflow>;
   talent: ReturnType<typeof talent>;
   talentProfile: ReturnType<typeof talentProfile>;
@@ -63,7 +73,10 @@ const defaultConfigs: AppConfigFactory<{
   contentSecurityPolicy: ReturnType<typeof contentSecurityPolicy>;
   publicEndpoints: ReturnType<typeof publicEndpoints>;
 }> = defaultAppConfigs({
+  nativeKnowledge,
   auth,
+  secrets,
+  users,
   authorization,
   notification,
   session,
@@ -81,6 +94,8 @@ const defaultConfigs: AppConfigFactory<{
   database,
   snowflake,
   ai,
+  assistant,
+  processes,
   workflow,
   talent,
   talentProfile,

@@ -1,3 +1,13 @@
+import flowDiagram from './system/flow-diagram-en-US.js';
+import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
+import authorizationInspector from './modules/authorization-inspector-en-US.js';
+import defaultAccess from './modules/default-access-en-US.js';
+import sharingRules from './modules/sharing-rules-en-US.js';
+import restrictionRules from './modules/restriction-rules-en-US.js';
+import databaseExplorer from './modules/database-explorer-en-US.js';
+import apiKeys from './modules/api-keys-en-US.js';
+import templateSettings from './system/settings-en-US.js';
+import deviceApproval from '#extensions/nocobase-device-approval/locales/en-US';
 import { coreHrAdditions } from './modules/core-hr-additions.js';
 // V3-10
 import { examAdditions } from './modules/exam-additions.js';
@@ -23,6 +33,51 @@ import { payrollOpeningAdditions } from './modules/payroll-opening.js';
 import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
+  ...agentChat,
+  flowDiagram,
+  nativeKnowledge: {
+    users: 'Users',
+    sourceForbidden: 'You are not authorized to search this source.',
+    tab: 'Search sources',
+    description:
+      'Search HR documents and native knowledge separately. Each source keeps its own permissions and references.',
+    query: 'Search knowledge',
+    search: 'Search',
+    legacy: 'HR documents',
+    native: 'Native knowledge',
+    spaces: 'Authorized native spaces',
+    noSpaces: 'No native knowledge spaces are authorized.',
+    noResults: 'No matching authorized documents.',
+    sourceUnavailable: 'This source is unavailable. Try again later.',
+    semanticUnavailable:
+      'Semantic search is unavailable. Native text matches are shown.',
+    version: 'Version {{version}}',
+    back: 'Back to source search',
+    qaDeferred:
+      'Persistent knowledge Q&A is not enabled. Search results do not start a chat.',
+  },
+  nativeAI: {
+    models: 'Models',
+    title: 'HR assistant',
+    description:
+      'Ask about your own HR information or request a profile correction for HR review.',
+    noModel: 'No AI model configured',
+    noModelHelp:
+      'Ask an authorized administrator to configure and enable a model in Settings → Models.',
+  },
+  authorizationInspector,
+  defaultAccess,
+  sharingRules,
+  restrictionRules,
+  databaseExplorer,
+  apiKeys,
+  'auth.preparingSession': 'Preparing your session…',
+  'auth.connectionFailed': 'Unable to connect',
+  'auth.connectionFailedDescription':
+    'The realtime connection could not be prepared. Retry to enter the application, or sign out.',
+  'auth.retry': 'Retry',
+
+  ...deviceApproval,
   // AI chat tool-call cards (client/extensions/nocobase-ai/components/chat/tool-call-card.tsx).
   aiTools: aiToolNames.en,
   // V1-02 additions (client/locales/modules/core-hr-additions.ts).
@@ -1454,10 +1509,52 @@ const enUS = {
     page: '{{title}} page',
   },
   settings: {
+    notificationLogs: 'Notification logs',
+    revokeAssignmentFor: 'Revoke role for “{{name}}”?',
+    authorizationInspector: 'Permission inspector',
+    defaultAccess: 'Default Access',
+    sharingRules: 'Sharing rules',
+    databaseExplorer: 'Database explorer',
+    revokeAssignment: 'Revoke this role assignment?',
+    assignments: 'Assignments',
+    revoke: 'Revoke',
+    assign: 'Assign',
+    subjectType: 'Subject type',
+    subjectSearch: 'Search people or teams',
+    subject: 'Subject',
+
+    ...templateSettings,
+    allRoles: 'All roles',
+    roleFilterIncomplete:
+      'Choose both a role scope and a role, or clear the filters.',
+    roleType: 'Type',
+    usersReadOnlyEmpty:
+      'Contact an administrator to add users or grant the permissions needed to create users and assign roles.',
+    rolesReadOnlyEmpty:
+      'Contact an administrator to create a role or grant you permission to create roles.',
+    invalidRequest:
+      'Some values are invalid. Check your input or filters and try again.',
+    apiKeys: 'API keys',
     title: 'Settings',
     emptyTitle: 'No settings available',
     emptyDescription:
       'No enabled plugin contributes a settings page you have access to.',
+    pageAccessHint:
+      'Controls which pages this role can open. Data and actions on each page require their own permissions.',
+    businessOperationsHint:
+      'Choose the operations this role can perform and the data each operation can use.',
+    userAccountsHint:
+      'Manage user information, account security and role assignments. Review each permission separately.',
+    systemToolsHint:
+      'Manage system configuration and tools. Review the capabilities each action includes before granting access.',
+    scopeHintFor: 'About the data range for {{name}}',
+    scopeExplanation:
+      'Each range applies to its corresponding data. The operation must also pass its authorization checks.',
+    noAdditionalScopeHint:
+      'This action grants no additional record access here. Default access, sharing and restriction rules still determine actual access.',
+    dataRanges: 'Data ranges ({{count}})',
+    preservedRecordScope: 'Keep existing configuration',
+    noRecordScope: 'No additional record access',
   },
   dev: {
     componentExamples: 'Component examples',
@@ -1506,6 +1603,7 @@ const enUS = {
     signingOut: 'Signing out…',
   },
   navigation: {
+    breadcrumbMore: 'Show the levels in between',
     ...coreHrAdditions.en.navigation,
     // V3-10
     ...examAdditions.en.navigation,
@@ -1552,7 +1650,7 @@ const enUS = {
     learningCenter: 'Learning and training',
     training: 'Training',
     talentMyLearning: 'My learning',
-    talentKnowledgeQa: 'Ask the knowledge base',
+    talentKnowledgeQa: 'HR assistant',
     talentKnowledge: 'Knowledge base',
     talentCourses: 'Courses',
     talentAssignments: 'Assignments',

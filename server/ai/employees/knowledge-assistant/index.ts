@@ -1,4 +1,4 @@
-import { defineAIEmployee } from '@nocobase/ai-employee';
+import { defineAIEmployee } from '../../contracts.js';
 
 export default defineAIEmployee({
   username: 'knowledgeAssistant',

@@ -752,13 +752,11 @@ export const personnelActionResource = defineCompositeResource(
           .grant('personnelActions', actionData),
       )
       .action('create', (a) =>
-        a
-          .title(label('authz.actions.create'))
-          .grant(
-            'personnelActions',
-            // personalEmail (V1-02 V2 增补) is written with a 离职单 but never read through the action.
-            actionData.create([...ACTION_FIELDS, 'personalEmail']),
-          ),
+        a.title(label('authz.actions.create')).grant(
+          'personnelActions',
+          // personalEmail (V1-02 V2 增补) is written with a 离职单 but never read through the action.
+          actionData.create([...ACTION_FIELDS, 'personalEmail']),
+        ),
       )
       .action('approve', (a) =>
         a

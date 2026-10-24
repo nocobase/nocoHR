@@ -23,60 +23,143 @@ export interface DemoResume {
   readonly kind: 'cnc' | 'forklift' | 'unrelated' | 'general' | 'zhoudi';
 }
 
-const SURNAMES = ['赵', '钱', '孙', '李', '周', '吴', '郑', '王', '冯', '陈', '褚', '卫', '蒋', '沈', '韩', '杨', '朱', '秦', '尤', '许', '何', '吕', '施', '张', '孔', '曹', '严', '华', '金'];
-const GIVEN = ['伟', '强', '磊', '军', '洋', '勇', '杰', '涛', '明', '超', '亮', '健', '峰', '斌', '鹏', '辉', '刚', '平', '浩', '鑫', '宇', '凯', '龙', '飞', '波', '林', '晨', '阳', '东'];
+const SURNAMES = [
+  '赵',
+  '钱',
+  '孙',
+  '李',
+  '周',
+  '吴',
+  '郑',
+  '王',
+  '冯',
+  '陈',
+  '褚',
+  '卫',
+  '蒋',
+  '沈',
+  '韩',
+  '杨',
+  '朱',
+  '秦',
+  '尤',
+  '许',
+  '何',
+  '吕',
+  '施',
+  '张',
+  '孔',
+  '曹',
+  '严',
+  '华',
+  '金',
+];
+const GIVEN = [
+  '伟',
+  '强',
+  '磊',
+  '军',
+  '洋',
+  '勇',
+  '杰',
+  '涛',
+  '明',
+  '超',
+  '亮',
+  '健',
+  '峰',
+  '斌',
+  '鹏',
+  '辉',
+  '刚',
+  '平',
+  '浩',
+  '鑫',
+  '宇',
+  '凯',
+  '龙',
+  '飞',
+  '波',
+  '林',
+  '晨',
+  '阳',
+  '东',
+];
 
 function person(i: number) {
   return `${SURNAMES[i % SURNAMES.length]}${GIVEN[(i * 7) % GIVEN.length]}${i % 3 === 0 ? '' : GIVEN[(i * 11 + 3) % GIVEN.length]}`;
 }
 
 /** The 29 import resumes. Resume 7 and resume 21 share one mobile (去重). */
-export const DEMO_RESUMES: readonly DemoResume[] = Array.from({ length: 29 }, (_, n) => {
-  const i = n + 1;
-  const kind: DemoResume['kind'] =
-    i <= 8 ? 'cnc' : i <= 11 ? 'forklift' : i <= 16 ? 'unrelated' : 'general';
-  const phone = i === 21 ? '13900007007' : `139000070${String(i).padStart(2, '0')}`;
-  const years = (i % 5) + 1;
-  const experiences =
-    kind === 'cnc'
-      ? [
-          `2019-2025 某机械加工厂 数控车床操作工 ${years} 年：负责数控车床与加工中心装夹、加工与首件检验`,
-          '能看懂零件图纸，熟练使用游标卡尺和千分尺，适应倒班',
-        ]
-      : kind === 'forklift'
-        ? [`2020-2025 某物流仓库 叉车司机 ${years} 年：负责仓库装卸与物料周转`]
-        : kind === 'unrelated'
-          ? [
-              [
-                `2021-2025 某餐饮公司 服务员 ${years} 年`,
-                `2020-2025 某商场 导购 ${years} 年`,
-                `2022-2025 某公司 行政文员 ${years} 年`,
-                `2019-2025 某装修公司 设计助理 ${years} 年`,
-                `2021-2025 某培训机构 课程顾问 ${years} 年`,
-              ][i - 12],
-            ]
-          : [`2021-2025 某电子厂 装配普工 ${years} 年：负责流水线装配与包装`];
-  return {
-    file: `简历-${String(i).padStart(2, '0')}.docx`,
-    name: person(i),
-    phone,
-    email: `candidate${String(i).padStart(2, '0')}@qiheng.test`,
-    gender: i % 4 === 0 ? '女' : '男',
-    age: 20 + (i % 15),
-    education: kind === 'unrelated' && i % 2 ? '大专 某职业学院 市场营销专业 毕业' : i % 3 === 0 ? '中专 某技工学校 数控技术专业 毕业' : '高中 某中学 毕业',
-    experiences,
-    skills:
+export const DEMO_RESUMES: readonly DemoResume[] = Array.from(
+  { length: 29 },
+  (_, n) => {
+    const i = n + 1;
+    const kind: DemoResume['kind'] =
+      i <= 8 ? 'cnc' : i <= 11 ? 'forklift' : i <= 16 ? 'unrelated' : 'general';
+    const phone =
+      i === 21 ? '13900007007' : `139000070${String(i).padStart(2, '0')}`;
+    const years = (i % 5) + 1;
+    const experiences =
       kind === 'cnc'
-        ? ['数控车床', '加工中心', '看图纸', '游标卡尺', '千分尺', 'FANUC 系统']
+        ? [
+            `2019-2025 某机械加工厂 数控车床操作工 ${years} 年：负责数控车床与加工中心装夹、加工与首件检验`,
+            '能看懂零件图纸，熟练使用游标卡尺和千分尺，适应倒班',
+          ]
         : kind === 'forklift'
-          ? ['叉车驾驶', '仓库管理']
+          ? [
+              `2020-2025 某物流仓库 叉车司机 ${years} 年：负责仓库装卸与物料周转`,
+            ]
           : kind === 'unrelated'
-            ? ['沟通', 'Excel']
-            : ['装配', '包装'],
-    certificates: kind === 'forklift' ? ['叉车证（N1）'] : kind === 'cnc' && i % 2 ? ['数控车工（四级）'] : [],
-    kind,
-  };
-});
+            ? [
+                [
+                  `2021-2025 某餐饮公司 服务员 ${years} 年`,
+                  `2020-2025 某商场 导购 ${years} 年`,
+                  `2022-2025 某公司 行政文员 ${years} 年`,
+                  `2019-2025 某装修公司 设计助理 ${years} 年`,
+                  `2021-2025 某培训机构 课程顾问 ${years} 年`,
+                ][i - 12],
+              ]
+            : [`2021-2025 某电子厂 装配普工 ${years} 年：负责流水线装配与包装`];
+    return {
+      file: `简历-${String(i).padStart(2, '0')}.docx`,
+      name: person(i),
+      phone,
+      email: `candidate${String(i).padStart(2, '0')}@qiheng.test`,
+      gender: i % 4 === 0 ? '女' : '男',
+      age: 20 + (i % 15),
+      education:
+        kind === 'unrelated' && i % 2
+          ? '大专 某职业学院 市场营销专业 毕业'
+          : i % 3 === 0
+            ? '中专 某技工学校 数控技术专业 毕业'
+            : '高中 某中学 毕业',
+      experiences,
+      skills:
+        kind === 'cnc'
+          ? [
+              '数控车床',
+              '加工中心',
+              '看图纸',
+              '游标卡尺',
+              '千分尺',
+              'FANUC 系统',
+            ]
+          : kind === 'forklift'
+            ? ['叉车驾驶', '仓库管理']
+            : kind === 'unrelated'
+              ? ['沟通', 'Excel']
+              : ['装配', '包装'],
+      certificates:
+        kind === 'forklift'
+          ? ['叉车证（N1）']
+          : kind === 'cnc' && i % 2
+            ? ['数控车工（四级）']
+            : [],
+      kind,
+    };
+  },
+);
 
 /** 周迪: 2 years on CNC lathes, submits on the careers page in the demo. */
 export const ZHOU_DI_RESUME: DemoResume = {
@@ -91,7 +174,15 @@ export const ZHOU_DI_RESUME: DemoResume = {
     '2023-2025 成都某汽车零部件厂 数控车床操作工 2 年：负责数控车床装夹与加工、首件检验、过程自检与设备日常保养',
     '能看懂零件图纸，熟练使用卡尺与千分尺，适应三班倒',
   ],
-  skills: ['数控车床', '看图纸', '卡尺', '千分尺', '首件检验', '设备保养', '三班倒'],
+  skills: [
+    '数控车床',
+    '看图纸',
+    '卡尺',
+    '千分尺',
+    '首件检验',
+    '设备保养',
+    '三班倒',
+  ],
   certificates: ['数控车工（四级）'],
   kind: 'zhoudi',
 };
@@ -109,15 +200,33 @@ export const ZOU_PENG_RESUME: DemoResume = {
     '2022-2025 德阳某阀门厂 数控车床操作工 3 年：负责数控车床编程调用、装夹与加工，首件送检与过程自检',
     '能看懂零件图纸，熟练使用卡尺、千分尺与高度尺，适应倒班',
   ],
-  skills: ['数控车床', 'FANUC 系统', '看图纸', '卡尺', '千分尺', '首件检验', '倒班'],
+  skills: [
+    '数控车床',
+    'FANUC 系统',
+    '看图纸',
+    '卡尺',
+    '千分尺',
+    '首件检验',
+    '倒班',
+  ],
   certificates: ['数控车工（四级）'],
   kind: 'cnc',
 };
 
 /** 另 2 名公开页投递的候选人: one answers "不能" to 三班倒. */
 export const PUBLIC_APPLICANTS = [
-  { name: '邱明', phone: '13900007201', email: 'qiuming@qiheng.test', shiftWork: 'no' },
-  { name: '黎平', phone: '13900007202', email: 'liping@qiheng.test', shiftWork: 'yes' },
+  {
+    name: '邱明',
+    phone: '13900007201',
+    email: 'qiuming@qiheng.test',
+    shiftWork: 'no',
+  },
+  {
+    name: '黎平',
+    phone: '13900007202',
+    email: 'liping@qiheng.test',
+    shiftWork: 'yes',
+  },
 ] as const;
 
 export function resumeLines(r: DemoResume): string[] {
@@ -207,13 +316,22 @@ function zip(files: { name: string; data: Uint8Array }[]): Uint8Array {
 }
 
 const escapeXml = (s: string) =>
-  s.replace(/[&<>"]/gu, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+  s.replace(
+    /[&<>"]/gu,
+    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!,
+  );
 
 /** A Word document with one paragraph per line; `description` goes to the document properties. */
-export function docx(lines: readonly string[], description = '个人简历'): Uint8Array {
+export function docx(
+  lines: readonly string[],
+  description = '个人简历',
+): Uint8Array {
   const encoder = new TextEncoder();
   const body = lines
-    .map((l) => `<w:p><w:r><w:t xml:space="preserve">${escapeXml(l)}</w:t></w:r></w:p>`)
+    .map(
+      (l) =>
+        `<w:p><w:r><w:t xml:space="preserve">${escapeXml(l)}</w:t></w:r></w:p>`,
+    )
     .join('');
   return zip([
     {

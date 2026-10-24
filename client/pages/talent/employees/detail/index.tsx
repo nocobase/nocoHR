@@ -22,7 +22,6 @@ import {
   useResolvedPath,
 } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -146,7 +145,6 @@ function EmployeeDetailView({
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         {detail.error ? (
           <LoadError error={detail.error} onRetry={detail.reload} />
         ) : !data || !context ? (

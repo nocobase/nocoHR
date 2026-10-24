@@ -159,6 +159,23 @@ describe('route overlays', () => {
 });
 
 describe('route overlay interactions', () => {
+  it('keeps the dialog frame fixed while its body scrolls', async () => {
+    setup();
+    const dialog = await screen.findByRole('dialog', { name: 'Edit' });
+    expect(dialog).toHaveAttribute('data-slot', 'route-overlay-content');
+    expect(dialog).toHaveAttribute('data-presentation', 'dialog');
+    expect(dialog).toHaveClass('max-h-[calc(100dvh-2rem)]');
+    expect(
+      dialog.querySelector('[data-slot="route-overlay-header"]'),
+    ).toBeInTheDocument();
+    expect(
+      dialog.querySelector('[data-slot="route-overlay-body"]'),
+    ).toHaveClass('overflow-y-auto');
+    expect(
+      dialog.querySelector('[data-slot="route-overlay-footer"]'),
+    ).toBeInTheDocument();
+  });
+
   it('renders an owning backdrop for the nested layer and dismisses only that layer', async () => {
     const user = userEvent.setup();
     const parentCheck = vi.fn(() => true);

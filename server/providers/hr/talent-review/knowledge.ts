@@ -19,9 +19,10 @@
  *   owner (the owner of the related controlled document, else the run's
  *   owner) confirms it in the knowledge base's 待审核 tab.
  */
+import type { StructuredAI } from '../../native-ai/structured.js';
 import { z } from 'zod';
 
-import { AIUnavailableError, type AIRunner } from '../ai-runner.js';
+import { AIUnavailableError } from '../ai-runner.js';
 import { authorizeAction, policyOf } from '../authorize.js';
 import type { AutomationRunContext } from '../automation.js';
 import { similarity } from '../document-changes.js';
@@ -113,9 +114,7 @@ export function conflictsWith(
       const theirs = [...other.matchAll(QUANTITY)];
       if (!theirs.length) continue;
       if (similarity(sentence, other).shared < 3) continue;
-      if (
-        own.some((a) => theirs.some((b) => a[2] === b[2] && a[1] !== b[1]))
-      ) {
+      if (own.some((a) => theirs.some((b) => a[2] === b[2] && a[1] !== b[1]))) {
         found.push({ sentence, documentSentence: other });
         break;
       }
@@ -125,7 +124,10 @@ export function conflictsWith(
 }
 
 /** 规则兜底：按报警代码或标题归并主题. */
-export function topicByRule(candidate: { title: string; content: string }): string {
+export function topicByRule(candidate: {
+  title: string;
+  content: string;
+}): string {
   const text = `${candidate.title} ${candidate.content}`;
   const code =
     /(?:报警|alarm)\s*([A-Z]{1,3}\d{1,4})/iu.exec(text)?.[1] ??
@@ -136,7 +138,7 @@ export function topicByRule(candidate: { title: string; content: string }): stri
 
 export function createKnowledgeDistiller(
   ctx: TalentReviewContext,
-  deps: { ai: AIRunner },
+  deps: { ai: StructuredAI },
 ) {
   const { database, platform } = ctx;
 
@@ -203,7 +205,18 @@ export function createKnowledgeDistiller(
       await database
         .query()
         .selectFrom('kbDocuments')
-        .select(['id', 'title', 'docNo', 'version', 'contentText', 'ownerUserId', 'supersededById', 'controlled', 'reviewStatus', 'translationOfId'])
+        .select([
+          'id',
+          'title',
+          'docNo',
+          'version',
+          'contentText',
+          'ownerUserId',
+          'supersededById',
+          'controlled',
+          'reviewStatus',
+          'translationOfId',
+        ])
         .where('active', '=', true)
         .where('parseStatus', '=', 'ready')
         .execute()
@@ -244,7 +257,9 @@ ${c.content}
       const report = { created: 0, updated: 0, rejected: [] as string[] };
       for (const item of parsed.data.items) {
         const accepted =
-          item.sourceSystem === 'ticket' ? item.resolved === true : item.featured === true;
+          item.sourceSystem === 'ticket'
+            ? item.resolved === true
+            : item.featured === true;
         if (!accepted) {
           report.rejected.push(item.externalId);
           continue;
@@ -296,10 +311,9 @@ ${c.content}
       const rows = (await database
         .repository('knowledgeCandidates')
         .withPolicy(policyOf(policies, 'knowledgeCandidates'))
-        .findMany(filters.status ? { filter: { status: filters.status } } : {})) as Record<
-        string,
-        unknown
-      >[];
+        .findMany(
+          filters.status ? { filter: { status: filters.status } } : {},
+        )) as Record<string, unknown>[];
       return {
         items: rows.map(toCandidate),
         can: { ignore: await ctx.can(actor, RESOURCE, 'ignore') },
@@ -315,26 +329,39 @@ ${c.content}
         throw new HrError('KNOWLEDGE_CANDIDATE_NOT_FOUND', 404);
       await repo.updateOne({
         filter: { id },
-        values: { status: 'ignored', ignoredBy: actor.userId, updatedAt: new Date() },
+        values: {
+          status: 'ignored',
+          ignoredBy: actor.userId,
+          updatedAt: new Date(),
+        },
       });
       return { id, status: 'ignored' };
     },
 
     /** knowledgeAssistant.knowledgeDistill (weekly, or by hand). */
     async distill(run: AutomationRunContext) {
-      await authorizeAction(run.owner.authz, 'talent.knowledgeAssistant', 'use');
+      await authorizeAction(
+        run.owner.authz,
+        'talent.knowledgeAssistant',
+        'use',
+      );
       const settings = await ctx.settings();
       await importResolvedGaps();
       const all = (await candidates()).filter((c) => c.status !== 'ignored');
       const fresh = all.filter((c) => c.status === 'new');
       run.summarize(`知识沉淀：${fresh.length} 条新候选`);
-      if (!fresh.length) return { status: 'skipped' as const, output: { reason: 'noNewCandidates' } };
+      if (!fresh.length)
+        return {
+          status: 'skipped' as const,
+          output: { reason: 'noNewCandidates' },
+        };
       // 归并主题: the model when configured, else the alarm code / title rule.
       let topics = new Map<string, string>();
       try {
         const { data, sessionId } = await deps.ai.structured({
           employee: 'knowledgeAssistant',
           userId: run.owner.userId,
+          authorization: run.owner.authz,
           title: '知识沉淀：归并主题',
           prompt: `把下列已解决的问题按主题归并（同一个问题的不同说法归为一个主题），主题名简短（如“报警 E17 处理”“报销单退回重提”）。已有主题：${JSON.stringify([...new Set(all.map((c) => c.topic).filter(Boolean))])}
 问题：${JSON.stringify(all.map((c) => ({ id: c.id, title: c.title, content: c.content.slice(0, 300) })))}`,
@@ -342,15 +369,21 @@ ${c.content}
           timeZone: platform.timeZone,
         });
         run.usedConversation(sessionId);
-        for (const t of data.topics) for (const id of t.candidateIds) topics.set(id, t.topic);
+        for (const t of data.topics)
+          for (const id of t.candidateIds) topics.set(id, t.topic);
       } catch (error) {
         if (!(error instanceof AIUnavailableError)) throw error;
         run.markFallback();
         topics = new Map();
       }
-      for (const c of all) if (!topics.has(c.id)) topics.set(c.id, c.topic ?? topicByRule(c));
+      for (const c of all)
+        if (!topics.has(c.id)) topics.set(c.id, c.topic ?? topicByRule(c));
       const groups = new Map<string, CandidateRow[]>();
-      for (const c of all) groups.set(topics.get(c.id)!, [...(groups.get(topics.get(c.id)!) ?? []), c]);
+      for (const c of all)
+        groups.set(topics.get(c.id)!, [
+          ...(groups.get(topics.get(c.id)!) ?? []),
+          c,
+        ]);
       for (const c of fresh)
         await database
           .query()
@@ -362,7 +395,8 @@ ${c.content}
       const drafted: string[] = [];
       for (const [topic, items] of groups) {
         const hasNew = items.some((c) => c.status === 'new');
-        if (!hasNew || items.length < settings.knowledgeMergeThreshold) continue;
+        if (!hasNew || items.length < settings.knowledgeMergeThreshold)
+          continue;
         // 冲突检查: a candidate contradicting a controlled document is left out and listed.
         const conflicts: {
           candidateId: string;
@@ -401,7 +435,10 @@ ${c.content}
         const conflicting = new Set(conflicts.map((c) => c.candidateId));
         const kept = items.filter((c) => !conflicting.has(c.id));
         if (!kept.length) continue;
-        const owner = related && bestShared >= 3 ? str(related.ownerUserId) : run.owner.userId;
+        const owner =
+          related && bestShared >= 3
+            ? str(related.ownerUserId)
+            : run.owner.userId;
         const content = faqMarkdown(kept);
         const notes = {
           topic,
@@ -413,11 +450,14 @@ ${c.content}
             link: c.link,
           })),
           conflicts,
-          relatedDocumentId: related && bestShared >= 3 ? str(related.id) : null,
+          relatedDocumentId:
+            related && bestShared >= 3 ? str(related.id) : null,
           runId: run.runId,
         };
         // 已起草过的主题: update its draft (a confirmed one gets a new draft).
-        const existingDraft = items.find((c) => c.draftDocumentId)?.draftDocumentId;
+        const existingDraft = items.find(
+          (c) => c.draftDocumentId,
+        )?.draftDocumentId;
         const draftRow = existingDraft
           ? await database
               .query()
@@ -429,12 +469,21 @@ ${c.content}
         const now = new Date();
         const fileId = await ctx.storeTextFile(`${topic}.md`, content);
         let documentId: string;
-        if (draftRow && str(draftRow.reviewStatus) === 'draft' && bool(draftRow.active)) {
+        if (
+          draftRow &&
+          str(draftRow.reviewStatus) === 'draft' &&
+          bool(draftRow.active)
+        ) {
           documentId = str(draftRow.id);
           await database
             .query()
             .updateTable('kbDocuments')
-            .set({ contentText: content, fileId, aiNotes: notes, updatedAt: now })
+            .set({
+              contentText: content,
+              fileId,
+              aiNotes: notes,
+              updatedAt: now,
+            })
             .where('id', '=', documentId)
             .execute();
         } else {
@@ -480,7 +529,11 @@ ${c.content}
           key: `knowledgeDraft:${documentId}:${run.runId}`,
           userIds: [owner],
           message: 'knowledgeFaqDrafted',
-          params: { title: topic, count: String(kept.length), conflicts: String(conflicts.length) },
+          params: {
+            title: topic,
+            count: String(kept.length),
+            conflicts: String(conflicts.length),
+          },
           path: '/talent/knowledge?tab=pending',
         });
         await run.recordItems('kbDocument', [{ id: documentId, hash: null }]);
@@ -492,14 +545,17 @@ ${c.content}
 
     /** 知识库 · 待审核: the AI-drafted FAQ documents with their sources and conflicts. */
     async pending(actor: ActorContext) {
-      const policies = await authorizeAction(actor.authz, 'talent.kbDocument', 'manage');
+      const policies = await authorizeAction(
+        actor.authz,
+        'talent.kbDocument',
+        'manage',
+      );
       const rows = (await database
         .repository('kbDocuments')
         .withPolicy(policyOf(policies, 'kbDocuments'))
-        .findMany({ filter: { source: 'ai', reviewStatus: 'draft', active: true } })) as Record<
-        string,
-        unknown
-      >[];
+        .findMany({
+          filter: { source: 'ai', reviewStatus: 'draft', active: true },
+        })) as Record<string, unknown>[];
       return Promise.all(
         rows.map(async (row) => ({
           id: str(row.id),
@@ -512,13 +568,25 @@ ${c.content}
       );
     },
 
-    async decide(actor: ActorContext, id: string, decision: 'confirm' | 'discard') {
-      const policies = await authorizeAction(actor.authz, 'talent.kbDocument', 'manage');
+    async decide(
+      actor: ActorContext,
+      id: string,
+      decision: 'confirm' | 'discard',
+    ) {
+      const policies = await authorizeAction(
+        actor.authz,
+        'talent.kbDocument',
+        'manage',
+      );
       const row = (await database
         .repository('kbDocuments')
         .withPolicy(policyOf(policies, 'kbDocuments'))
         .findOne({ filter: { id } })) as Record<string, unknown> | undefined;
-      if (!row || str(row.source ?? '') !== 'ai' || str(row.reviewStatus ?? '') !== 'draft')
+      if (
+        !row ||
+        str(row.source ?? '') !== 'ai' ||
+        str(row.reviewStatus ?? '') !== 'draft'
+      )
         throw new HrError('DOCUMENT_NOT_FOUND', 404);
       const admin = await ctx.can(actor, 'talent.talentReview', 'manage');
       if (str(row.ownerUserId) !== actor.userId && !admin)

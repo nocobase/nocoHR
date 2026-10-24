@@ -274,9 +274,7 @@ export function registerTalentReviewRecordAccess(
             .selectFrom('trainingSessions')
             .select(['id'])
             .where('instructorUserId', '=', userId);
-          const sessions = (await sessionQuery.execute()).map((r) =>
-            str(r.id),
-          );
+          const sessions = (await sessionQuery.execute()).map((r) => str(r.id));
           if (profiles.length) {
             sessionQuery = database
               .query()

@@ -69,7 +69,8 @@ const TOPIC_WORDS: Record<CheckInTopic, RegExp> = {
   mentoring: /师傅|带教|导师|教我|没人教|没人带|上手|同事|培训/u,
   schedule: /排班|夜班|班次|倒班|调班|休息|工作时间|上班时间|周末/u,
   workload: /太累|加班|工作量|任务多|强度/u,
-  expectations: /工作内容|岗位职责|职责|预期|期望|说的不一样|不一致|和.{0,6}(说|讲|介绍)的/u,
+  expectations:
+    /工作内容|岗位职责|职责|预期|期望|说的不一样|不一致|和.{0,6}(说|讲|介绍)的/u,
   environment: /环境|工位|办公室|设备|电脑|工具|空调|热水|噪音|食堂|吃饭/u,
   other: /$^/u,
 };
@@ -108,7 +109,10 @@ export function classifyReply(text: string) {
     .filter(Boolean);
   const answers: { topic: CheckInTopic; text: string }[] = [];
   for (const sentence of sentences.length ? sentences : [text]) {
-    const parts = sentence.split(/[，,]/u).map((p) => p.trim()).filter(Boolean);
+    const parts = sentence
+      .split(/[，,]/u)
+      .map((p) => p.trim())
+      .filter(Boolean);
     for (const part of parts.length ? parts : [sentence]) {
       const topic =
         (Object.keys(TOPIC_WORDS) as CheckInTopic[]).find((t) =>
@@ -122,7 +126,8 @@ export function classifyReply(text: string) {
   const issues = answers
     .filter((a) => negative.test(a.text))
     .map((a) => ({ topic: a.topic, summary: a.text }));
-  const declined = /不想(回答|说)|不用了|没事|挺好|都好/u.test(text) && !issues.length;
+  const declined =
+    /不想(回答|说)|不用了|没事|挺好|都好/u.test(text) && !issues.length;
   return { answers, issues, declined };
 }
 
@@ -130,7 +135,11 @@ export function createCheckIns(ctx: RecruitingContext) {
   const { database, platform } = ctx;
 
   async function owner(): Promise<string | null> {
-    return (await ctx.ownerOf(CHECK_IN_TASK)) ?? (await ctx.hrAdministrators())[0] ?? null;
+    return (
+      (await ctx.ownerOf(CHECK_IN_TASK)) ??
+      (await ctx.hrAdministrators())[0] ??
+      null
+    );
   }
 
   async function routeTarget(topic: StoredCheckInTopic, employeeId: string) {
@@ -199,16 +208,23 @@ export function createCheckIns(ctx: RecruitingContext) {
     ) {
       if (checkIn.status === 'replied') {
         // A second reply adds what is new; issues already routed stay.
-        const known = new Set(checkIn.issues.map((i) => `${i.topic}:${i.summary}`));
+        const known = new Set(
+          checkIn.issues.map((i) => `${i.topic}:${i.summary}`),
+        );
         data = {
           ...data,
-          issues: data.issues.filter((i) => !known.has(`${i.topic}:${i.summary}`)),
+          issues: data.issues.filter(
+            (i) => !known.has(`${i.topic}:${i.summary}`),
+          ),
         };
       }
       const employee = await platform.employee(checkIn.employeeId);
       const t = await ctx.translate();
       // One to-do per person an issue is routed to, listing the topics (整理成待办转给对应负责人).
-      const byUser = new Map<string, { topic: CheckInTopic; summary: string }[]>();
+      const byUser = new Map<
+        string,
+        { topic: CheckInTopic; summary: string }[]
+      >();
       const unrouted: { topic: CheckInTopic; summary: string }[] = [];
       for (const issue of data.issues) {
         const userId = await routeTarget(issue.topic, checkIn.employeeId);
@@ -277,7 +293,10 @@ export function createCheckIns(ctx: RecruitingContext) {
      * The daily scan: creates and sends today's check-ins, closes unanswered
      * ones. Returns ids and topics only, for the run record.
      */
-    async runDaily(asOf: string, send: (checkInId: string) => Promise<'sent' | 'notBound' | 'failed'>) {
+    async runDaily(
+      asOf: string,
+      send: (checkInId: string) => Promise<'sent' | 'notBound' | 'failed'>,
+    ) {
       const settings = await ctx.settings();
       const maxDay = Math.max(...settings.checkIns.days);
       const rows = await database
@@ -288,7 +307,8 @@ export function createCheckIns(ctx: RecruitingContext) {
         .where('hireDate', '>=', addDays(asOf, -maxDay - 1))
         .where('hireDate', '<=', asOf)
         .execute();
-      const created: { employeeId: string; day: number; channel: string }[] = [];
+      const created: { employeeId: string; day: number; channel: string }[] =
+        [];
       for (const employee of rows) {
         const hire = day(employee.hireDate);
         if (!hire) continue;
@@ -340,7 +360,11 @@ export function createCheckIns(ctx: RecruitingContext) {
           await database
             .query()
             .updateTable('newHireCheckIns')
-            .set({ status: 'asked', askedAt: new Date(), updatedAt: new Date() })
+            .set({
+              status: 'asked',
+              askedAt: new Date(),
+              updatedAt: new Date(),
+            })
             .where('id', '=', id)
             .execute();
         } else {
@@ -348,7 +372,11 @@ export function createCheckIns(ctx: RecruitingContext) {
           await database
             .query()
             .updateTable('newHireCheckIns')
-            .set({ channel: 'app', status: 'faceToFace', updatedAt: new Date() })
+            .set({
+              channel: 'app',
+              status: 'faceToFace',
+              updatedAt: new Date(),
+            })
             .where('id', '=', id)
             .execute();
           const head = await platform.headOf({
@@ -364,7 +392,11 @@ export function createCheckIns(ctx: RecruitingContext) {
               path: `/talent/employees/${str(employee.id)}`,
             });
         }
-        created.push({ employeeId: str(employee.id), day: elapsed, channel: outcome === 'sent' ? 'feishu' : 'app' });
+        created.push({
+          employeeId: str(employee.id),
+          day: elapsed,
+          channel: outcome === 'sent' ? 'feishu' : 'app',
+        });
       }
       // 3 天未回复记为 noReply，不重复追问: counted from the check-in's own day (hire date + day), so a
       // simulated date (验收 · 模拟日期) and the real one agree.

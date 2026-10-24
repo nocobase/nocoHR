@@ -73,7 +73,8 @@ interface CertificateWall {
 
 interface TimelineEntry {
   // V4-12: 'review' is 考核结果发布 (the cycle's name only).
-  kind: 'jobEvent' | 'course' | 'exam' | 'certificate' | 'assessment' | 'review';
+  kind:
+    'jobEvent' | 'course' | 'exam' | 'certificate' | 'assessment' | 'review';
   at: string;
   title: string;
   detail: string | null;

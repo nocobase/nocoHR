@@ -58,6 +58,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/toast';
 
+import { KnowledgeSourceSearch } from './source-search.js';
 import { ConflictsPanel } from './conflicts-panel.js';
 import { DocumentDialog } from './document-dialog.js';
 import { ReviewDate } from './review-date.js';
@@ -78,6 +79,10 @@ export default function KnowledgePage(): ReactElement {
     resource: { type: 'composite', id: 'talent.documentConflict' },
     action: 'view',
   });
+  const canSearch = useCan({
+    resource: { type: 'composite', id: 'talent.knowledgeAssistant' },
+    action: 'use',
+  });
   const requestedTab = params.get('tab');
   const review = params.get('review') ?? '';
   const filters = {
@@ -88,14 +93,16 @@ export default function KnowledgePage(): ReactElement {
   };
   const list = useRemote<DocumentList>('talent/kb/documents', filters);
   const tab =
-    requestedTab === 'gaps' && list.data?.canViewGaps
-      ? 'gaps'
-      : requestedTab === 'conflicts' && canViewConflicts.can
-        ? 'conflicts'
-        : // V4-13 待审核
-          requestedTab === 'pending' && list.data?.canCreate
-          ? 'pending'
-          : 'documents';
+    requestedTab === 'search' && canSearch.can
+      ? 'search'
+      : requestedTab === 'gaps' && list.data?.canViewGaps
+        ? 'gaps'
+        : requestedTab === 'conflicts' && canViewConflicts.can
+          ? 'conflicts'
+          : // V4-13 待审核
+            requestedTab === 'pending' && list.data?.canCreate
+            ? 'pending'
+            : 'documents';
   // 复核状态 is computed from each document's next review date on the page; the endpoint has no such filter.
   const items = useMemo(
     () =>
@@ -147,14 +154,22 @@ export default function KnowledgePage(): ReactElement {
           ) : null
         }
       />
-      {list.data?.canViewGaps || canViewConflicts.can || list.data?.canCreate ? (
+      {canSearch.can ||
+      list.data?.canViewGaps ||
+      canViewConflicts.can ||
+      list.data?.canCreate ? (
         <Tabs
           value={tab}
           onValueChange={(value) =>
             setFilter('tab', value === 'documents' ? '' : String(value))
           }
         >
-          <TabsList>
+          <TabsList className='h-auto max-w-full flex-wrap justify-start'>
+            {canSearch.can ? (
+              <TabsTrigger value='search'>
+                {t('nativeKnowledge.tab')}
+              </TabsTrigger>
+            ) : null}
             <TabsTrigger value='documents'>
               {t('talent.knowledge.tabs.documents')}
             </TabsTrigger>
@@ -178,7 +193,9 @@ export default function KnowledgePage(): ReactElement {
         </Tabs>
       ) : null}
 
-      {tab === 'gaps' && list.data ? (
+      {tab === 'search' ? (
+        <KnowledgeSourceSearch />
+      ) : tab === 'gaps' && list.data ? (
         <GapsPanel documents={list.data.items} />
       ) : tab === 'conflicts' ? (
         <ConflictsPanel />

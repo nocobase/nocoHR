@@ -18,12 +18,12 @@ import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
- * The guarantee under test is a build-time one: nothing a plugin declares through `defineDevRoutes()` may reach a
+ * The guarantee under test is a build-time one: nothing a plugin declares through `the application dev contribution` may reach a
  * production bundle. A unit test cannot show that — only a real production build can, because the guarantee comes
  * from Vite replacing `import.meta.env.PROD` with `true` and then dropping the branch that becomes unreachable.
  *
  * The fixture builds against the real `@nocobase/app-client` helpers rather than a stand-in, so the test fails if the
- * guard inside `defineDevRoutes()` is ever weakened.
+ * guard inside `the application dev contribution` is ever weakened.
  */
 
 const appClientPackagePath = findPackageJSON(
@@ -88,32 +88,14 @@ beforeAll(async () => {
       `  return '${SETTINGS_PAGE_MARKER}';\n` +
       `}\n`,
   );
-  // The entry mirrors how a plugin declares both surfaces side by side, so the settings page acts as the control: it
-  // must survive exactly the build that drops the dev page.
+  // Import the application's actual development contribution. If its guard is lost,
+  // the plugin below resolves its real lazy page to the marked dependency fixture.
   await writeFile(
     path.join(source, 'main.ts'),
-    `import { defineDevRoutes, defineSettingsRoutes } from '@nocobase/app-client/plugins';\n\n` +
-      `const routes = [\n` +
-      `  defineSettingsRoutes([\n` +
-      `    {\n` +
-      `      name: 'settings-page',\n` +
-      `      path: '/settings-page',\n` +
-      `      navigation: { title: 'Settings page' },\n` +
-      `      componentLoader: () => import('./settings-page.js'),\n` +
-      `    },\n` +
-      `  ]),\n` +
-      `  defineDevRoutes([\n` +
-      `    {\n` +
-      `      name: 'dev-page',\n` +
-      `      path: '/dev-page',\n` +
-      `      navigation: { title: 'Dev page' },\n` +
-      `      componentLoader: () => import('./dev-page.js'),\n` +
-      `    },\n` +
-      `  ]),\n` +
-      `];\n\n` +
-      `globalThis.__routes = routes;\n`,
+    `import devRoutes from ${JSON.stringify(path.resolve('client/dev-routes.ts'))};
+import {defineAppRoutes} from '@nocobase/app-client/plugins';
+ globalThis.__routes = [defineAppRoutes([{name:'settings-page',path:'/settings-page',authz:'skip',componentLoader:()=>import('./settings-page.js')}]),devRoutes];`,
   );
-
   // Vite decides `import.meta.env.PROD` from NODE_ENV, not from the build mode. Vitest sets NODE_ENV=test, under
   // which Vite treats even `mode: 'production'` as a non-production build and leaves the dev branch in place — so the
   // variable has to be set for the duration of the build, or this test would assert against a development bundle.
@@ -122,6 +104,18 @@ beforeAll(async () => {
   try {
     await build({
       root: workspace,
+      plugins: [
+        {
+          name: 'marked-real-dev-page',
+          resolveId(id, importer) {
+            if (
+              importer?.endsWith('/client/dev-routes.ts') &&
+              id === './pages/dev/im-mock.js'
+            )
+              return path.join(source, 'dev-page.tsx');
+          },
+        },
+      ],
       logLevel: 'silent',
       resolve: {
         alias: [

@@ -1,6 +1,12 @@
 import { resolveAppUrl, useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
 
 import type { LearnerCourse } from '@/components/talent/learning-types';
 import { Progress } from '@/components/ui/progress';
@@ -36,59 +42,67 @@ export function VideoLesson({
 }): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
-  const video = useRef<HTMLVideoElement>(null);
-  const furthest = useRef(lesson.maxPositionSeconds);
-  const segmentStart = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const furthestRef = useRef(lesson.maxPositionSeconds);
+  const segmentStartRef = useRef<number | null>(null);
   const [watched, setWatched] = useState(lesson.watchedSeconds);
   const duration = lesson.videoSeconds ?? 0;
   const required = Math.ceil((duration * lesson.minWatchPercent) / 100);
 
-  async function report(): Promise<void> {
-    const element = video.current;
-    if (!element || segmentStart.current === null) return;
-    const from = segmentStart.current;
-    const to = element.currentTime;
-    segmentStart.current = element.paused ? null : to;
-    if (to - from < 0.5) return;
-    try {
-      const result = await api.request<{
-        data: {
-          watchedSeconds: number;
-          maxPositionSeconds: number;
-          canComplete: boolean;
-        };
-      }>({
-        path: 'talent/learning/video-progress',
-        method: 'POST',
-        json: { courseId, lessonId: lesson.id, from, to },
-      });
-      furthest.current = Math.max(
-        furthest.current,
-        result.data.maxPositionSeconds,
-      );
-      setWatched(result.data.watchedSeconds);
-      onProgress(result.data);
-    } catch {
-      // A missed report only delays progress; the next one covers the interval again.
-    }
-  }
+  const progressRef = useRef(onProgress);
+  useEffect(() => {
+    progressRef.current = onProgress;
+  }, [onProgress]);
+
+  const report = useCallback(
+    async (element = videoRef.current): Promise<void> => {
+      if (!element || segmentStartRef.current === null) return;
+      const from = segmentStartRef.current;
+      const to = element.currentTime;
+      segmentStartRef.current = element.paused ? null : to;
+      if (to - from < 0.5) return;
+      try {
+        const result = await api.request<{
+          data: {
+            watchedSeconds: number;
+            maxPositionSeconds: number;
+            canComplete: boolean;
+          };
+        }>({
+          path: 'talent/learning/video-progress',
+          method: 'POST',
+          json: { courseId, lessonId: lesson.id, from, to },
+        });
+        furthestRef.current = Math.max(
+          furthestRef.current,
+          result.data.maxPositionSeconds,
+        );
+        setWatched(result.data.watchedSeconds);
+        progressRef.current(result.data);
+      } catch {
+        // A missed report only delays progress; the next one covers the interval again.
+      }
+    },
+    [api, courseId, lesson.id],
+  );
 
   useEffect(() => {
+    // Passive cleanup runs after React detaches the ref. Retain this lesson's
+    // element so the final watched segment is still reported on replacement.
+    const element = videoRef.current;
     const timer = window.setInterval(() => {
-      if (video.current && !video.current.paused) void report();
+      if (videoRef.current && !videoRef.current.paused) void report();
     }, REPORT_EVERY_MS);
     return () => {
       window.clearInterval(timer);
-      void report();
+      void report(element);
     };
-    // `report` reads refs only; re-creating the interval on every render would reset it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lesson.id]);
+  }, [report]);
 
   return (
     <div className='space-y-3'>
       <video
-        ref={video}
+        ref={videoRef}
         className='aspect-video w-full rounded-lg bg-muted'
         src={resolveAppUrl(
           `api/talent/learning/lessons/${encodeURIComponent(lesson.id)}/video`,
@@ -98,23 +112,23 @@ export function VideoLesson({
         disablePictureInPicture
         preload='metadata'
         onPlay={(event) => {
-          segmentStart.current = event.currentTarget.currentTime;
+          segmentStartRef.current = event.currentTarget.currentTime;
         }}
         onPause={() => void report()}
         onEnded={() => void report()}
         onSeeking={(event) => {
           const element = event.currentTarget;
-          const limit = furthest.current + SEEK_AHEAD_SECONDS;
+          const limit = furthestRef.current + SEEK_AHEAD_SECONDS;
           if (element.currentTime > limit)
-            element.currentTime = furthest.current;
+            element.currentTime = furthestRef.current;
           // A seek starts a new interval; the one before it was reported as it ended.
-          segmentStart.current = element.paused ? null : element.currentTime;
+          segmentStartRef.current = element.paused ? null : element.currentTime;
         }}
         onTimeUpdate={(event) => {
           const now = event.currentTarget.currentTime;
           // Playing forward extends what may be sought to; the server still decides what counts.
-          if (now > furthest.current && now - furthest.current < 2)
-            furthest.current = now;
+          if (now > furthestRef.current && now - furthestRef.current < 2)
+            furthestRef.current = now;
         }}
         onRateChange={(event) => {
           if (event.currentTarget.playbackRate > MAX_RATE)

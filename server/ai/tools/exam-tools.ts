@@ -1,4 +1,4 @@
-import { defineTools } from '@nocobase/ai-employee';
+import { defineTools } from '../contracts.js';
 import {
   authorizationToken,
   type AppAuthorization,

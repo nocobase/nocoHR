@@ -1,6 +1,8 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
+import userEvent from '@testing-library/user-event';
 
 // Outside an `I18nProvider` the runtime returns default values verbatim; interpolate them the way the application does.
 vi.mock('@nocobase/i18n/client', () => ({
@@ -15,8 +17,10 @@ vi.mock('@nocobase/i18n/client', () => ({
   }),
 }));
 
-import { DataTable } from '../../client/components/data-table';
-import { DataTableColumnHeader } from '../../client/components/data-table-column-header';
+import {
+  DataTable,
+  DataTableColumnHeader,
+} from '../../client/components/data-table/index.js';
 
 interface Payment {
   id: string;
@@ -64,5 +68,85 @@ describe('DataTable', () => {
     render(<DataTable columns={columns} data={[]} />);
 
     expect(screen.getByText('No results.')).toBeInTheDocument();
+  });
+
+  it('resets uncontrolled pagination when refreshed data gets shorter', async () => {
+    const user = userEvent.setup();
+
+    function UncontrolledTable() {
+      const [data, setData] = useState(payments);
+
+      return (
+        <>
+          <button onClick={() => setData(payments.slice(0, 3))}>
+            Refresh rows
+          </button>
+          <DataTable columns={columns} data={data} pageSize={5} />
+        </>
+      );
+    }
+
+    render(<UncontrolledTable />);
+
+    await user.click(screen.getByRole('button', { name: 'Go to next page' }));
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
+    expect(screen.getByText('user5@example.com')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Refresh rows' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Page 1 of 1')).toBeInTheDocument();
+      expect(screen.getByText('user0@example.com')).toBeInTheDocument();
+    });
+  });
+
+  it('keeps the controlled page when refreshed data changes', async () => {
+    const user = userEvent.setup();
+
+    function ControlledTable() {
+      const [data, setData] = useState(payments);
+      const [paginationState, setPaginationState] = useState({
+        pageIndex: 1,
+        pageSize: 5,
+      });
+
+      return (
+        <>
+          <button
+            onClick={() =>
+              setData(
+                payments.map((payment) => ({
+                  ...payment,
+                  email: `refreshed-${payment.email}`,
+                })),
+              )
+            }
+          >
+            Refresh rows
+          </button>
+          <DataTable
+            columns={columns}
+            data={data}
+            pageSize={5}
+            paginationState={paginationState}
+            onPaginationChange={setPaginationState}
+          />
+        </>
+      );
+    }
+
+    render(<ControlledTable />);
+
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
+    expect(screen.getByText('user5@example.com')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Refresh rows' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
+      expect(
+        screen.getByText('refreshed-user5@example.com'),
+      ).toBeInTheDocument();
+    });
   });
 });

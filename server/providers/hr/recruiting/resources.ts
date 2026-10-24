@@ -333,14 +333,10 @@ export const candidateResource = defineCompositeResource(
           .grant('applications', applicationsWrite),
       )
       .action('decide', (a) =>
-        a
-          .title(t('candidate.decide'))
-          .grant('applications', applicationsWrite),
+        a.title(t('candidate.decide')).grant('applications', applicationsWrite),
       )
       .action('anonymize', (a) =>
-        a
-          .title(t('candidate.anonymize'))
-          .grant('candidates', candidatesWrite),
+        a.title(t('candidate.anonymize')).grant('candidates', candidatesWrite),
       ),
 );
 
@@ -376,7 +372,9 @@ export const offerResource = defineCompositeResource('talent.offer', (r) =>
     .action('approve', (a) =>
       a.title(t('offer.approve')).grant('offers', offersWrite),
     )
-    .action('send', (a) => a.title(t('offer.send')).grant('offers', offersWrite))
+    .action('send', (a) =>
+      a.title(t('offer.send')).grant('offers', offersWrite),
+    )
     // hr.admin: turns an accepted offer into the onboarding action (工号由 HR 填写); no salary.
     .action('onboard', (a) =>
       a.title(t('offer.onboard')).grant('offers', offers),
@@ -450,23 +448,25 @@ export const RECRUITING_COMPOSITES = [
   recruitingAssistantResource,
 ] as const;
 
-export const RECRUITING_COLLECTIONS: readonly { name: string; title: string }[] =
-  [
-    { name: 'workforcePlans', title: 'recruiting.collections.workforcePlans' },
-    {
-      name: 'jobRequisitions',
-      title: 'recruiting.collections.jobRequisitions',
-    },
-    { name: 'jobPostings', title: 'recruiting.collections.jobPostings' },
-    { name: 'candidates', title: 'recruiting.collections.candidates' },
-    { name: 'applications', title: 'recruiting.collections.applications' },
-    { name: 'interviews', title: 'recruiting.collections.interviews' },
-    { name: 'offers', title: 'recruiting.collections.offers' },
-    {
-      name: 'newHireCheckIns',
-      title: 'recruiting.collections.newHireCheckIns',
-    },
-  ];
+export const RECRUITING_COLLECTIONS: readonly {
+  name: string;
+  title: string;
+}[] = [
+  { name: 'workforcePlans', title: 'recruiting.collections.workforcePlans' },
+  {
+    name: 'jobRequisitions',
+    title: 'recruiting.collections.jobRequisitions',
+  },
+  { name: 'jobPostings', title: 'recruiting.collections.jobPostings' },
+  { name: 'candidates', title: 'recruiting.collections.candidates' },
+  { name: 'applications', title: 'recruiting.collections.applications' },
+  { name: 'interviews', title: 'recruiting.collections.interviews' },
+  { name: 'offers', title: 'recruiting.collections.offers' },
+  {
+    name: 'newHireCheckIns',
+    title: 'recruiting.collections.newHireCheckIns',
+  },
+];
 
 /** The pages of the step (client/routes.ts declares them). */
 export const RECRUITING_PAGES = {

@@ -27,8 +27,13 @@ export function useTrAction(): {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const run = useCallback(
-    async <T,>(
-      request: { method: Method; path: string; json?: unknown; body?: FormData },
+    async <T>(
+      request: {
+        method: Method;
+        path: string;
+        json?: unknown;
+        body?: FormData;
+      },
       success?: string,
     ): Promise<T | undefined> => {
       setBusy(true);
@@ -36,7 +41,11 @@ export function useTrAction(): {
       try {
         const response = await api.request<{ data: T }>(
           request.body
-            ? { method: request.method as 'POST', path: request.path, body: request.body }
+            ? {
+                method: request.method as 'POST',
+                path: request.path,
+                body: request.body,
+              }
             : {
                 method: request.method as 'POST',
                 path: request.path,
@@ -64,7 +73,10 @@ export const BOX_ROWS: readonly (readonly number[])[] = [
   [1, 2, 3],
 ];
 
-export function formatDate(locale: string, value: string | null | undefined): string {
+export function formatDate(
+  locale: string,
+  value: string | null | undefined,
+): string {
   if (!value) return '—';
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
     new Date(value.length === 10 ? `${value}T00:00:00` : value),

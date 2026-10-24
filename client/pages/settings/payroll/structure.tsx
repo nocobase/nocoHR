@@ -12,7 +12,6 @@ import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -91,7 +90,6 @@ export default function StructurePage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer className='max-w-5xl'>
-        <Breadcrumbs />
         {list.error ? (
           <LoadError error={list.error} onRetry={list.reload} />
         ) : !list.data ? (

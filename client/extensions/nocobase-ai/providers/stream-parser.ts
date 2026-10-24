@@ -19,8 +19,14 @@ const MAX_SSE_BUFFER_SIZE = 16 * 1024 * 1024;
 
 export async function* parseNocoBaseSSE(
   stream: ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
 ): AsyncGenerator<NocoBaseStreamEvent> {
   const reader = stream.getReader();
+  const cancel = () => {
+    void reader.cancel().catch(() => {});
+  };
+  if (signal?.aborted) cancel();
+  else signal?.addEventListener('abort', cancel, { once: true });
   const decoder = new TextDecoder();
   const events: EventSourceMessage[] = [];
   let parseError: ParseError | undefined;
@@ -66,6 +72,7 @@ export async function* parseNocoBaseSSE(
       return;
     }
   } finally {
+    signal?.removeEventListener('abort', cancel);
     reader.releaseLock();
   }
 }

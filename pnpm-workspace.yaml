@@ -4,7 +4,7 @@
 allowBuilds:
   better-sqlite3: true
   esbuild: true
-  msgpackr-extract: set this to true or false
+  msgpackr-extract: true
   oracledb: true
   # @larksuiteoapi/node-sdk: its install script only prints a version notice.
   protobufjs: false
@@ -56,3 +56,13 @@ minimumReleaseAgeExclude:
   - '@nocobase/app-server@1.0.0-beta.30'
   - '@nocobase/app-skills@0.1.0-beta.20'
   - '@nocobase/jobs@0.1.0-beta.0'
+  - '@nocobase/agent-protocol@0.1.0-beta.12'
+  - '@nocobase/app-cli-client@0.1.0-beta.13'
+  - '@nocobase/app-plugin-agents@1.0.0-beta.18'
+  - '@nocobase/app-plugin-foundation@0.1.0-beta.1'
+  - '@nocobase/app-plugin-notification-in-app@2.0.0-beta.0'
+  - '@nocobase/app-plugin-notification-providers@1.0.0-beta.15'
+  - '@nocobase/app-plugin-notification@2.0.0-beta.0'
+  - '@nocobase/app-plugin-users@2.0.0-beta.9'
+  - '@nocobase/app-server@3.0.0-beta.2'
+  - '@nocobase/app-skills@0.1.0-beta.44'

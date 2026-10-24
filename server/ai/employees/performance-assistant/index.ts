@@ -1,4 +1,4 @@
-import { defineAIEmployee } from '@nocobase/ai-employee';
+import { defineAIEmployee } from '../../contracts.js';
 
 /**
  * V4-12 绩效助理: finds the facts, drafts goals and comments, and points out

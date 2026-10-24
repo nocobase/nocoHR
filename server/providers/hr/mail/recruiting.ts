@@ -21,6 +21,7 @@ import { z } from 'zod';
 
 import { AIUnavailableError } from '../ai-runner.js';
 import type { AutomationRunContext } from '../automation.js';
+import { runMailTask } from './task-result.js';
 import { tryAuthorizeAction } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
 import { HrError } from '../shared.js';
@@ -499,7 +500,8 @@ export function createRecruitingMailHandler(deps: {
   }
 
   async function sort(message: MailMessage, attempt?: string) {
-    await deps.run<{ mailId: string; applicationId: string | null }>(
+    await runMailTask<{ mailId: string; applicationId: string | null }>(
+      deps.run,
       MAIL_SORT_RECRUITING,
       {
         dedupeKey: attempt ? `${message.id}:${attempt}` : message.id,
@@ -606,10 +608,16 @@ export function createRecruitingMailHandler(deps: {
           return { output: { mailId: message.id, applicationId: null } };
         }
       },
+      async () => {
+        const after = await mail.row(message.id);
+        if (after.status === 'received')
+          await mail.leaveUnmatched(
+            message.id,
+            null,
+            '未自动识别，请人工归类。',
+          );
+      },
     );
-    const after = await mail.row(message.id);
-    if (after.status === 'received')
-      await mail.leaveUnmatched(message.id, null, '未自动识别，请人工归类。');
   }
 
   function replyDraft(
@@ -696,7 +704,8 @@ export function createRecruitingMailHandler(deps: {
 
   /** 挂到职位后回复: the question answered from the posting, for the recruiter to send. */
   async function answerPosting(message: MailMessage, postingId: string) {
-    await deps.run(
+    await runMailTask(
+      deps.run,
       MAIL_REPLY_RECRUITING,
       {
         dedupeKey: `${message.id}:posting:${postingId}`,
@@ -724,7 +733,8 @@ export function createRecruitingMailHandler(deps: {
   async function reply(message: MailMessage) {
     if (message.refType !== 'application' || !message.refId) return;
     const applicationId = message.refId;
-    await deps.run(
+    await runMailTask(
+      deps.run,
       MAIL_REPLY_RECRUITING,
       {
         dedupeKey: message.id,

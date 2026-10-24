@@ -4,11 +4,11 @@
  * Reads here are rule inputs, never authorization: every service authorizes
  * the caller first and filters with the policies it gets back.
  */
+import type { StructuredAI } from '../../native-ai/structured.js';
 import type { UserAdministrationService } from '@nocobase/app-plugin-authentication';
 import type { NocoBaseDriveManager } from '@nocobase/drive';
 import type { ServiceContainer } from '@nocobase/service-provider';
 
-import type { AIRunner } from '../ai-runner.js';
 import type { AutomationService } from '../automation.js';
 import type { CompetencyService } from '../competency-service.js';
 import type { CustomFieldService } from '../custom-fields.js';
@@ -29,7 +29,7 @@ export interface ProfileConfig {
 export interface ProfileDeps {
   readonly container: ServiceContainer;
   readonly platform: Platform;
-  readonly ai: AIRunner;
+  readonly ai: StructuredAI;
   readonly drive: () => NocoBaseDriveManager;
   readonly users: () => UserAdministrationService;
   readonly customFields: () => CustomFieldService;

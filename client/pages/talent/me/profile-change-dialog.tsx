@@ -48,6 +48,48 @@ const DEGREES = [
 ] as const;
 
 type Row = Record<string, string>;
+type DraftRow = { uiId: number; value: Row };
+
+function draftOf(initial: ReturnType<typeof initialRows>) {
+  let nextRowId = 0;
+  const wrap = (rows: Row[]): DraftRow[] =>
+    rows.map((value) => ({ uiId: nextRowId++, value }));
+  return {
+    ...initial,
+    educations: wrap(initial.educations),
+    experiences: wrap(initial.experiences),
+    emergencyContacts: wrap(initial.emergencyContacts),
+    nextRowId,
+  };
+}
+
+function initialRows(employee: Employee, profile: EmployeeProfile) {
+  return {
+    mobile: employee.mobile ?? '',
+    email: employee.email ?? '',
+    address: employee.address ?? '',
+    personalEmail: employee.personalEmail ?? '',
+    educations: rowsOf(profile.educations, [
+      'school',
+      'degree',
+      'major',
+      'startDate',
+      'endDate',
+    ]),
+    experiences: rowsOf(profile.experiences, [
+      'company',
+      'title',
+      'startDate',
+      'endDate',
+      'description',
+    ]),
+    emergencyContacts: rowsOf(profile.emergencyContacts, [
+      'name',
+      'relation',
+      'phone',
+    ]),
+  };
+}
 
 function rowsOf(
   items: readonly Record<string, unknown>[],
@@ -89,32 +131,8 @@ export function ProfileChangeDialog({
   const { t } = useTranslation();
   const allowed = (field: string) => fields.includes(field);
   const api = useApiClient();
-  const initial = {
-    mobile: employee.mobile ?? '',
-    email: employee.email ?? '',
-    address: employee.address ?? '',
-    personalEmail: employee.personalEmail ?? '',
-    educations: rowsOf(profile.educations, [
-      'school',
-      'degree',
-      'major',
-      'startDate',
-      'endDate',
-    ]),
-    experiences: rowsOf(profile.experiences, [
-      'company',
-      'title',
-      'startDate',
-      'endDate',
-      'description',
-    ]),
-    emergencyContacts: rowsOf(profile.emergencyContacts, [
-      'name',
-      'relation',
-      'phone',
-    ]),
-  };
-  const [draft, setDraft] = useState(initial);
+  const initial = initialRows(employee, profile);
+  const [draft, setDraft] = useState(() => draftOf(initial));
   // 界面追加字段 placed for self-service (工服尺码…); sensitive ones never are.
   const { definitions: selfFields } = useCustomFieldDefinitions(
     'employees',
@@ -125,6 +143,16 @@ export function ProfileChangeDialog({
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
 
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setDraft(draftOf(initial));
+      setCustom(initialCustom);
+      setError(undefined);
+    }
+  }
+
   const updateRow = (
     kind: 'educations' | 'experiences' | 'emergencyContacts',
     index: number,
@@ -134,13 +162,18 @@ export function ProfileChangeDialog({
     setDraft((d) => ({
       ...d,
       [kind]: d[kind].map((row, i) =>
-        i === index ? { ...row, [key]: value } : row,
+        i === index ? { ...row, value: { ...row.value, [key]: value } } : row,
       ),
     }));
   const addRow = (
     kind: 'educations' | 'experiences' | 'emergencyContacts',
     row: Row,
-  ) => setDraft((d) => ({ ...d, [kind]: [...d[kind], row] }));
+  ) =>
+    setDraft((d) => ({
+      ...d,
+      [kind]: [...d[kind], { uiId: d.nextRowId, value: row }],
+      nextRowId: d.nextRowId + 1,
+    }));
   const removeRow = (
     kind: 'educations' | 'experiences' | 'emergencyContacts',
     index: number,
@@ -162,7 +195,13 @@ export function ProfileChangeDialog({
       'experiences',
       'emergencyContacts',
     ] as const)
-      if (!same(draft[kind], initial[kind])) changes[kind] = clean(draft[kind]);
+      if (
+        !same(
+          draft[kind].map((row) => row.value),
+          initial[kind],
+        )
+      )
+        changes[kind] = clean(draft[kind].map((row) => row.value));
     const customChanged = Object.fromEntries(
       Object.entries(compactValues(custom)).filter(
         ([key, value]) =>
@@ -199,7 +238,7 @@ export function ProfileChangeDialog({
       onOpenChange={(next) => {
         if (saving) return;
         if (next) {
-          setDraft(initial);
+          setDraft(draftOf(initial));
           setCustom(initialCustom);
           setError(undefined);
         }
@@ -296,13 +335,13 @@ export function ProfileChangeDialog({
                 </FieldLegend>
                 {draft.emergencyContacts.map((row, index) => (
                   <div
-                    key={index}
+                    key={row.uiId}
                     className='grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2'
                   >
                     <Input
                       aria-label={t('talent.profile.contactName')}
                       placeholder={t('talent.profile.contactName')}
-                      value={row.name}
+                      value={row.value.name}
                       onChange={(e) =>
                         updateRow(
                           'emergencyContacts',
@@ -315,7 +354,7 @@ export function ProfileChangeDialog({
                     <Input
                       aria-label={t('talent.profile.relation')}
                       placeholder={t('talent.profile.relation')}
-                      value={row.relation}
+                      value={row.value.relation}
                       onChange={(e) =>
                         updateRow(
                           'emergencyContacts',
@@ -328,7 +367,7 @@ export function ProfileChangeDialog({
                     <Input
                       aria-label={t('talent.profile.phone')}
                       placeholder={t('talent.profile.phone')}
-                      value={row.phone}
+                      value={row.value.phone}
                       onChange={(e) =>
                         updateRow(
                           'emergencyContacts',
@@ -373,20 +412,20 @@ export function ProfileChangeDialog({
                 <FieldLegend>{t('talent.profile.educations')}</FieldLegend>
                 {draft.educations.map((row, index) => (
                   <div
-                    key={index}
+                    key={row.uiId}
                     className='grid grid-cols-2 items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]'
                   >
                     <Input
                       aria-label={t('talent.profile.school')}
                       placeholder={t('talent.profile.school')}
-                      value={row.school}
+                      value={row.value.school}
                       onChange={(e) =>
                         updateRow('educations', index, 'school', e.target.value)
                       }
                     />
                     <NativeSelect
                       aria-label={t('talent.profile.degree')}
-                      value={row.degree}
+                      value={row.value.degree}
                       onChange={(e) =>
                         updateRow('educations', index, 'degree', e.target.value)
                       }
@@ -400,7 +439,7 @@ export function ProfileChangeDialog({
                     <Input
                       aria-label={t('talent.profile.major')}
                       placeholder={t('talent.profile.major')}
-                      value={row.major}
+                      value={row.value.major}
                       onChange={(e) =>
                         updateRow('educations', index, 'major', e.target.value)
                       }
@@ -408,7 +447,7 @@ export function ProfileChangeDialog({
                     <Input
                       aria-label={t('talent.profile.startDate')}
                       type='date'
-                      value={row.startDate}
+                      value={row.value.startDate}
                       onChange={(e) =>
                         updateRow(
                           'educations',
@@ -421,7 +460,7 @@ export function ProfileChangeDialog({
                     <Input
                       aria-label={t('talent.profile.endDate')}
                       type='date'
-                      value={row.endDate}
+                      value={row.value.endDate}
                       onChange={(e) =>
                         updateRow(
                           'educations',
@@ -468,13 +507,13 @@ export function ProfileChangeDialog({
                 <FieldLegend>{t('talent.profile.experiences')}</FieldLegend>
                 {draft.experiences.map((row, index) => (
                   <div
-                    key={index}
+                    key={row.uiId}
                     className='grid grid-cols-2 items-end gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]'
                   >
                     <Input
                       aria-label={t('talent.profile.company')}
                       placeholder={t('talent.profile.company')}
-                      value={row.company}
+                      value={row.value.company}
                       onChange={(e) =>
                         updateRow(
                           'experiences',
@@ -487,7 +526,7 @@ export function ProfileChangeDialog({
                     <Input
                       aria-label={t('talent.profile.jobTitle')}
                       placeholder={t('talent.profile.jobTitle')}
-                      value={row.title}
+                      value={row.value.title}
                       onChange={(e) =>
                         updateRow('experiences', index, 'title', e.target.value)
                       }
@@ -495,7 +534,7 @@ export function ProfileChangeDialog({
                     <Input
                       aria-label={t('talent.profile.startDate')}
                       type='date'
-                      value={row.startDate}
+                      value={row.value.startDate}
                       onChange={(e) =>
                         updateRow(
                           'experiences',
@@ -508,7 +547,7 @@ export function ProfileChangeDialog({
                     <Input
                       aria-label={t('talent.profile.endDate')}
                       type='date'
-                      value={row.endDate}
+                      value={row.value.endDate}
                       onChange={(e) =>
                         updateRow(
                           'experiences',

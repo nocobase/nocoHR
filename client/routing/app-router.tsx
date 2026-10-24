@@ -1,11 +1,13 @@
+import { NativeAIProvider } from '../components/native-ai/provider.js';
 import { useTranslation } from '@nocobase/i18n/client';
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
 import { lazy, Suspense, useMemo, type ReactElement } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router';
 
 import { Loading } from '@/components/loading';
-import { EMPTY_ARRAY } from '@/lib/constants';
+import { filterRouteTree, inSurface, surfaceRoutes } from './surfaces.js';
 
+import { SessionPreparation } from './session-preparation.js';
 import { AppLayout } from '../layouts/app-layout.js';
 import { GuestOnly, RequireSignIn } from './authentication-gates.js';
 import { renderRouteTree } from './route-tree.js';
@@ -27,30 +29,19 @@ const DevLayout = import.meta.env.DEV
   : undefined;
 
 export interface AppRouterProps {
-  readonly settingsRouteTree: readonly AppClientRegisteredRoute[];
-  readonly devRouteTree: readonly AppClientRegisteredRoute[];
   readonly clientRoutes: readonly AppClientRegisteredRoute[];
 }
 
 export function AppRouter(inputProps: AppRouterProps): ReactElement {
   const { t } = useTranslation();
-  const { settingsRouteTree, devRouteTree, clientRoutes } = inputProps;
+  const { clientRoutes } = inputProps;
 
-  const settingsRoutes = useMemo(
-    () =>
-      filterRouteTree(
-        clientRoutes,
-        (route) =>
-          route.auth === 'required' && route.path.startsWith('/settings/'),
-      ),
+  const settingsRouteTree = useMemo(
+    () => surfaceRoutes(clientRoutes, 'settings'),
     [clientRoutes],
   );
-  const devRoutes = useMemo(
-    () =>
-      filterRouteTree(
-        clientRoutes,
-        (route) => route.auth === 'required' && route.path.startsWith('/dev/'),
-      ),
+  const devRouteTree = useMemo(
+    () => surfaceRoutes(clientRoutes, 'dev'),
     [clientRoutes],
   );
   const routeGroups = useMemo(
@@ -61,8 +52,8 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
         clientRoutes,
         (route) =>
           route.auth === 'required' &&
-          !route.path.startsWith('/settings/') &&
-          !route.path.startsWith('/dev/'),
+          !inSurface(route.path, 'settings') &&
+          !inSurface(route.path, 'dev'),
       ),
     }),
     [clientRoutes],
@@ -74,7 +65,12 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
         element={
           // Carries the requested location to /login and back; see authentication-gates.tsx.
           <RequireSignIn>
-            <Outlet />
+            <SessionPreparation>
+              {/* Application providers wrap plugin providers, so identity-bound chat belongs inside the authenticated routes. */}
+              <NativeAIProvider>
+                <Outlet />
+              </NativeAIProvider>
+            </SessionPreparation>
           </RequireSignIn>
         }
       >
@@ -94,10 +90,7 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
                 />
               }
             >
-              <SettingsLayout
-                routeTree={settingsRouteTree}
-                routes={settingsRoutes}
-              />
+              <SettingsLayout routeTree={settingsRouteTree} />
             </Suspense>
           }
         />
@@ -115,7 +108,7 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
                   />
                 }
               >
-                <DevLayout routeTree={devRouteTree} routes={devRoutes} />
+                <DevLayout routeTree={devRouteTree} />
               </Suspense>
             }
           />
@@ -141,16 +134,4 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
       <Route path='*' element={<Navigate to='/' replace />} />
     </Routes>
   );
-}
-
-/** Pure groups can span surfaces; a page and its descendants always share their shell. */
-function filterRouteTree(
-  routes: readonly AppClientRegisteredRoute[],
-  predicate: (route: AppClientRegisteredRoute) => boolean,
-): AppClientRegisteredRoute[] {
-  return routes.flatMap((route) => {
-    if (route.componentLoader) return predicate(route) ? [route] : [];
-    const children = filterRouteTree(route.children ?? EMPTY_ARRAY, predicate);
-    return children.length ? [{ ...route, children }] : [];
-  });
 }

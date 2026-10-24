@@ -13,7 +13,6 @@ import { CameraIcon, MicIcon, SparklesIcon } from 'lucide-react';
 import { useRef, useState, type ReactElement } from 'react';
 import { useOutletContext, useParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -39,7 +38,11 @@ interface PracticalRecord {
   location: string | null;
   results: { key: string; passed: boolean; note: string }[];
   aiStructured: {
-    items: { key: string; suggestion: 'pass' | 'fail' | 'notRecorded'; quotes: string[] }[];
+    items: {
+      key: string;
+      suggestion: 'pass' | 'fail' | 'notRecorded';
+      quotes: string[];
+    }[];
     source: string;
   } | null;
   assessment: Template;
@@ -54,7 +57,11 @@ interface PracticalRecord {
 interface SpeechRecognitionLike {
   lang: string;
   interimResults: boolean;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onresult:
+    | ((event: {
+        results: ArrayLike<ArrayLike<{ transcript: string }>>;
+      }) => void)
+    | null;
   onend: (() => void) | null;
   start: () => void;
 }
@@ -76,7 +83,9 @@ export default function PracticalRecordPage(): ReactElement {
   const record = useRemote<PracticalRecord>(path);
   const action = useTrAction();
   const [notes, setNotes] = useState<string | null>(null);
-  const [results, setResults] = useState<PracticalRecord['results'] | null>(null);
+  const [results, setResults] = useState<PracticalRecord['results'] | null>(
+    null,
+  );
   const [reason, setReason] = useState('');
   const [listening, setListening] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -91,7 +100,6 @@ export default function PracticalRecordPage(): ReactElement {
     return (
       <RouteChildPage>
         <PageContainer>
-          <Breadcrumbs />
           <LoadError error={record.error} onRetry={record.reload} />
         </PageContainer>
       </RouteChildPage>
@@ -106,11 +114,18 @@ export default function PracticalRecordPage(): ReactElement {
     );
   const currentResults = results ?? data.results;
   const resultOf = (key: string) => currentResults.find((r) => r.key === key);
-  const setResult = (key: string, patch: Partial<{ passed: boolean; note: string }>) =>
+  const setResult = (
+    key: string,
+    patch: Partial<{ passed: boolean; note: string }>,
+  ) =>
     setResults(() => {
       const list = [...currentResults];
       const index = list.findIndex((r) => r.key === key);
-      const next = { key, passed: patch.passed ?? list[index]?.passed ?? false, note: patch.note ?? list[index]?.note ?? '' };
+      const next = {
+        key,
+        passed: patch.passed ?? list[index]?.passed ?? false,
+        note: patch.note ?? list[index]?.note ?? '',
+      };
       if (index >= 0) list[index] = next;
       else list.push(next);
       return list;
@@ -129,7 +144,6 @@ export default function PracticalRecordPage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         <PageHeader
           title={t('talentReview.record.title', { name: data.employeeName })}
           description={t('talentReview.record.description', {
@@ -142,7 +156,9 @@ export default function PracticalRecordPage(): ReactElement {
               <TrStatusBadge status={data.status} />
               {data.status !== 'draft' ? (
                 <Badge variant={data.passed ? 'default' : 'destructive'}>
-                  {data.passed ? t('talentReview.practicals.passed') : t('talentReview.practicals.failed')}
+                  {data.passed
+                    ? t('talentReview.practicals.passed')
+                    : t('talentReview.practicals.failed')}
                 </Badge>
               ) : null}
             </div>
@@ -155,7 +171,9 @@ export default function PracticalRecordPage(): ReactElement {
         ) : null}
         {data.voidReason ? (
           <Alert variant='destructive'>
-            <AlertDescription>{t('talentReview.record.voided', { reason: data.voidReason })}</AlertDescription>
+            <AlertDescription>
+              {t('talentReview.record.voided', { reason: data.voidReason })}
+            </AlertDescription>
           </Alert>
         ) : null}
         <Card>
@@ -176,7 +194,10 @@ export default function PracticalRecordPage(): ReactElement {
                         const said = Array.from(event.results)
                           .map((r) => r[0]?.transcript ?? '')
                           .join('');
-                        setNotes((n) => `${n ?? data.observationNotes}${n || data.observationNotes ? '\n' : ''}${said}`);
+                        setNotes(
+                          (n) =>
+                            `${n ?? data.observationNotes}${n || data.observationNotes ? '\n' : ''}${said}`,
+                        );
                       };
                       recognition.onend = () => setListening(false);
                       setListening(true);
@@ -184,10 +205,16 @@ export default function PracticalRecordPage(): ReactElement {
                     }}
                   >
                     <MicIcon data-icon='inline-start' />
-                    {listening ? t('talentReview.record.listening') : t('talentReview.record.dictate')}
+                    {listening
+                      ? t('talentReview.record.listening')
+                      : t('talentReview.record.dictate')}
                   </Button>
                 ) : null}
-                <Button size='sm' variant='outline' onClick={() => photoRef.current?.click()}>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  onClick={() => photoRef.current?.click()}
+                >
                   <CameraIcon data-icon='inline-start' />
                   {t('talentReview.record.photo')}
                 </Button>
@@ -198,17 +225,23 @@ export default function PracticalRecordPage(): ReactElement {
                   capture='environment'
                   className='hidden'
                   aria-label={t('talentReview.record.photo')}
-                  onChange={(e) => { void (async () => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const body = new FormData();
-                    body.append('file', file);
-                    await api
-                      .request({ method: 'POST', path: `${path}/attachments`, body })
-                      .catch(() => undefined);
-                    e.target.value = '';
-                    record.reload();
-                  })(); }}
+                  onChange={(e) => {
+                    void (async () => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const body = new FormData();
+                      body.append('file', file);
+                      await api
+                        .request({
+                          method: 'POST',
+                          path: `${path}/attachments`,
+                          body,
+                        })
+                        .catch(() => undefined);
+                      e.target.value = '';
+                      record.reload();
+                    })();
+                  }}
                 />
               </div>
             ) : null}
@@ -224,20 +257,27 @@ export default function PracticalRecordPage(): ReactElement {
             />
             {data.files.length ? (
               <p className='text-muted-foreground text-xs'>
-                {t('talentReview.record.files', { list: data.files.map((f) => f.filename).join('、') })}
+                {t('talentReview.record.files', {
+                  list: data.files.map((f) => f.filename).join('、'),
+                })}
               </p>
             ) : null}
             {data.can.edit ? (
               <Button
                 variant='outline'
-                disabled={action.busy || !(notes ?? data.observationNotes).trim()}
-                onClick={() => { void (async () => {
-                  if (notes !== null || results !== null) await saveDraft();
-                  const done = await action.run<{ restructured: boolean }>(
-                    { method: 'POST', path: `${path}/structure` },
-                  );
-                  if (done) reload();
-                })(); }}
+                disabled={
+                  action.busy || !(notes ?? data.observationNotes).trim()
+                }
+                onClick={() => {
+                  void (async () => {
+                    if (notes !== null || results !== null) await saveDraft();
+                    const done = await action.run<{ restructured: boolean }>({
+                      method: 'POST',
+                      path: `${path}/structure`,
+                    });
+                    if (done) reload();
+                  })();
+                }}
               >
                 <SparklesIcon data-icon='inline-start' />
                 {t('talentReview.record.structure')}
@@ -247,7 +287,9 @@ export default function PracticalRecordPage(): ReactElement {
         </Card>
         <div className='flex flex-col gap-2'>
           {data.assessment.checklist.map((item) => {
-            const suggestion = data.aiStructured?.items.find((i) => i.key === item.key);
+            const suggestion = data.aiStructured?.items.find(
+              (i) => i.key === item.key,
+            );
             const result = resultOf(item.key);
             return (
               <Card key={item.key}>
@@ -265,24 +307,36 @@ export default function PracticalRecordPage(): ReactElement {
                       value={result ? [result.passed ? 'pass' : 'fail'] : []}
                       onValueChange={(value: string[]) => {
                         const last = value.at(-1);
-                        if (last) setResult(item.key, { passed: last === 'pass' });
+                        if (last)
+                          setResult(item.key, { passed: last === 'pass' });
                       }}
                       disabled={!data.can.edit}
-                      aria-label={t('talentReview.record.resultFor', { item: item.item })}
+                      aria-label={t('talentReview.record.resultFor', {
+                        item: item.item,
+                      })}
                     >
-                      <ToggleGroupItem value='pass'>{t('talentReview.record.pass')}</ToggleGroupItem>
-                      <ToggleGroupItem value='fail'>{t('talentReview.record.fail')}</ToggleGroupItem>
+                      <ToggleGroupItem value='pass'>
+                        {t('talentReview.record.pass')}
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value='fail'>
+                        {t('talentReview.record.fail')}
+                      </ToggleGroupItem>
                     </ToggleGroup>
                   </div>
                   {suggestion ? (
                     <div className='bg-muted/40 rounded-md p-2 text-xs'>
                       <span className='font-medium'>
                         {t('talentReview.record.suggestion', {
-                          value: t(`talentReview.record.suggestionValue.${suggestion.suggestion}`),
+                          value: t(
+                            `talentReview.record.suggestionValue.${suggestion.suggestion}`,
+                          ),
                         })}
                       </span>
                       {suggestion.quotes.map((q) => (
-                        <blockquote key={q} className='text-muted-foreground border-s-2 ps-2'>
+                        <blockquote
+                          key={q}
+                          className='text-muted-foreground border-s-2 ps-2'
+                        >
                           {q}
                         </blockquote>
                       ))}
@@ -290,10 +344,14 @@ export default function PracticalRecordPage(): ReactElement {
                   ) : null}
                   {data.can.edit ? (
                     <Input
-                      aria-label={t('talentReview.record.itemNote', { item: item.item })}
+                      aria-label={t('talentReview.record.itemNote', {
+                        item: item.item,
+                      })}
                       placeholder={t('talentReview.record.itemNotePlaceholder')}
                       value={result?.note ?? ''}
-                      onChange={(e) => setResult(item.key, { note: e.target.value })}
+                      onChange={(e) =>
+                        setResult(item.key, { note: e.target.value })
+                      }
                     />
                   ) : result?.note ? (
                     <span className='text-muted-foreground'>{result.note}</span>
@@ -308,9 +366,11 @@ export default function PracticalRecordPage(): ReactElement {
             <Button
               variant='outline'
               disabled={action.busy || (notes === null && results === null)}
-              onClick={() => { void (async () => {
-                if (await saveDraft()) reload();
-              })(); }}
+              onClick={() => {
+                void (async () => {
+                  if (await saveDraft()) reload();
+                })();
+              }}
             >
               {t('talentReview.common.save')}
             </Button>
@@ -318,13 +378,18 @@ export default function PracticalRecordPage(): ReactElement {
           {data.can.sign ? (
             <Button
               disabled={action.busy || !complete}
-              onClick={() => { void (async () => {
-                if (notes !== null || results !== null) {
-                  if (!(await saveDraft())) return;
-                }
-                const done = await action.run({ method: 'POST', path: `${path}/sign` }, t('talentReview.record.signed'));
-                if (done) reload();
-              })(); }}
+              onClick={() => {
+                void (async () => {
+                  if (notes !== null || results !== null) {
+                    if (!(await saveDraft())) return;
+                  }
+                  const done = await action.run(
+                    { method: 'POST', path: `${path}/sign` },
+                    t('talentReview.record.signed'),
+                  );
+                  if (done) reload();
+                })();
+              }}
             >
               {t('talentReview.record.sign')}
             </Button>
@@ -332,10 +397,15 @@ export default function PracticalRecordPage(): ReactElement {
           {data.can.witness ? (
             <Button
               disabled={action.busy}
-              onClick={() => { void (async () => {
-                const done = await action.run({ method: 'POST', path: `${path}/witness` }, t('talentReview.record.witnessed'));
-                if (done) reload();
-              })(); }}
+              onClick={() => {
+                void (async () => {
+                  const done = await action.run(
+                    { method: 'POST', path: `${path}/witness` },
+                    t('talentReview.record.witnessed'),
+                  );
+                  if (done) reload();
+                })();
+              }}
             >
               {t('talentReview.record.witnessSign')}
             </Button>
@@ -356,10 +426,19 @@ export default function PracticalRecordPage(): ReactElement {
               <Button
                 variant='destructive'
                 disabled={action.busy || !reason.trim()}
-                onClick={() => { void (async () => {
-                  const done = await action.run({ method: 'POST', path: `${path}/void`, json: { reason } }, t('talentReview.record.voidDone'));
-                  if (done) reload();
-                })(); }}
+                onClick={() => {
+                  void (async () => {
+                    const done = await action.run(
+                      {
+                        method: 'POST',
+                        path: `${path}/void`,
+                        json: { reason },
+                      },
+                      t('talentReview.record.voidDone'),
+                    );
+                    if (done) reload();
+                  })();
+                }}
               >
                 {t('talentReview.record.void')}
               </Button>

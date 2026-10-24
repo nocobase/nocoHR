@@ -1,5 +1,9 @@
 import { authenticationToken } from '@nocobase/app-plugin-authentication';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import {
+  serverFileRepositoryManagerToken,
+  type FileRecord,
+} from '@nocobase/app-plugin-file/server';
 import type { Application } from '@nocobase/app-server/application';
 import {
   defineApiRoutes,
@@ -21,6 +25,7 @@ import {
   readJson,
   type HrEnv,
 } from './shared.js';
+import { CERTIFICATE_SCAN_ACCESS_PATH } from './certificate-scans.js';
 
 /**
  * Exams and certification under `/api/talent`: the question bank, exam
@@ -35,6 +40,13 @@ export const examApiRoutes: AppApiRouteContribution<Application> =
     const exams = app.container.resolve(examServiceToken);
     const certifications = app.container.resolve(certificationServiceToken);
     const examSettings = app.container.resolve(examSettingsToken);
+    const certificateScanFiles = app.container
+      .resolve(serverFileRepositoryManagerToken)
+      .repository('certificateScanFiles', {
+        disk: 'local',
+        accessPath: CERTIFICATE_SCAN_ACCESS_PATH,
+        policy: { read: true, create: false, update: false, delete: false },
+      });
     /** V3-10 单设备作答: the token this browser holds for the attempt. */
     const device = (c: { req: { header(name: string): string | undefined } }) =>
       c.req.header('x-exam-device')?.slice(0, 64) || null;
@@ -331,11 +343,20 @@ export const examApiRoutes: AppApiRouteContribution<Application> =
         ),
       }),
     );
-    routes.get('/external-certificates/:id/scan', async (c) =>
-      c.json({
-        data: await certifications.externalScan(actor(c), c.req.param('id')),
-      }),
-    );
+    routes.get('/external-certificates/:id/scan', async (c) => {
+      const scan = await certifications.externalScan(
+        actor(c),
+        c.req.param('id'),
+      );
+      return c.json({
+        data: scan
+          ? {
+              ...scan,
+              contentUrl: `${app.publicBasePath ?? ''}${certificateScanFiles.getUrl(scan as unknown as FileRecord)}`,
+            }
+          : null,
+      });
+    });
     routes.get('/certificates/:id/qualification-dossier', async (c) =>
       c.json({
         data: await certifications.qualificationDossier(

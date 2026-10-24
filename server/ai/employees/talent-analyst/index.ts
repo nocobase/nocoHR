@@ -1,4 +1,4 @@
-import { defineAIEmployee } from '@nocobase/ai-employee';
+import { defineAIEmployee } from '../../contracts.js';
 
 /**
  * V3-11 人才分析师: finds what heads should look at in learning, exams,

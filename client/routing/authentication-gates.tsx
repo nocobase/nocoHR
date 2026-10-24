@@ -1,11 +1,9 @@
 /**
  * Application gates around the authentication plugin's guards.
  *
- * `RequiredAuthentication` redirects an anonymous visitor to a fixed `/login` and `GuestAuthentication` sends a
- * signed-in one to a fixed `/`; neither carries the requested location, and the plugin offers no option for it. Its
- * Skill says an application needing a different landing page redirects again instead of forking the guard, so these
- * gates take the redirect first, with the location carried in `?redirect=` (see `sign-in-return.ts`), and otherwise
- * render the plugin's guard unchanged, which stays in charge of the pending state.
+ * RequiredAuthentication still sends guests to a fixed /login. The target guest guard reads a return query,
+ * while the application also rejects backslashes, control characters, guest targets and external URLs.
+ * Keep the requested path/query/hash through sign-in and apply that stricter validation before the native guard.
  */
 import {
   GuestAuthentication,

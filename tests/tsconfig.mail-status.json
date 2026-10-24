@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.server.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": [
+    "logic/mail-task-result.test.ts",
+    "logic/mail-completion-feedback.test.ts",
+    "playwright/mail-completion*.ts"
+  ],
+  "exclude": []
+}

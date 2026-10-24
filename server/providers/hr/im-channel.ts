@@ -2,9 +2,8 @@
  * 办公软件机器人 · 渠道适配层 (V1-04). The AI employee plugin has no external
  * channels and the notification plugin cannot reach one user in an office
  * suite, so this adapter receives and sends messages, identifies the user,
- * carries interactive cards and pushes notifications; the conversation
- * itself is the AI employee plugin's, run as that user with the same tools
- * and scope as in the app.
+ * carries interactive cards and pushes notifications. Native Agents owns
+ * the conversation and tool approval, running as the bound sender.
  *
  * - A group mention gets "请私聊提问" and never reaches an AI employee.
  * - The sender is found through the V1-03 binding (`employees.externalUserId`);
@@ -12,9 +11,9 @@
  *   (No office-suite sign-in plugin is installed, so there is no sign-in
  *   binding to try first.)
  * - The question is routed like the app's entry. When the HR assistant
- *   drafts the employee's own change (its `submitMyProfileChange` tool waits
- *   for approval), the draft becomes a 本人提交 card instead; other
- *   confirmations stay in NocoHR.
+ *   drafts the employee's own change, its native approval is bound to a
+ *   stored card; the callback continues that same execution. Historical
+ *   business cards retain their original handlers.
  * - Replies are masked: mobile and ID numbers never leave in full, even the
  *   user's own, and a NocoHR link is added.
  * - A message id is handled once. Signatures are checked by the route.
@@ -24,9 +23,24 @@
  * the development mock (模拟渠道) outside production, nothing in production
  * until a real Feishu transport is configured.
  */
-import { AIUnavailableError, type AIRunner } from './ai-runner.js';
+import { createHash } from 'node:crypto';
+import { AIUnavailableError } from './ai-runner.js';
 import type { AiEntryService } from './ai-entry-service.js';
-import { scopeForUser } from './authorize.js';
+import type {
+  OnlineAgentService,
+  RealtimeOnlineAgent,
+} from '@nocobase/app-plugin-agents/server/online-agent';
+import {
+  openIMSession,
+  consumeIMResponse,
+  currentIMApprovals,
+  imResponseText,
+} from '../native-ai/im-session.js';
+import {
+  NATIVE_APPROVAL_CARD,
+  nativeApprovalCardKind,
+} from './im-cards/native-approval-card.js';
+import { scopeForUser, authorizeAction } from './authorize.js';
 import { channelContext, type ConversationChannel } from './channel-context.js';
 import type { HrCoreService } from './core-service.js';
 import { APPROVAL_CARD, approvalCardKind } from './im-cards/approval-card.js';
@@ -94,7 +108,8 @@ const FOLLOW_UP =
 export function createImChannel(deps: {
   readonly platform: Platform;
   readonly entry: () => AiEntryService;
-  readonly ai: AIRunner;
+  readonly online: () => OnlineAgentService;
+  readonly modelAvailable: () => Promise<boolean>;
   readonly core: () => HrCoreService;
   readonly publicUrl: (path: string) => string;
   /** The server locale's `hr` strings in the application's default language. */
@@ -122,6 +137,76 @@ export function createImChannel(deps: {
   );
   const profileChange = profileChangeCardKind({ database, core: deps.core });
   cards.register(profileChange.kind);
+  async function publishApprovals(
+    session: RealtimeOnlineAgent,
+    userId: string,
+    provider: IncomingMessage['provider'],
+  ) {
+    const state = await currentIMApprovals(database, userId, session);
+    const ids: string[] = [];
+    for (const pending of state.pending) {
+      const parsed = isRecord(pending.input)
+        ? pending.input.changes
+        : undefined;
+      if (!isRecord(parsed)) continue;
+      const display = await profileChange.describe(
+        userId,
+        parsed,
+        await deps.translate(),
+      );
+      const { input: _input, ...binding } = pending;
+      const sent = await cards.send({
+        kind: NATIVE_APPROVAL_CARD,
+        provider,
+        recipientUserId: userId,
+        refType: 'nativeSession',
+        refId: session.sessionId,
+        dedupeKey:
+          'native:' +
+          createHash('sha256')
+            .update(
+              JSON.stringify([
+                provider,
+                userId,
+                pending.sessionId,
+                pending.messageId,
+                pending.executionId,
+                pending.approvalId,
+              ]),
+            )
+            .digest('hex'),
+        payload: {
+          ...binding,
+          display: display.map((line) =>
+            maskSensitive(`${line.field}: ${line.before} → ${line.after}`),
+          ),
+        },
+      });
+      if (sent.status !== 'notBound') ids.push(sent.cardId);
+    }
+    return { expired: state.expired, cards: ids };
+  }
+  cards.register(
+    nativeApprovalCardKind({
+      online: deps.online,
+      async continued(session, userId, provider, externalUserId) {
+        await consumeIMResponse(session);
+        // Rebinding while the model answered must not redirect cards or text to another person.
+        if (
+          (await cards.bindings.userOf(provider, externalUserId)) !== userId ||
+          (await cards.bindings.externalOf(provider, userId)) !== externalUserId
+        )
+          return;
+        await publishApprovals(session, userId, provider);
+        const body = imResponseText(await session.history());
+        if (body)
+          await transport.sendText(
+            { provider, externalUserId },
+            maskSensitive(body),
+          );
+      },
+    }),
+  );
   const push = createImPush({
     database,
     transport,
@@ -131,7 +216,10 @@ export function createImChannel(deps: {
     warn: deps.warn,
   });
   // One conversation per user and channel, kept in memory: a restart starts a new one.
-  const sessions = new Map<string, string>();
+  const sessions = new Map<
+    string,
+    { sessionId: string; externalUserId: string }
+  >();
   /** Who answered a member last, and when: a follow-up (“那张已经撤销了，请重新起草”) stays with them. */
   const lastTurn = new Map<string, { employee: string; at: number }>();
   const hooks: BotTurnHook[] = [];
@@ -233,6 +321,7 @@ export function createImChannel(deps: {
       );
       if (!userId) return { reply: t('imBot.unbound'), handledBy: null };
       const ctx = { userId, authz: await scopeForUser(platform.authz, userId) };
+      await authorizeAction(ctx.authz, 'talent.aiAssistant', 'use');
       // V2-05: an answer to the bot's own question (考勤异常追问) goes to the HR assistant with its context.
       let claimed: Awaited<ReturnType<NonNullable<BotTurnHook['claim']>>>;
       for (const hook of hooks) {
@@ -288,53 +377,76 @@ export function createImChannel(deps: {
         };
       };
       try {
-        const answer = await channelContext.run(message.provider, () =>
-          deps.ai.reply({
-            employee: employee,
-            userId,
-            title: `${message.provider} · ${message.text.slice(0, 30)}`,
-            text:
-              employee === 'hrAssistant'
-                ? `${BOT_NOTE}${claimed?.note ?? ''}${message.text}`
-                : message.text,
-            timeZone: platform.timeZone,
-            sessionId: sessions.get(sessionKey),
-          }),
-        );
-        if (answer.paused) {
-          // A paused conversation cannot take the next message; the next one starts afresh.
+        const modelAvailable = await deps.modelAvailable();
+        if (!sessions.has(sessionKey) && !modelAvailable)
+          throw new AIUnavailableError('No enabled native chat model');
+        let previousSession = sessions.get(sessionKey);
+        if (
+          previousSession &&
+          previousSession.externalUserId !== message.senderExternalId
+        ) {
+          // userOf and current use were checked above. Only a verified new binding
+          // releases the memory reference; access/owner/configuration errors still propagate.
+          if (
+            (await cards.bindings.externalOf(message.provider, userId)) !==
+            message.senderExternalId
+          )
+            throw new HrError('FORBIDDEN', 403);
           sessions.delete(sessionKey);
-          const draft = answer.pending.find(
-            (call) => call.name === 'submitMyProfileChange',
-          );
-          const changes =
-            draft && isRecord(draft.args) ? draft.args.changes : undefined;
-          if (changes !== undefined) {
-            try {
-              const sent = await draftProfileChange(
-                userId,
-                changes,
-                message.provider,
-              );
-              if (sent.status !== 'notBound')
-                return {
-                  reply: `${t('imBot.cardSent')}\n\n${t('imBot.viewInApp', { link })}`,
-                  handledBy: employee,
-                  cards: [sent.cardId],
-                };
-            } catch (error) {
-              if (!(error instanceof HrError)) throw error;
-              return {
-                reply: `${t('imBot.fieldNotAllowed')}\n\n${t('imBot.viewInApp', { link })}`,
-                handledBy: employee,
-              };
-            }
-          }
-        } else sessions.set(sessionKey, answer.sessionId);
-        const body = answer.paused
-          ? t('imBot.confirmInApp')
-          : answer.text || t('imBot.noAnswer');
-        return await withCards(body);
+          previousSession = undefined;
+        }
+        let session = await openIMSession(
+          deps.online(),
+          ctx,
+          {
+            provider: message.provider,
+            externalUserId: message.senderExternalId,
+          },
+          previousSession?.sessionId,
+        );
+        // Only a confirmed expired approval releases the old reference. Preserve its
+        // execution/history and card; this input starts independently, with no old input replay.
+        let state = await publishApprovals(session, userId, message.provider);
+        if (state.expired) {
+          sessions.delete(sessionKey);
+          if (!modelAvailable)
+            throw new AIUnavailableError('No enabled native chat model');
+          session = await openIMSession(deps.online(), ctx, {
+            provider: message.provider,
+            externalUserId: message.senderExternalId,
+          });
+          state = { expired: false, cards: [] };
+        }
+        sessions.set(sessionKey, {
+          sessionId: session.sessionId,
+          externalUserId: message.senderExternalId,
+        });
+        // A currently valid approval stays bound; a new input never resumes it.
+        let pending = state.cards;
+        if (!pending.length) {
+          if (!modelAvailable)
+            throw new AIUnavailableError('No enabled native chat model');
+          await channelContext.run(message.provider, async () => {
+            await session.send([
+              {
+                role: 'user',
+                content: `[Time zone: ${platform.timeZone}]\n${employee === 'hrAssistant' ? BOT_NOTE : ''}${claimed?.note ?? ''}${message.text}`,
+              },
+            ]);
+            await consumeIMResponse(session);
+          });
+          pending = (await publishApprovals(session, userId, message.provider))
+            .cards;
+        }
+        if (pending.length)
+          return {
+            reply: `${t('imCards.nativeApproval.sent')}\n\n${t('imBot.viewInApp', { link })}`,
+            handledBy: employee,
+            cards: pending,
+          };
+        return await withCards(
+          imResponseText(await session.history()) || t('imBot.noAnswer'),
+        );
       } catch (error) {
         if (!(error instanceof AIUnavailableError)) throw error;
         if (claimed) return await withCards(await claimed.fallback(), false);

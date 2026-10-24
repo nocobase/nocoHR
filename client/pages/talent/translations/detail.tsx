@@ -8,7 +8,6 @@ import { useTranslation } from '@nocobase/i18n/client';
 import { useState, type ReactElement } from 'react';
 import { useOutletContext, useParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -21,7 +20,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 type Texts = Record<string, unknown>;
-const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+const text = (value: unknown): string =>
+  typeof value === 'string' ? value : '';
 interface Detail {
   type: string;
   id: string;
@@ -54,14 +54,21 @@ export default function TranslationDetailPage(): ReactElement {
     outlet?.reload?.();
   };
   const value = (key: string) => text(fields[key] ?? data?.translation[key]);
-  const lessons = (data?.translation.lessons ?? []) as { id: string; title: string; content: string }[];
-  const originalLessons = (data?.original.lessons ?? []) as { id: string; title: string; content: string }[];
+  const lessons = (data?.translation.lessons ?? []) as {
+    id: string;
+    title: string;
+    content: string;
+  }[];
+  const originalLessons = (data?.original.lessons ?? []) as {
+    id: string;
+    title: string;
+    content: string;
+  }[];
   const editedLessons = (fields.lessons ?? lessons) as typeof lessons;
   const editable = data?.reviewStatus === 'draft';
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         {detail.error ? (
           <LoadError error={detail.error} onRetry={detail.reload} />
         ) : !data ? (
@@ -74,7 +81,9 @@ export default function TranslationDetailPage(): ReactElement {
               actions={
                 <div className='flex items-center gap-2'>
                   <TrStatusBadge status={data.reviewStatus} />
-                  {data.translationStatus === 'outdated' ? <TrStatusBadge status='outdated' /> : null}
+                  {data.translationStatus === 'outdated' ? (
+                    <TrStatusBadge status='outdated' />
+                  ) : null}
                 </div>
               }
             />
@@ -86,16 +95,26 @@ export default function TranslationDetailPage(): ReactElement {
             {(FIELDS[data.type] ?? []).map((key) => (
               <div key={key} className='grid gap-2 md:grid-cols-2'>
                 <div className='flex flex-col gap-1'>
-                  <span className='text-muted-foreground text-xs'>{t(`talentReview.translations.fields.${key}`)} · {t('talentReview.translations.original')}</span>
-                  <p className='bg-muted/40 rounded-md border p-2 text-sm whitespace-pre-wrap'>{text(data.original[key])}</p>
+                  <span className='text-muted-foreground text-xs'>
+                    {t(`talentReview.translations.fields.${key}`)} ·{' '}
+                    {t('talentReview.translations.original')}
+                  </span>
+                  <p className='bg-muted/40 rounded-md border p-2 text-sm whitespace-pre-wrap'>
+                    {text(data.original[key])}
+                  </p>
                 </div>
                 <div className='flex flex-col gap-1'>
-                  <span className='text-muted-foreground text-xs'>{t(`talentReview.translations.fields.${key}`)} · {t('talentReview.translations.english')}</span>
+                  <span className='text-muted-foreground text-xs'>
+                    {t(`talentReview.translations.fields.${key}`)} ·{' '}
+                    {t('talentReview.translations.english')}
+                  </span>
                   <Textarea
                     aria-label={t(`talentReview.translations.fields.${key}`)}
                     disabled={!editable}
                     value={value(key)}
-                    onChange={(e) => setFields((f) => ({ ...f, [key]: e.target.value }))}
+                    onChange={(e) =>
+                      setFields((f) => ({ ...f, [key]: e.target.value }))
+                    }
                   />
                 </div>
               </div>
@@ -110,26 +129,34 @@ export default function TranslationDetailPage(): ReactElement {
                   </div>
                   <div className='flex flex-col gap-1'>
                     <Textarea
-                      aria-label={t('talentReview.translations.lessonTitle', { no: index + 1 })}
+                      aria-label={t('talentReview.translations.lessonTitle', {
+                        no: index + 1,
+                      })}
                       disabled={!editable}
                       rows={1}
                       value={lesson.title}
                       onChange={(e) =>
                         setFields((f) => ({
                           ...f,
-                          lessons: editedLessons.map((l, i) => (i === index ? { ...l, title: e.target.value } : l)),
+                          lessons: editedLessons.map((l, i) =>
+                            i === index ? { ...l, title: e.target.value } : l,
+                          ),
                         }))
                       }
                     />
                     <Textarea
-                      aria-label={t('talentReview.translations.lessonContent', { no: index + 1 })}
+                      aria-label={t('talentReview.translations.lessonContent', {
+                        no: index + 1,
+                      })}
                       disabled={!editable}
                       rows={6}
                       value={lesson.content}
                       onChange={(e) =>
                         setFields((f) => ({
                           ...f,
-                          lessons: editedLessons.map((l, i) => (i === index ? { ...l, content: e.target.value } : l)),
+                          lessons: editedLessons.map((l, i) =>
+                            i === index ? { ...l, content: e.target.value } : l,
+                          ),
                         }))
                       }
                     />
@@ -142,23 +169,37 @@ export default function TranslationDetailPage(): ReactElement {
                 <Button
                   variant='outline'
                   disabled={action.busy || !Object.keys(fields).length}
-                  onClick={() => { void (async () => {
-                    const done = await action.run({ method: 'PUT', path, json: { fields } }, t('talentReview.translations.saved'));
-                    if (done) reload();
-                  })(); }}
+                  onClick={() => {
+                    void (async () => {
+                      const done = await action.run(
+                        { method: 'PUT', path, json: { fields } },
+                        t('talentReview.translations.saved'),
+                      );
+                      if (done) reload();
+                    })();
+                  }}
                 >
                   {t('talentReview.common.save')}
                 </Button>
                 <Button
                   disabled={action.busy}
-                  onClick={() => { void (async () => {
-                    if (Object.keys(fields).length) {
-                      const saved = await action.run({ method: 'PUT', path, json: { fields } });
-                      if (!saved) return;
-                    }
-                    const done = await action.run({ method: 'POST', path: `${path}/confirm` }, t('talentReview.translations.confirmed'));
-                    if (done) reload();
-                  })(); }}
+                  onClick={() => {
+                    void (async () => {
+                      if (Object.keys(fields).length) {
+                        const saved = await action.run({
+                          method: 'PUT',
+                          path,
+                          json: { fields },
+                        });
+                        if (!saved) return;
+                      }
+                      const done = await action.run(
+                        { method: 'POST', path: `${path}/confirm` },
+                        t('talentReview.translations.confirmed'),
+                      );
+                      if (done) reload();
+                    })();
+                  }}
                 >
                   {t('talentReview.translations.confirm')}
                 </Button>

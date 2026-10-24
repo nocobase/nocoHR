@@ -1,3 +1,4 @@
+import { assertUnrestrictedNativeAIEntry } from '../../providers/native-ai/access.js';
 import { authenticationToken } from '@nocobase/app-plugin-authentication';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import type { Application } from '@nocobase/app-server/application';
@@ -108,6 +109,7 @@ export const automationApiRoutes: AppApiRouteContribution<Application> =
       const key = c.req.param('key');
       if (!AUTOMATIONS.some((a) => a.key === key))
         throw new HrError('AUTOMATION_NOT_FOUND', 404);
+      assertUnrestrictedNativeAIEntry(actor(c).authz);
       await automation.assertCanRun(actor(c), key);
       const outcome = await app.container
         .resolve(automationTasksToken)

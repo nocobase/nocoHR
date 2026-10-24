@@ -9,6 +9,8 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { databaseManagerToken, type SeedContext } from '@nocobase/db';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import { jobExecutorServiceToken } from '@nocobase/app-server/jobs';
+import { observeFixtureClose } from '../helpers/close-diagnostics.ts';
 import attendanceSettingsSeed from '../../database/main/seeds/202609290105_attendance_settings_permissions.ts';
 import leaveManagementSeed from '../../database/main/seeds/202609290106_leave_management_permissions.ts';
 import leavePageSeed from '../../database/main/seeds/202609290107_leave_page_permission.ts';
@@ -106,6 +108,11 @@ async function startAcceptanceServer() {
       storageDir: path.join(directory, 'storage'),
     },
   });
+  // These API cases drive business work explicitly; wall-clock schedules have their own coverage.
+  await server.application.container
+    .resolve(jobExecutorServiceToken)
+    .getScheduleExecutor('@nocobase/app-plugin-scheduler')
+    .shutdown();
   base = `http://localhost${server.application.publicBasePath}`;
 }
 
@@ -1422,7 +1429,12 @@ async function call(
 }
 
 afterAll(async () => {
-  await server?.close();
+  await observeFixtureClose({
+    suite: 'talent-acceptance',
+    stage: 'application',
+    application: server?.application,
+    close: () => server?.close(),
+  });
   delete process.env.HR_DEMO_PASSWORD;
   delete process.env.HR_ATTENDANCE_DEMO;
   if (directory) rmSync(directory, { recursive: true, force: true });

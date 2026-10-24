@@ -8,9 +8,9 @@
  * authorization service evaluates on the server, so the scope is never taken
  * from the model or the page. A database full-text index was not chosen
  * because the dialects differ and SQLite's tokenizer does not split Chinese;
- * vector search would need an embedding service the application does not
- * configure. The document set is small, so ranking in memory after the
- * authorized query is fast enough.
+ * the retained HR set keeps keyword ranking in memory after the authorized
+ * query. New native Knowledge has a separate official vector index; it neither
+ * imports this corpus nor replaces these citations or visibility rules.
  */
 import type { DatabaseManager, RepositoryRecord } from '@nocobase/db';
 import type { NocoBaseDriveManager } from '@nocobase/drive';
@@ -25,6 +25,7 @@ import {
   type DocumentSection,
 } from './document-text.js';
 import type { ActorContext } from './framework-service.js';
+import { assertUnrestrictedNativeAIEntry } from '../native-ai/access.js';
 import { assertUsableHrFile } from './hr-files.js';
 import { bool, json, type Platform } from './platform.js';
 import {
@@ -661,8 +662,7 @@ export function createKnowledgeService(
       // V4-13: AI drafts wait in the 待审核 tab and translations in 译文审核.
       rows = rows.filter(
         (row) =>
-          !row.translationOfId &&
-          (row.reviewStatus ?? 'confirmed') !== 'draft',
+          !row.translationOfId && (row.reviewStatus ?? 'confirmed') !== 'draft',
       );
       if (filters.competencyId) {
         const tagged = await database
@@ -1055,12 +1055,15 @@ export function createKnowledgeService(
     },
 
     async search(ctx, query, limit = 5) {
+      assertUnrestrictedNativeAIEntry(ctx.authz);
       const policies = await authorizeAction(ctx.authz, ASSISTANT, 'use');
+      const view = await authorizeAction(ctx.authz, DOCUMENT, 'view');
       const text = query.trim().slice(0, 500);
       if (!text) return [];
       const rows = (await database
         .repository('kbDocuments')
         .withPolicy(policyOf(policies, 'kbDocuments'))
+        .narrow(policyOf(view, 'kbDocuments'))
         .findMany({
           filter: { active: true, parseStatus: 'ready' },
         })) as Record<string, unknown>[];
@@ -1560,7 +1563,10 @@ export function createKnowledgeService(
       const rows = await database
         .repository('kbDocuments')
         .withPolicy(policyOf(policies, 'kbDocuments'))
-        .findMany({ filter: { active: true } });
+        .findMany({
+          filter: { active: true },
+          select: (select) => select.fields('id'),
+        });
       return new Set(
         rows.map((row) => String((row as Record<string, unknown>).id)),
       );

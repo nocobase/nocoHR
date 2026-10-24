@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 coverage/
 
@@ -17,7 +17,8 @@ coverage/
 /database.sqlite-wal
 /database.sqlite-shm
 /database/*/collections/
-/.agents/
+/.agents/*
+!/.agents/rules/
 /.claude/skills/
 /.claude/launch.json
 /.agent-annotations/

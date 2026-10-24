@@ -39,7 +39,8 @@ export type UpdatedToolCall = {
   args?: unknown;
 };
 
-export type AIConversationActiveState = 'idle' | 'streaming' | 'invoking';
+export type AIConversationActiveState =
+  'idle' | 'streaming' | 'invoking' | 'pending';
 
 export interface AIService {
   listEmployees(): Promise<AIEmployee[]>;

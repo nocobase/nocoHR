@@ -51,7 +51,7 @@ const route: AppClientRegisteredRoute = {
   path: '/settings/preferences',
   packageName: 'test',
   source: 'application',
-  auth: 'optional',
+  auth: 'required',
   navigation: { title: 'Preferences' },
   componentLoader: async () => ({ default: () => <p>Preferences content</p> }),
 };
@@ -71,7 +71,7 @@ async function setup(children: ReactNode, path = '/') {
   await runtime.init('en-US');
   const app = {
     config: createAppClientConfig({ rawConfig: {} }),
-    runtime: { settingsRouteTree: [route] },
+    runtime: { routes: [route] },
   } as unknown as ClientApplication;
   render(
     <I18nProvider runtime={runtime}>

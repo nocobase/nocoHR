@@ -1,8 +1,8 @@
 /**
  * Where a visitor returns after signing in.
  *
- * The authentication plugin's guards redirect to a fixed `/login` and, once signed in, to a fixed `/`, so a deep link
- * opened while signed out used to lose its path and query. The application's gates in `authentication-gates.tsx`
+ * The required authentication guard redirects to a fixed `/login`; the application preserves a deep link's path,
+ * query and hash and applies a stricter return-path check than the native guest guard. The application's gates in `authentication-gates.tsx`
  * carry the requested location in `?redirect=` and read it back here. The value is only ever an application-internal
  * path, relative to the router's basename: anything that could leave the application is refused.
  */

@@ -1,0 +1,70 @@
+# Client warning follow-up
+
+Baseline `f6b77e4`, fixed template `.76` / Skills `.44`. This record closes the final two reviewed lint warnings while preserving the prior seven behavior fixes. Independent review is required; the PR remains draft.
+
+## Seven approved warnings
+
+- Video reporting uses a callback stable for API/course/lesson and an effect-updated latest progress callback. Parent renders do not restart the ten-second interval. Cleanup captures the old video element because passive cleanup runs after React detaches its ref; switching lessons/unmounting can therefore send the intended final nonempty segment. Pause/end/cleanup do not duplicate an already reported segment; seek/rate limits remain.
+- Profile contacts, education and experience wrap each local draft value with a monotonic `uiId`. Deletion preserves surviving DOM identity, including duplicate content. Opening a controlled dialog resets its draft. Change comparison and the original trim/null payload unwrap values; neither IDs nor the local counter reach the API.
+- Mailbox refresh explicitly awaits the same concurrent provider/account requests and preserves the same failure message. A successful refresh does not erase an earlier error. Connection feedback and the existing two-second removal refresh remain unchanged; no new timer is added.
+- Practice reply appends employee/coach turns in `practice-service.ts`; finish only saves evaluation/status. The client preserves identity for the confirmed unchanged prefix, assigning IDs only to new display turns. Duplicate role/text/timestamp values remain distinct. Route-key remount resets local identity; the manager view still omits conversation content. IDs never enter a reply request.
+- Fill-in answers use local draft IDs independent of answer text and position. Display numbering and slash-separated alternatives retain their original order and payload. Adding, removing, switching type and opening another question preserve the intended draft boundaries.
+
+The first new component run passed eight cases and failed the old-lesson final-report assertion: a detached ref prevented that request. Retaining the old element closes that regression; the original failure log is preserved with delivery evidence. No assertion or timeout was weakened.
+
+## Final two warning fixes
+
+The approved local calendar clock is implemented in `client/pages/talent/sessions/index.tsx`. Today highlighting now refreshes at the next local calendar midnight; the timeout is computed from that boundary rather than a fixed 24-hour interval, so spring-forward and fall-back days are handled. A visible-page restoration or focus return recalibrates immediately after background suspension. Month navigation does not reset. Both timers are cleared while hidden and on unmount, and both page listeners are removed. The initial full lint exposed the effect's synchronous state update; the final implementation queues the date state refresh on a 1 ms local timer and cleans it up. This adds local timer/listener work only; it adds no request.
+
+Independent review found a timezone-portability defect in the DST test setup, not in the calendar. `it.each` now stores date factories and constructs the dates inside each test after its timezone hook; the 23-hour and 25-hour assertions remain unchanged. The original test failed 2/3 cases under `TZ=UTC`; after the fixture-only correction, all 3 calendar cases pass under the same UTC process.
+
+The approved additive report identity is implemented in `server/providers/hr/insight-service.ts` and `client/pages/talent/training-reports/index.tsx`. Every one of the ten authorized detail categories now carries a category-prefixed, readonly `rowKey: string`, used as its React row key. Completion, overdue and path rows use assignment IDs; exam rows use employee+exam IDs; missing-certificate rows use employee+qualification IDs; expiring/expired rows use employee-certificate IDs; gaps use gap IDs; attendance uses enrollment IDs; practice uses practice IDs. The attendance, practice and knowledge-gap IDs are selected in their existing scoped queries. Display columns and export values are unchanged; the key is never persisted or accepted as input. No authorization filter or policy changed.
+
+The service regression now inserts an in-period path assignment and a completed non-rehearsal practice record for an east employee, plus one of each for an out-of-scope employee, into its disposable SQLite fixture. The real report route returns both source-ID-backed keys to HR and only the in-scope keys to the east manager; the existing filtered department request retains the same keys, while a cross-scope department filter returns no employee-backed rows. All ten categories are asserted non-empty. Duplicate-name/duplicate-certificate records retain distinct keys after sorting and filtering. `DetailTable` renders only its existing columns, and this report page has no export action or export route; the separate attendance export is untouched.
+
+No new storage, migration, authorization policy, scheduler/claim/lease/retry mechanism, dependency or lock change is needed by either proposal. Neither random keys nor rule suppressions are recommended.
+
+## Verification results
+
+| Check                                     | Result / boundary                                                                                                                                                                                                                    |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Previous seven-fix component interactions | 9 passed across five changed modules; the original 8-pass/1-fail video-cleanup run is retained as historical evidence                                                                                                                |
+| Final two component regressions           | 4 passed: spring/fall DST boundaries, background/focus restoration, month navigation, cleanup, and stable same-name row identity through reorder/filter                                                                              |
+| UTC calendar test portability             | Baseline under `TZ=UTC`: 2 failed / 1 passed; date-factory fixture after the timezone hook: 3 passed; production clock logic unchanged                                                                                               |
+| Training report service regressions       | `tests/logic/training-acceptance.test.ts`: 20 passed; all ten categories return rows with source-ID-backed keys, with duplicate names, filter identity and cross-scope refusal                                                       |
+| Client and server TypeScript              | Full three-project `pnpm typecheck` passed after the final code change                                                                                                                                                               |
+| Full repository formatter                 | `pnpm format:check` passed                                                                                                                                                                                                           |
+| Full repository lint                      | `pnpm lint` passed with zero errors and zero warnings; no rule suppression                                                                                                                                                           |
+| Real source application                   | Isolated SQLite/storage, native synthetic admin login, English `/talent/sessions?view=calendar` and `/talent/training-reports` routes; calendar highlight and expiring-certificate detail shown; no page errors or external requests |
+| Preservation                              | All 138 historical source hashes, package/lock, `.54`, preflight, closed gates and 284-path ledger unchanged; [maintenance manifest](evidence/quality-warning-manifest.json) records this batch's owned-source hashes                |
+
+The final HR report response contains the following populated detail rows:
+
+| Category                         | Rows |
+| -------------------------------- | ---: |
+| Completion                       |    4 |
+| Overdue                          |    1 |
+| Exams                            |    6 |
+| Missing certification coverage   |   24 |
+| Expiring certificates            |    2 |
+| Expired certificates             |    1 |
+| Knowledge gaps                   |    3 |
+| Learning paths                   |    2 |
+| Attendance                       |    3 |
+| Completed non-rehearsal practice |    2 |
+
+The browser harness initially used a CommonJS export incorrectly, then waited for a mailbox heading as an ungranted employee; the real page correctly denies that user. A later immediate typing check ran before the Dialog's existing restore-focus animation frame after deleting the focused button. A read-only focus stack identifies that callback; waiting for its two animation frames before clicking/typing yields the complete value while retaining the same input node. Those harness failures are preserved separately, not classified as application defects or repaired by changing the primitive.
+
+## Verification and costs
+
+The new component suite exercises all five changed modules: duplicate rows and focused-node identity after removal, append/reopen and value-only submissions, video cadence/latest callback/final cleanup, both mailbox load failures and connection failure/removal completion, transcript append/finish and manager privacy. API/mail responses and time are controlled in these component tests; real business services are covered separately by the selected training/exam/prompt regressions. Browser evidence uses an isolated initialized synthetic SQLite/storage, native test authentication and real application routes; external mail/notifications/Feishu and model configuration are disabled before startup. No real user's channel is used.
+
+Local IDs and mailbox syntax add zero network, SQL, model, business-write or transaction operations. Video retains its periodic ten-second cadence and original progress endpoint/body. Restoring final-segment delivery adds **at most one existing progress POST per lesson exit** when an unreported segment of at least 0.5 seconds exists; its existing authorization/progress SQL is not zero and is not newly instrumented here. The controlled component sample observes one periodic POST, one pause POST and one final old-lesson POST, with no duplicate end/unmount POST. No model request is added. Initialization, native authentication, selected service tests and background Jobs perform real test-database reads/writes outside these component windows; they are not counted as zero or as production per-request budgets.
+
+The final browser window records **46 non-authentication GETs and 4 locale PUTs**, plus three synthetic native sign-ins; there are no business mutation POSTs because both drafts are cancelled, and no external browser requests or page errors. These counts include ordinary shell/navigation traffic, not added request requirements. Authentication/locale persistence and startup/maintenance SQL are not instrumented as zero. The two source development runs close normally through SIGINT (about 0.1 seconds each); their disposable database, storage and generated test configuration are removed after evidence capture. This is ordinary local cleanup, not a shutdown-stability acceptance run.
+
+The final real-browser verification made 26 page API requests across the two routes; a separate synthetic-authenticated report read checked all ten response lists. The browser requests include normal shell/navigation traffic and are verification activity, not added application behavior. The row identity change adds no query: three existing selects include their already-owned primary keys, and the other categories reuse IDs already selected. SQL statement counts were not separately instrumented in this browser run. There are no new persistent writes, schema fields, storage, model calls, transactions, or external requests. Test setup created four additional disposable report rows (two path assignments and two practice sessions); those writes are confined to the temporary test database and are not production cost.
+
+The calendar screenshot is `evidence/quality-warning-final/sessions-calendar-en.png`; the report screenshot is `evidence/quality-warning-final/training-report-details-en.png`. Both show real English application routes on the isolated source instance, not a component harness. The report screenshot shows the expiring-certificate detail with a populated row. The browser suite does not validate every deployment timezone or PDF/other unrelated acceptance paths.
+
+No full-suite shutdown stress rerun or compiled build is part of this quality unit. The previous Jobs-only adapter remains uninstalled after failing the reconciliation-concurrency prerequisite, and historical close failures and final-head integration acceptance remain open. The old official-workspace configuration gap has been resolved: PM-668 has an active official `nocobase/nocobase` `v3-develop` implementation run for the approved Scheduler/Jobs contract, but it is not yet independently reviewed, CI-verified, owner-approved or released. This application unit does not update dependencies or install an adapter; application integration still requires an authorized exact release, any applicable dependency approval, the public thin adapter, and final shutdown/build/start/restore acceptance. Persistent knowledge Q&A stays deferred; nonexistent old-environment migration/restore remains not applicable. The ownership ledger, lock, 138 historical sources, preflight, gates and `.54` remain unchanged.

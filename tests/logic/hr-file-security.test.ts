@@ -6,6 +6,9 @@
 // video endpoint serves only a video, with nosniff, a sandbox CSP and an inline disposition, streaming exactly the
 // requested byte range; a practical record keeps only the photos taken on it.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { observeFixtureClose } from '../helpers/close-diagnostics.ts';
+import { observeSchedulerClose } from '../helpers/scheduler-close-diagnostics.ts';
+import { observeMailClose } from '../helpers/mail-close-diagnostics.ts';
 
 import {
   PASSWORD,
@@ -14,14 +17,35 @@ import {
 } from './talent-review-harness.ts';
 
 let h: Harness;
+let schedulerDiagnostics: ReturnType<typeof observeSchedulerClose>;
+let mailDiagnostics: ReturnType<typeof observeMailClose>;
 const cookies = new Map<string, string>();
 
 beforeAll(async () => {
   h = await startHarness('hr-file-security');
+  schedulerDiagnostics = observeSchedulerClose(
+    h.server.application,
+    'hr-file-security',
+  );
+  mailDiagnostics = observeMailClose(h.server.application, 'hr-file-security');
 }, 240_000);
 
 afterAll(async () => {
-  await h?.close();
+  try {
+    await observeFixtureClose({
+      suite: 'hr-file-security',
+      stage: 'application',
+      application: h?.server.application,
+      state: () => ({
+        ...schedulerDiagnostics?.snapshot(),
+        ...mailDiagnostics?.snapshot(),
+      }),
+      close: () => h?.close(),
+    });
+  } finally {
+    mailDiagnostics?.restore();
+    schedulerDiagnostics?.restore();
+  }
 });
 
 async function cookieOf(username: string): Promise<string> {

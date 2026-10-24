@@ -1,0 +1,425 @@
+{
+  "title": "Quality cleanup source ownership and hash manifest",
+  "baseCommit": "bf643ff",
+  "fixedTemplate": ".76",
+  "fixedSkills": ".44",
+  "formatBacklog": {
+    "baselineCount": 54,
+    "formattedCount": 54,
+    "directHistoricalSourceCount": 0,
+    "seedDataHelpers": [
+      "database/seed-data/demo-exams.ts",
+      "database/seed-data/demo-recruiting.ts",
+      "database/seed-data/demo-training.ts"
+    ]
+  },
+  "lint": {
+    "baselineErrors": 0,
+    "baselineWarnings": 17,
+    "currentErrors": 0,
+    "currentWarnings": 9,
+    "resolvedWarnings": 8,
+    "suppressionsOrRuleChanges": 0,
+    "mechanicalChanges": {
+      "client/pages/settings/departments/index.tsx": "useState initial draft changed to a lazy initializer",
+      "client/pages/talent/training-reports/index.tsx": "date useState initializers changed to lazy initializers",
+      "client/pages/talent/employees/index.tsx": "timer ref renamed to timerRef",
+      "client/pages/talent/learning/video-lesson.tsx": "video, furthest and segmentStart refs renamed with Ref suffix",
+      "client/pages/talent/questions/index.tsx": "fileInput ref renamed to fileInputRef"
+    }
+  },
+  "historicalSources": {
+    "count": 138,
+    "perFileSha256ManifestSha256": "f7fee5d7fb2846aa1d7be4975db711ff6755c30d1c8e079cfc1d27b88e5280db",
+    "allUnchanged": true
+  },
+  "historicalSeedConsumers": [
+    {
+      "path": "database/main/seeds/202609280103_hr_demo_exams.ts",
+      "sha256": "7faac0d26fa18744929ef5f7523666570f235b359626accacd42fa73898aa204",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202609290102_hr_demo_training.ts",
+      "sha256": "2d7baca982abcec035b6ef120c82e554787d7b6066cadf4ba41ba2d9324a721f",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610090102_demo_recruiting.ts",
+      "sha256": "152ac653deacbb7861e09d120fd04ac3206545a3baec5236d9f6848ab69daff9",
+      "unchanged": true
+    },
+    {
+      "path": "database/main/seeds/202610160104_demo_mail_recruiting.ts",
+      "sha256": "d627e17aa159426066124809cfd55398e3b42eeafe022f1b26160e3dcb475ab1",
+      "unchanged": true
+    }
+  ],
+  "seedExportSnapshot": {
+    "sha256": "9d217d4af50c129729af57af6bffdae1b1c75d51701dc6da6c3099910c0891d3",
+    "beforeAndAfterByteIdentical": true,
+    "snapshotScope": "runtime export keys and values, resume text and generated DOCX byte hashes"
+  },
+  "templateOwnershipLedger": {
+    "path": "server/providers/upgrade/template-ownership.tsv",
+    "lineCount": 285,
+    "sha256": "01cefe994ceaee7d10bff275e8f02a34eb803040e63ff01958aedba4d39c1702",
+    "updated": false,
+    "reason": "None of the 58 quality-cleanup source paths is in the 284-path .54-to-.76 template delta; this batch is application-owned quality cleanup, not an upstream template ownership change."
+  },
+  "sourceFiles": [
+    {
+      "path": "client/components/talent/growth.tsx",
+      "classification": "format-only",
+      "beforeSha256": "902fba3b4b3d50cf38c88d29e03170bfe8bef4e8aa26c65ae67b5081004d48ce",
+      "afterSha256": "427754e17ee5b1d91cb030524419d86420b3e97a1e125fb3efd7a53d3c97d3ac"
+    },
+    {
+      "path": "client/components/talent/talent-review-agent-connect.tsx",
+      "classification": "format-only",
+      "beforeSha256": "25d60dd74c62d59816d337cb754e266b5bfc5b70afa8cbac7217c9ff6b997149",
+      "afterSha256": "672da167564400477f0b291b45b0c5f9b1e96129bb7031bceee778b3170e55c8"
+    },
+    {
+      "path": "client/components/talent/talent-review-cert-practicals.tsx",
+      "classification": "format-only",
+      "beforeSha256": "e9ab80ce9a721fcf41038f3201fe2b32c8b6216de9ea8c7726d3c8a4d2055051",
+      "afterSha256": "c52f20298fdc5a5dc7d3bbec53b140c2e1d5e9b2228e7a9c128ea044fdce59a2"
+    },
+    {
+      "path": "client/components/talent/talent-review-evaluation-form.tsx",
+      "classification": "format-only",
+      "beforeSha256": "33526091a2664a3bf569c600db00cd8de2ba6c2dbe7f142fd39a452ad807b57a",
+      "afterSha256": "435d37e84eca2f97c9cd60ea847218bf7af2411675171fde680870671356bc37"
+    },
+    {
+      "path": "client/components/talent/talent-review-kb-pending.tsx",
+      "classification": "format-only",
+      "beforeSha256": "bf25f6a5b4a4010a06afcc822044950bed2cf34718f54d4b2de9956e50847034",
+      "afterSha256": "adc920a77c3f1223f4c8e9f9b2d7f94ef017516a0a58cc7bc3cafa3ae8955c32"
+    },
+    {
+      "path": "client/components/talent/talent-review-lib.ts",
+      "classification": "format-only",
+      "beforeSha256": "c546a46b529ac98456954ae63327d653b02700189d86f505a1f505d24e7e7e20",
+      "afterSha256": "42ce7c8a8be49e9723d6fad0d1f1569e76a06d7ff3c473d492492845eae0691c"
+    },
+    {
+      "path": "client/components/talent/talent-review-model-versions.tsx",
+      "classification": "format-only",
+      "beforeSha256": "7ad5d5e652db310c83b392d269b7e12c2403f9888886c11b54b2ba74bfdc9935",
+      "afterSha256": "89372b1308cb7ea45acd3141fe420f79aacffa0a7d1d63c84948e493bd99269b"
+    },
+    {
+      "path": "client/components/talent/talent-review-nine-box.tsx",
+      "classification": "format-only",
+      "beforeSha256": "7800d6a166fe90b9d2b4b4651b2dd6dfd981a2500cfb5dee8a2ae2a8311dbeb3",
+      "afterSha256": "e9db2fb164c16c3da08a52308e96e0e93e25c2efe351248521e96cf378f65c71"
+    },
+    {
+      "path": "client/components/talent/talent-review-shared.tsx",
+      "classification": "format-only",
+      "beforeSha256": "3ca0f4888cdfda97b101c47a285b367c46eaa16d5be3648e92c0eaed66efd8ee",
+      "afterSha256": "6bcc944fd65078da2717248f69a3e7c31c46866d4bedf81b7c576750c424fd25"
+    },
+    {
+      "path": "client/components/talent/talent-review-translate-button.tsx",
+      "classification": "format-only",
+      "beforeSha256": "c44e77b5f2b0aeb69274117d818472a24e22d7f08ebb774fd76684ab4b1b2ee8",
+      "afterSha256": "7125dd88f39a76d55d36183cc6c963e810a15ac569d69d303092c1aa9d743d87"
+    },
+    {
+      "path": "client/locales/modules/talent-review.ts",
+      "classification": "format-only",
+      "beforeSha256": "36d59f48e1e13a32d995ae4d2ef5d89e718da333becd67b48139bb746b6ece78",
+      "afterSha256": "01baf5a9b7983fa5897b56ac8950abdf23381e4ede20d368c75b043c18d141df"
+    },
+    {
+      "path": "client/pages/settings/agent-clients/index.tsx",
+      "classification": "format-only",
+      "beforeSha256": "5fa3f9c8ae331268f02eed5119f97abf5c304817a78866f262994e2e5fbd40b5",
+      "afterSha256": "19680f307ad172f2d83128552ac21a44666586a8eab1b0b8d1656337062bd59b"
+    },
+    {
+      "path": "client/pages/settings/departments/index.tsx",
+      "classification": "format-and-lint-mechanical",
+      "beforeSha256": "6b1c26d6e8fe857f9d4be6657153b35ad72b737c0695832c9bf3501373adf30f",
+      "afterSha256": "8af62e3b2e65e26db3ea32d7748e26b0d2e36c4685e99fe3ff1b7b0c57c2a0cf",
+      "lintChange": "useState initial draft changed to a lazy initializer"
+    },
+    {
+      "path": "client/pages/talent/employees/index.tsx",
+      "classification": "lint-mechanical",
+      "beforeSha256": "b079ccd0aa9c399e433062ff8c77039d6c168a70b2e0bcba97f011023bda07bb",
+      "afterSha256": "5c6d222dd910a78edd012f0b43e0919f77e3d51207da0ca32de55181e502e514",
+      "lintChange": "timer ref renamed to timerRef"
+    },
+    {
+      "path": "client/pages/talent/instructors/index.tsx",
+      "classification": "format-only",
+      "beforeSha256": "b3db2fd92120dd001ce39ee3e1a50af72c51843f922ad50605d08b94c0cd4b18",
+      "afterSha256": "142e216a3f5a3de80047bfd6c7c9eecba977918393ccfa2fd418030dbf09146d"
+    },
+    {
+      "path": "client/pages/talent/learning/video-lesson.tsx",
+      "classification": "lint-mechanical",
+      "beforeSha256": "0fad76a6851c2be4f4ca0a8a910ebf87573f11653ada7b69f346ce8ceba43432",
+      "afterSha256": "bf2b0c8af11c95951de2e3e5507392b66e3a894ca0f8f9f14a8afb0c60ed430a",
+      "lintChange": "video, furthest and segmentStart refs renamed with Ref suffix"
+    },
+    {
+      "path": "client/pages/talent/payroll/cycle/overview.tsx",
+      "classification": "format-only",
+      "beforeSha256": "a217f2c970048a5d3639246a1a5e2603eeb009a554f7d47201b5d7c58b6cac94",
+      "afterSha256": "e2afeb4d6f649fd7f9e9247d2c063477565fd94d7da80a80404ebf9beccc36bb"
+    },
+    {
+      "path": "client/pages/talent/practicals/index.tsx",
+      "classification": "format-only",
+      "beforeSha256": "3ae6dcf42103e956a171b85cf32891ec636daa68ffa92336171d295e62fb0df3",
+      "afterSha256": "d442d19b56c057342465fb5918985d0754c450f35453559c9bda036d3d12927a"
+    },
+    {
+      "path": "client/pages/talent/questions/index.tsx",
+      "classification": "lint-mechanical",
+      "beforeSha256": "2751b737ad3cf1e062dd3934c4af205259a7c1b5d8179d73b12e5ed6803b033b",
+      "afterSha256": "eca49cd1b3d49555a750c4f9ceb860d4e1ebf0256ef8a2309e4fb050832f129d",
+      "lintChange": "fileInput ref renamed to fileInputRef"
+    },
+    {
+      "path": "client/pages/talent/succession/index.tsx",
+      "classification": "format-only",
+      "beforeSha256": "05fc685efdba16b27caa60349fb365ab47e9a650519205c83c1296a2d3b548c1",
+      "afterSha256": "2b069a4f213cdffe64e49807c9ef496f469ed2218d67d2a8dd678a4bde2caa9c"
+    },
+    {
+      "path": "client/pages/talent/talent-reviews/index.tsx",
+      "classification": "format-only",
+      "beforeSha256": "fb9c5765439c08e4e7e36867aa0cc17e187fb7ea0a8bfff1324256c6de105828",
+      "afterSha256": "17ce8eafb80e82ba36a6eee03f1caa20f03e3c10363ad17b98eecebead2ada2f"
+    },
+    {
+      "path": "client/pages/talent/training-reports/index.tsx",
+      "classification": "lint-mechanical",
+      "beforeSha256": "d9cb34655e7aba5db2f3d26e76d8be77378dcbac751db9e2a412300d71837d1b",
+      "afterSha256": "a6f1fbe77da6100155ab4fbe8f81b85d50af6ed41666210b341bda970cca5bdb",
+      "lintChange": "date useState initializers changed to lazy initializers"
+    },
+    {
+      "path": "client/pages/talent/translations/index.tsx",
+      "classification": "format-only",
+      "beforeSha256": "c4239090293e1adcba31d11ba451b8c3b17251a1aa48257a5b370935425dd460",
+      "afterSha256": "91f163158fd2d0fe2a7b26d9f0d9081c90b36474a8ee6c72890934ca4d9c7134"
+    },
+    {
+      "path": "database/seed-data/demo-exams.ts",
+      "classification": "format-only",
+      "beforeSha256": "c1cf3bff8309b5b927c10194d97e99fdb98feee608eabb3421a763b7e462a51b",
+      "afterSha256": "0507fa14d7de9271086f1d62421162cfb535a77d4aa99d65937d9ec1039f7435"
+    },
+    {
+      "path": "database/seed-data/demo-recruiting.ts",
+      "classification": "format-only",
+      "beforeSha256": "d5b1420f31a89f38c7f5d2bab2a4495307ae19fa8711c48dab6c6edbe581ae9f",
+      "afterSha256": "571297a0b1653d49957dd764dd3e12daebb77eaf6ac3f7dd2e15b5a8ca4783a8"
+    },
+    {
+      "path": "database/seed-data/demo-training.ts",
+      "classification": "format-only",
+      "beforeSha256": "b49a116356da752cd48f708e0701fef755d2631117cea3b3afb62784e193d750",
+      "afterSha256": "4757b4fdd720e1b1c1529cf3cce2542ffb1d529c1f9ff19c61324a9e0174cf96"
+    },
+    {
+      "path": "server/locales/modules/talent-review.ts",
+      "classification": "format-only",
+      "beforeSha256": "21a6d75071fd478286529bae3948493e9b97d7e7df37e21b1f60083afb48ef3b",
+      "afterSha256": "07fe06b25891a7ef5e67ac0655d24cbffefaaa4fcf890ba48d2c79a53081703c"
+    },
+    {
+      "path": "server/providers/hr/attendance-cards.ts",
+      "classification": "format-only",
+      "beforeSha256": "525a86dc54946329df7cc7940e2c7afa6bdd328a9541e9b81493389634e70e5f",
+      "afterSha256": "677fc6d03904ec4a394b726d253303f8610b52961e5fa69927158185eae84d32"
+    },
+    {
+      "path": "server/providers/hr/authz-resources.ts",
+      "classification": "format-only",
+      "beforeSha256": "d982ae763d0673fcc42ba04793afc6980585a0d228f3a76fd9bd8ff2954d473f",
+      "afterSha256": "26a4c58fd014130946bc692de52fa876fdd5dfa337abf7b3a2a3b295142bb3ac"
+    },
+    {
+      "path": "server/providers/hr/payroll/salaries.ts",
+      "classification": "format-only",
+      "beforeSha256": "b7c25b4ace298fde342a1ef402d304d337a7146c5ae8ef8ce5fed29b6cc4c433",
+      "afterSha256": "0d815b22c1d7dac7b0b6a261676e21111cdcd4fd8a5cb6d2e881b86617872cbf"
+    },
+    {
+      "path": "server/providers/hr/recruiting/calendar.ts",
+      "classification": "format-only",
+      "beforeSha256": "436d42f3f0e0897e7f82584e9cd6ab5b5ee606d62033ade90d76578642fbace1",
+      "afterSha256": "e5b4f6002b7d38e925a810efe7522c2558ce673f1b816d2db59333c828b25789"
+    },
+    {
+      "path": "server/providers/hr/recruiting/checkins.ts",
+      "classification": "format-only",
+      "beforeSha256": "c050188971f27e6487515140d89432e0f44002549cd7dda39fda371af696337c",
+      "afterSha256": "2ec72c5df522d19561622ea032722e5b970e81ca64ca7d77d973047e5df7e0a5"
+    },
+    {
+      "path": "server/providers/hr/recruiting/config.ts",
+      "classification": "format-only",
+      "beforeSha256": "5a82cf37b143c451615d8d0fd6e35ffc1e5ff532814bc928c9f6e1329c7bce1a",
+      "afterSha256": "c7a88bea9a50ef778cf1682c69aeeb790c81665c6f64b53fe953e125ee8675fe"
+    },
+    {
+      "path": "server/providers/hr/recruiting/index.ts",
+      "classification": "format-only",
+      "beforeSha256": "b7af528e816430b4d910cd08984f1d97f62e7ec30412853f0c54931e0f6ef390",
+      "afterSha256": "3687d0dba6da7b2be011d3cdc431e4baa24b33f87b4d7171e2b6a5d2afa71695"
+    },
+    {
+      "path": "server/providers/hr/recruiting/reports.ts",
+      "classification": "format-only",
+      "beforeSha256": "6136c8fe6ae3c3cd2c553030507043625c83019dda51e53615956af6c4a225b9",
+      "afterSha256": "7399ee60cab96d66b7151b82e09c28501549f7ab841054bfb88de652a10c7eda"
+    },
+    {
+      "path": "server/providers/hr/recruiting/resources.ts",
+      "classification": "format-only",
+      "beforeSha256": "0ce5237612869cf4bebe4ae180728eab8fb85c696fa372d2e9fdab307a603a7f",
+      "afterSha256": "9b64c7e180d23dd52b6ace1d1bd4fba961ac6662ec5c389477601adc4ef08144"
+    },
+    {
+      "path": "server/providers/hr/recruiting/tasks.ts",
+      "classification": "format-only",
+      "beforeSha256": "cdb379cef9ee6a17676c1d33522834a903b8bd400e8248309be1cb81b5678158",
+      "afterSha256": "40a8600a37f529ec1299ee1f26e71d3cb6f3d3a23f3f049f0efe3399daeb9227"
+    },
+    {
+      "path": "server/providers/hr/recruiting/workforce.ts",
+      "classification": "format-only",
+      "beforeSha256": "2c48b88840b40dae58d2abca944efe7b5160e064ef00ca9ff1c682889f98b9f9",
+      "afterSha256": "3cd70462f984f354fe56e93420bfdcfbfa97634eef1c7bfac03521e92dc0893a"
+    },
+    {
+      "path": "server/providers/hr/talent-review/agents.ts",
+      "classification": "format-only",
+      "beforeSha256": "2104854c6ca0b3ea007819cd393df3365b506207da8b9448a513be7c46224a1a",
+      "afterSha256": "359c2c468bb2c9c8f2e0b7117542015abe44c3a260d9452a816e70a407a8960d"
+    },
+    {
+      "path": "server/providers/hr/talent-review/evaluations.ts",
+      "classification": "format-only",
+      "beforeSha256": "0fe3f89383d4ac7adc4a018bed7a1934dc053163478d1f695621cf8185ead303",
+      "afterSha256": "925d0b9930791c7f36f7c1e45515330f568078bb9394b8617975af79d199f85b"
+    },
+    {
+      "path": "server/providers/hr/talent-review/evidence.ts",
+      "classification": "format-only",
+      "beforeSha256": "8a30664efc3775fc7d059b8b4d15fb63205b560d84f61fcb37779850b8c64296",
+      "afterSha256": "302e5c94056a2bc03b46c6805837fe827b71031d723c4063bf0a43491fcec36f"
+    },
+    {
+      "path": "server/providers/hr/talent-review/instructors.ts",
+      "classification": "format-only",
+      "beforeSha256": "014386a772feeefa989f5865fa2f51ade551fd0b79f4b295923c388ad313af8c",
+      "afterSha256": "acdc80c0907f7f404ca6b0f2818e76110626f8e279c261ddeaf9d9900b52b233"
+    },
+    {
+      "path": "server/providers/hr/talent-review/model-versions.ts",
+      "classification": "format-only",
+      "beforeSha256": "46045082c00f7b3f689f2cff22deea9927ac9d23fa30718fec93440358bee525",
+      "afterSha256": "f0ef6a0e2ebe74ed01f65bf1a199ea9efed0618517fbd9b46541a6bc5f6091eb"
+    },
+    {
+      "path": "server/providers/hr/talent-review/record-access.ts",
+      "classification": "format-only",
+      "beforeSha256": "0d076b2bdf6e1f13485b163ce805f8cdd7b33e73bf80838cde19ca0775efe372",
+      "afterSha256": "80f22cad030d9fb8482c9901b875fc433f78393c00791f49213eb7cffb406cf4"
+    },
+    {
+      "path": "server/providers/hr/talent-review/resources.ts",
+      "classification": "format-only",
+      "beforeSha256": "8a393162972cf260872d91cee82be7bd98cd56eccfa93d4971302eb1c9b26b6c",
+      "afterSha256": "7773f6a13cf7acbd9932538bc203d15b002eaacbad580dd38a3bba7a3109778c"
+    },
+    {
+      "path": "server/providers/hr/talent-review/reviews.ts",
+      "classification": "format-only",
+      "beforeSha256": "65202752d2b0c9a3e0ea75952690572ce5cefa2c898e5e0eb3e481b89686ebfd",
+      "afterSha256": "99ea152361608d06b9bc15915372cbf7603bf9f70ea767f8f120ac93078255d6"
+    },
+    {
+      "path": "server/providers/hr/talent-review/succession.ts",
+      "classification": "format-only",
+      "beforeSha256": "4dc2ebf459bcf3d7da91b6937aa39d0b37c8e762cb90ccbaf7fc23dc64c43260",
+      "afterSha256": "774d68a197663af782600bb2f4a3655e3f285f5fc9481e0cb2fc44a658c88283"
+    },
+    {
+      "path": "server/routes/hr/agent-mcp.ts",
+      "classification": "format-only",
+      "beforeSha256": "b3facc4c5d696953d07907f51d3b99894132bd257f7a92c3560278f5ff714163",
+      "afterSha256": "fe7317c5ecf0c38dc2baf12d8f3c6b398841b6dd812565e7463ab4fa25863a90"
+    },
+    {
+      "path": "server/routes/hr/recruiting.ts",
+      "classification": "format-only",
+      "beforeSha256": "7a88a93f4940ff1a1732f91ced161376bb28d3fbf5c4e3815bf9e74c670f113c",
+      "afterSha256": "55e2691d4232bebf55e23a01b130f94aca758f096e8e037a7e0b418f62661f03"
+    },
+    {
+      "path": "server/routes/hr/talent-review.ts",
+      "classification": "format-only",
+      "beforeSha256": "c47ed959d9e49b178a715ee7216196bc75ecdfa88ff4537ae9d5cd117e46409e",
+      "afterSha256": "aaaa6279899441158e8b3fbc2e1b09492b93939c738a46b2b9b5e5f70194ff1c"
+    },
+    {
+      "path": "tests/components/talent-review-evaluation-form.test.tsx",
+      "classification": "format-only",
+      "beforeSha256": "89c97ecb960e5d7d5537a2a0a6d8bbff2e3092ad53d1169bafc8b33f1d21ab6d",
+      "afterSha256": "ee15b3b8ee409d9eb037e768ce75f618073bd86319f4e341ed59e38d678b106d"
+    },
+    {
+      "path": "tests/components/talent-review-nine-box.test.tsx",
+      "classification": "format-only",
+      "beforeSha256": "12c5ebe959b4df42d5f4d6421b430bf46fe6b69322d134447331eab617663ce4",
+      "afterSha256": "d955fc13a43380a958829d7430184e7c1140c2f8f064b4c1ed6a068d0eba0ed8"
+    },
+    {
+      "path": "tests/logic/document-changes.test.ts",
+      "classification": "format-only",
+      "beforeSha256": "68fbe011d857da95ccfade34a8f2e8c45b8d3279e65181ec197f42a83a84d8c5",
+      "afterSha256": "7efd87d1e93dcc43f1cdc69d2228808df5e647f537dea8f91cd64fb89c35592b"
+    },
+    {
+      "path": "tests/logic/recruiting-schema.test.ts",
+      "classification": "format-only",
+      "beforeSha256": "315a842879d698b578938e3e13893706d97f815b2815821231bd27b6d6b94fa8",
+      "afterSha256": "fdd76018e3f911ef649dbd3ca21ba42a22373ea7008665f59f1008fad5a01629"
+    },
+    {
+      "path": "tests/logic/talent-review-schema.test.ts",
+      "classification": "format-only",
+      "beforeSha256": "20e1fa4d5fc4220f2e87feb4be0cd91c896d5f45764e542fc2d9ca7bc9656cbd",
+      "afterSha256": "e73da9a0c2a8efb05d07319a9df94611a751bfca118eec92cacdfd04e068b9d6"
+    },
+    {
+      "path": "tests/logic/v2-leave-custom-fields.test.ts",
+      "classification": "format-only",
+      "beforeSha256": "a17890b666d926ad4453c10ce05abb51521b7644fc7e9726da434f5d2cf52258",
+      "afterSha256": "57b777fb0ab9fb56be65b1a479d7d4487b66415fd62b50a0ef2cf7949e9b44db"
+    },
+    {
+      "path": "tests/logic/v4-agent-clients.test.ts",
+      "classification": "format-only",
+      "beforeSha256": "fdf97cdc12728cb724cc191d027f55b5f0c4a5715f7f136df7dd0ae30e7d1f20",
+      "afterSha256": "73e1b153ba00fbcf5bf9f7a6d7dd74ca00d1fec3430de06d46608bd1fd0d103b"
+    },
+    {
+      "path": "tests/logic/v4-talent-review-13b.test.ts",
+      "classification": "format-only",
+      "beforeSha256": "6bab175d4fc81211abba562673caa19ee23c4f7e16c76d41cfb05eacaee8ce5e",
+      "afterSha256": "1d2ff777a27c61d12d65d3bc8eeec3794c274ec3a83a037acd6882cd8d455214"
+    }
+  ]
+}

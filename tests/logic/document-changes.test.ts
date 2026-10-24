@@ -43,10 +43,15 @@ describe('document changes', () => {
     expect(
       diffSections(V40, V40.replace(/# 6\.1 设备点检\n每班开工前点检。/u, '')),
     ).toEqual([
-      expect.objectContaining({ sectionTitle: '6.1 设备点检', changeType: 'removed' }),
+      expect.objectContaining({
+        sectionTitle: '6.1 设备点检',
+        changeType: 'removed',
+      }),
     ]);
     // Reformatting is not a change.
-    expect(diffSections(V40, V40.replace('15 分钟', '**15 分钟**'))).toEqual([]);
+    expect(diffSections(V40, V40.replace('15 分钟', '**15 分钟**'))).toEqual(
+      [],
+    );
   });
 
   it('finds content quoting the replaced text, and the numbers that changed', () => {
@@ -58,7 +63,9 @@ describe('document changes', () => {
     expect(touchesChange('每班开工前点检。', interruption)).toBe(false);
     const [pair] = replacedQuantities(interruption);
     expect([pair.from.text, pair.to.text]).toEqual(['15 分钟', '10 分钟']);
-    expect(replaceQuantity(lesson, pair.from, pair.to)).toContain('**10 分钟**');
+    expect(replaceQuantity(lesson, pair.from, pair.to)).toContain(
+      '**10 分钟**',
+    );
   });
 
   it('flags the same statement with a different number in another document', () => {
@@ -71,7 +78,10 @@ describe('document changes', () => {
     expect(conflicts[0]?.otherQuantity.text).toBe('15 分钟');
     // Different subjects with different numbers are not a conflict.
     expect(
-      numericConflicts(interruption.after ?? '', 'B 级区内每 30 分钟用 75% 乙醇消毒手套。'),
+      numericConflicts(
+        interruption.after ?? '',
+        'B 级区内每 30 分钟用 75% 乙醇消毒手套。',
+      ),
     ).toEqual([]);
   });
 

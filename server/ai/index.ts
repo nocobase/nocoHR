@@ -1,5 +1,12 @@
-import type { AIEmployeeManager, ToolsManager } from '@nocobase/ai-employee';
-import { AIResourceRegistrar } from '@nocobase/app-plugin-ai-employee/server';
+import type { AIEmployeeOptions, RegisteredTool } from './contracts.js';
+
+interface EmployeeRegistration {
+  registerEmployee(employee: AIEmployeeOptions): Promise<void>;
+}
+
+interface ToolRegistration {
+  registerTools(tools: RegisteredTool[]): Promise<void>;
+}
 
 import certificationSteward from './employees/certification-steward/index.js';
 import contentWriter from './employees/content-writer/index.js';
@@ -110,9 +117,36 @@ import {
   sendLearningNudge,
 } from './tools/training-tools.js';
 
-export default class AppAIResources extends AIResourceRegistrar {
-  protected override async registerAIEmployees(
-    manager: AIEmployeeManager,
+export default class AppAIResources {
+  public async collect(): Promise<{
+    employees: ReadonlyMap<string, AIEmployeeOptions>;
+    tools: ReadonlyMap<string, RegisteredTool>;
+  }> {
+    const employees = new Map<string, AIEmployeeOptions>();
+    const tools = new Map<string, RegisteredTool>();
+    await this.registerTools({
+      async registerTools(entries) {
+        for (const tool of entries) {
+          if (tools.has(tool.definition.name))
+            throw new Error('DUPLICATE_AI_TOOL');
+          tools.set(tool.definition.name, tool);
+        }
+      },
+    });
+    await this.registerAIEmployees({
+      async registerEmployee(employee) {
+        if (employees.has(employee.username))
+          throw new Error('DUPLICATE_AI_EMPLOYEE');
+        for (const tool of employee.tools ?? [])
+          if (!tools.has(tool.name))
+            throw new Error('EMPLOYEE_TOOL_NOT_REGISTERED');
+        employees.set(employee.username, employee);
+      },
+    });
+    return { employees, tools };
+  }
+  protected async registerAIEmployees(
+    manager: EmployeeRegistration,
   ): Promise<void> {
     // V2-06: the HR assistant also explains payslips and checks payroll (prompt points and tools in payroll-tools.ts).
     await manager.registerEmployee(
@@ -141,7 +175,7 @@ export default class AppAIResources extends AIResourceRegistrar {
     await manager.registerEmployee(performanceAssistant);
   }
 
-  protected override async registerTools(manager: ToolsManager): Promise<void> {
+  protected async registerTools(manager: ToolRegistration): Promise<void> {
     await manager.registerTools([
       listImportIssues,
       sendHrDigest,

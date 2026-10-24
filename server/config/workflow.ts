@@ -2,23 +2,22 @@ import {
   defineAppConfig,
   type AppConfigFactory,
 } from '@nocobase/app-server/config';
-import type { WorkflowRuntimeConfig } from '@nocobase/app-plugin-workflow/server';
-import { resolveWorkflowRuntimeConfig } from '@nocobase/app-plugin-workflow/server';
+
+/** Legacy configuration retained for inventory; execution belongs to the application process runtime. */
+interface WorkflowRuntimeConfig {
+  readonly sourceRoot: string;
+  readonly distRoot: string;
+  readonly artifactDisk: string;
+  readonly production: boolean;
+}
 
 const workflow: AppConfigFactory<WorkflowRuntimeConfig> = defineAppConfig(
-  ({ paths, env }) =>
-    resolveWorkflowRuntimeConfig(
-      {
-        sourceRoot: paths.root('workflows'),
-        distRoot: paths.root('workflows'),
-        artifactDisk: 'local',
-        production: env.NODE_ENV === 'production',
-      },
-      {
-        rootDir: paths.root(),
-        serverDir: paths.server(),
-      },
-    ),
+  ({ paths, env }) => ({
+    sourceRoot: paths.root('workflows'),
+    distRoot: paths.root('workflows'),
+    artifactDisk: 'local',
+    production: env.NODE_ENV === 'production',
+  }),
 );
 
 export default workflow;

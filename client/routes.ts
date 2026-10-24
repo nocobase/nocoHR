@@ -1,3 +1,4 @@
+import devRoutes from './dev-routes.js';
 import {
   Award,
   Bot,
@@ -34,7 +35,6 @@ import {
   SlidersHorizontal,
   LayoutGrid,
   Sparkles,
-  RadioTower,
   ShieldCheck,
   Columns3,
 } from 'lucide-react';
@@ -84,10 +84,11 @@ import {
 import { Rocket } from 'lucide-react';
 import {
   defineAppRoutes,
-  defineDevRoutes,
-  defineSettingsRoutes,
   type AppClientRouteContribution,
 } from '@nocobase/app-client/plugins';
+
+import { DEVICE_AUTHORIZATION_ENABLED } from '../shared/device-authorization.js';
+import systemSettingsRoutes from './pages/settings/routes.js';
 
 const page = (id: string) =>
   ({ resource: { type: 'page', id }, action: 'access' }) as const;
@@ -1510,232 +1511,258 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
   },
 ]);
 
-const settingsRoutes: AppClientRouteContribution = defineSettingsRoutes([
+const settingsRoutes: AppClientRouteContribution = defineAppRoutes([
   {
-    // 上线准备: the go-live steps in order with their status (hr.admin; payroll sees its own steps).
-    name: 'talent-go-live',
-    path: '/go-live',
-    navigation: { title: 'navigation.goLive', icon: Rocket },
-    authz: page('talent.goLive'),
-    componentLoader: () => import('./pages/settings/go-live/index.js'),
-  },
-  {
-    name: 'talent-attendance-settings',
-    path: '/attendance',
-    navigation: { title: 'attendance.settings.title', icon: SlidersHorizontal },
-    authz: page('talent.attendanceSettings'),
-    componentLoader: () => import('./pages/settings/attendance/index.js'),
+    name: 'nocohr-settings',
+    path: '/settings',
+    navigation: { title: 'settings.title' },
     children: [
       {
-        name: 'talent-attendance-catalog-new',
-        path: ':kind/new',
-        componentLoader: () =>
-          import('./pages/settings/attendance/catalog/edit.js'),
+        // 上线准备: the go-live steps in order with their status (hr.admin; payroll sees its own steps).
+        name: 'talent-go-live',
+        path: '/go-live',
+        navigation: { title: 'navigation.goLive', icon: Rocket },
+        authz: page('talent.goLive'),
+        componentLoader: () => import('./pages/settings/go-live/index.js'),
       },
       {
-        name: 'talent-attendance-catalog-edit',
-        path: ':kind/:recordId/edit',
-        componentLoader: () =>
-          import('./pages/settings/attendance/catalog/edit.js'),
-      },
-    ],
-  },
-  {
-    name: 'talent-personnel-settings',
-    path: '/personnel',
-    navigation: { title: 'personnelSettings.title', icon: SlidersHorizontal },
-    authz: {
-      resource: { type: 'settings', id: 'talent.hr' },
-      action: 'administer',
-    },
-    componentLoader: () => import('./pages/settings/personnel/index.js'),
-  },
-  {
-    // V4-14 设置 / 持证上岗: the industry pack's switch, certification-only permission sets, the schedule and transfer
-    // checks, shifts' required certifications (hr.admin through the page resource).
-    name: 'talent-licensed-operation-settings',
-    path: '/licensed-operation',
-    navigation: {
-      title: 'navigation.licensedOperationSettings',
-      icon: SlidersHorizontal,
-    },
-    authz: page('talent.licensedOperationSettings'),
-    componentLoader: () => import('./pages/settings/licensed/index.js'),
-  },
-  {
-    // V3-09 学习规则: due-soon days, plan expiry, check-in window, default watch share. hr.admin only, like 人事设置.
-    name: 'talent-learning-settings',
-    path: '/learning',
-    navigation: { title: 'learningSettings.title', icon: SlidersHorizontal },
-    authz: {
-      resource: { type: 'settings', id: 'talent.hr' },
-      action: 'administer',
-    },
-    componentLoader: () => import('./pages/settings/learning/index.js'),
-  },
-  {
-    // 字段管理 (V1-01, 总纲 可定制约定): the fields administrators add to business tables.
-    name: 'talent-custom-fields',
-    path: '/custom-fields',
-    navigation: { title: 'customFields.title', icon: Columns3 },
-    authz: {
-      resource: { type: 'settings', id: 'talent.hr' },
-      action: 'administer',
-    },
-    componentLoader: () => import('./pages/settings/custom-fields/index.js'),
-  },
-  {
-    // 设置 / 邮件 (V2-06): what the business mailboxes are used for; connections stay in the configuration.
-    name: 'talent-mail-settings',
-    path: '/mail',
-    navigation: { title: 'mailSettings.title', icon: AtSign },
-    authz: {
-      resource: { type: 'settings', id: 'talent.hr' },
-      action: 'administer',
-    },
-    componentLoader: () => import('./pages/settings/mail/index.js'),
-  },
-  {
-    // 组织管理: departments, heads and members. Checks the departments settings item the server registers.
-    name: 'talent-departments',
-    path: '/departments',
-    navigation: { title: 'navigation.talentDepartments', icon: Network },
-    authz: {
-      resource: { type: 'settings', id: 'talent.departments' },
-      action: 'read',
-    },
-    componentLoader: () => import('./pages/settings/departments/index.js'),
-    children: [
-      {
-        // 初始数据导入: the department tree from Excel (the settings item's import).
-        name: 'talent-departments-import',
-        path: 'import',
-        breadcrumb: { title: 'dataImport.departments.title' },
-        componentLoader: () => import('./pages/settings/departments/import.js'),
-      },
-    ],
-  },
-  {
-    // 组织同步 (V1-03): four tabs as child routes; the runs tab opens a run in a drawer, the mappings tab its dialogs.
-    name: 'talent-org-sync',
-    path: '/org-sync',
-    navigation: { title: 'navigation.orgSync', icon: RefreshCcw },
-    authz: page('talent.orgSync'),
-    componentLoader: () => import('./pages/settings/org-sync/index.js'),
-    children: [
-      {
-        name: 'talent-org-sync-connection',
-        path: 'connection',
-        componentLoader: () =>
-          import('./pages/settings/org-sync/connection.js'),
-      },
-      {
-        name: 'talent-org-sync-runs',
-        path: 'runs',
-        componentLoader: () => import('./pages/settings/org-sync/runs.js'),
+        name: 'talent-attendance-settings',
+        path: '/attendance',
+        navigation: {
+          title: 'attendance.settings.title',
+          icon: SlidersHorizontal,
+        },
+        authz: page('talent.attendanceSettings'),
+        componentLoader: () => import('./pages/settings/attendance/index.js'),
         children: [
           {
-            name: 'talent-org-sync-run-detail',
-            path: ':runId',
+            name: 'talent-attendance-catalog-new',
+            path: ':kind/new',
             componentLoader: () =>
-              import('./pages/settings/org-sync/run-detail.js'),
+              import('./pages/settings/attendance/catalog/edit.js'),
+          },
+          {
+            name: 'talent-attendance-catalog-edit',
+            path: ':kind/:recordId/edit',
+            componentLoader: () =>
+              import('./pages/settings/attendance/catalog/edit.js'),
           },
         ],
       },
       {
-        name: 'talent-org-sync-issues',
-        path: 'issues',
-        componentLoader: () => import('./pages/settings/org-sync/issues.js'),
+        name: 'talent-personnel-settings',
+        path: '/personnel',
+        navigation: {
+          title: 'personnelSettings.title',
+          icon: SlidersHorizontal,
+        },
+        authz: {
+          resource: { type: 'settings', id: 'talent.hr' },
+          action: 'administer',
+        },
+        componentLoader: () => import('./pages/settings/personnel/index.js'),
       },
       {
-        name: 'talent-org-sync-aliases',
-        path: 'aliases',
-        componentLoader: () => import('./pages/settings/org-sync/aliases.js'),
+        // V4-14 设置 / 持证上岗: the industry pack's switch, certification-only permission sets, the schedule and transfer
+        // checks, shifts' required certifications (hr.admin through the page resource).
+        name: 'talent-licensed-operation-settings',
+        path: '/licensed-operation',
+        navigation: {
+          title: 'navigation.licensedOperationSettings',
+          icon: SlidersHorizontal,
+        },
+        authz: page('talent.licensedOperationSettings'),
+        componentLoader: () => import('./pages/settings/licensed/index.js'),
+      },
+      {
+        // V3-09 学习规则: due-soon days, plan expiry, check-in window, default watch share. hr.admin only, like 人事设置.
+        name: 'talent-learning-settings',
+        path: '/learning',
+        navigation: {
+          title: 'learningSettings.title',
+          icon: SlidersHorizontal,
+        },
+        authz: {
+          resource: { type: 'settings', id: 'talent.hr' },
+          action: 'administer',
+        },
+        componentLoader: () => import('./pages/settings/learning/index.js'),
+      },
+      {
+        // 字段管理 (V1-01, 总纲 可定制约定): the fields administrators add to business tables.
+        name: 'talent-custom-fields',
+        path: '/custom-fields',
+        navigation: { title: 'customFields.title', icon: Columns3 },
+        authz: {
+          resource: { type: 'settings', id: 'talent.hr' },
+          action: 'administer',
+        },
+        componentLoader: () =>
+          import('./pages/settings/custom-fields/index.js'),
+      },
+      {
+        // 设置 / 邮件 (V2-06): what the business mailboxes are used for; connections stay in the configuration.
+        name: 'talent-mail-settings',
+        path: '/mail',
+        navigation: { title: 'mailSettings.title', icon: AtSign },
+        authz: {
+          resource: { type: 'settings', id: 'talent.hr' },
+          action: 'administer',
+        },
+        componentLoader: () => import('./pages/settings/mail/index.js'),
+      },
+      {
+        // 组织管理: departments, heads and members. Checks the departments settings item the server registers.
+        name: 'talent-departments',
+        path: '/departments',
+        navigation: { title: 'navigation.talentDepartments', icon: Network },
+        authz: {
+          resource: { type: 'settings', id: 'talent.departments' },
+          action: 'read',
+        },
+        componentLoader: () => import('./pages/settings/departments/index.js'),
         children: [
           {
-            name: 'talent-org-sync-alias-new',
-            path: 'new',
+            // 初始数据导入: the department tree from Excel (the settings item's import).
+            name: 'talent-departments-import',
+            path: 'import',
+            breadcrumb: { title: 'dataImport.departments.title' },
             componentLoader: () =>
-              import('./pages/settings/org-sync/alias-edit.js'),
-          },
-          {
-            name: 'talent-org-sync-alias-edit',
-            path: ':aliasId/edit',
-            componentLoader: () =>
-              import('./pages/settings/org-sync/alias-edit.js'),
+              import('./pages/settings/departments/import.js'),
           },
         ],
       },
-    ],
-  },
-  {
-    // AI 自动化: each AI employee's proactive work, its owner, switch and run time, and the run records.
-    name: 'talent-ai-automations',
-    path: '/ai-automations',
-    navigation: { title: 'navigation.aiAutomations', icon: Bot },
-    authz: {
-      resource: { type: 'settings', id: 'talent.aiAutomations' },
-      action: 'read',
-    },
-    componentLoader: () => import('./pages/settings/ai-automations/index.js'),
-  },
-  {
-    // V2-06 薪酬设置: salary structures and the payroll rules (hr.payroll).
-    name: 'talent-payroll-settings',
-    path: '/payroll',
-    navigation: { title: 'payroll.settings.title', icon: Wallet },
-    breadcrumb: { title: 'payroll.settings.title' },
-    authz: page('talent.payrollSettings'),
-    componentLoader: () => import('./pages/settings/payroll/index.js'),
-    children: [
       {
-        name: 'talent-payroll-structure',
-        path: 'structures/:structureId',
-        breadcrumb: { title: 'payroll.structure.breadcrumb' },
-        componentLoader: () => import('./pages/settings/payroll/structure.js'),
+        // 组织同步 (V1-03): four tabs as child routes; the runs tab opens a run in a drawer, the mappings tab its dialogs.
+        name: 'talent-org-sync',
+        path: '/org-sync',
+        navigation: { title: 'navigation.orgSync', icon: RefreshCcw },
+        authz: page('talent.orgSync'),
+        componentLoader: () => import('./pages/settings/org-sync/index.js'),
+        children: [
+          {
+            name: 'talent-org-sync-connection',
+            path: 'connection',
+            componentLoader: () =>
+              import('./pages/settings/org-sync/connection.js'),
+          },
+          {
+            name: 'talent-org-sync-runs',
+            path: 'runs',
+            componentLoader: () => import('./pages/settings/org-sync/runs.js'),
+            children: [
+              {
+                name: 'talent-org-sync-run-detail',
+                path: ':runId',
+                componentLoader: () =>
+                  import('./pages/settings/org-sync/run-detail.js'),
+              },
+            ],
+          },
+          {
+            name: 'talent-org-sync-issues',
+            path: 'issues',
+            componentLoader: () =>
+              import('./pages/settings/org-sync/issues.js'),
+          },
+          {
+            name: 'talent-org-sync-aliases',
+            path: 'aliases',
+            componentLoader: () =>
+              import('./pages/settings/org-sync/aliases.js'),
+            children: [
+              {
+                name: 'talent-org-sync-alias-new',
+                path: 'new',
+                componentLoader: () =>
+                  import('./pages/settings/org-sync/alias-edit.js'),
+              },
+              {
+                name: 'talent-org-sync-alias-edit',
+                path: ':aliasId/edit',
+                componentLoader: () =>
+                  import('./pages/settings/org-sync/alias-edit.js'),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        // AI 自动化: each AI employee's proactive work, its owner, switch and run time, and the run records.
+        name: 'talent-ai-automations',
+        path: '/ai-automations',
+        navigation: { title: 'navigation.aiAutomations', icon: Bot },
+        authz: {
+          resource: { type: 'settings', id: 'talent.aiAutomations' },
+          action: 'read',
+        },
+        componentLoader: () =>
+          import('./pages/settings/ai-automations/index.js'),
+      },
+      {
+        // V2-06 薪酬设置: salary structures and the payroll rules (hr.payroll).
+        name: 'talent-payroll-settings',
+        path: '/payroll',
+        navigation: { title: 'payroll.settings.title', icon: Wallet },
+        breadcrumb: { title: 'payroll.settings.title' },
+        authz: page('talent.payrollSettings'),
+        componentLoader: () => import('./pages/settings/payroll/index.js'),
+        children: [
+          {
+            name: 'talent-payroll-structure',
+            path: 'structures/:structureId',
+            breadcrumb: { title: 'payroll.structure.breadcrumb' },
+            componentLoader: () =>
+              import('./pages/settings/payroll/structure.js'),
+          },
+        ],
+      },
+      {
+        // AI 入口 (V1-04): the unified entry's routing table, knowledge scopes and office-suite bots.
+        name: 'talent-ai-entry',
+        path: '/ai-entry',
+        navigation: { title: 'navigation.aiEntry', icon: Sparkles },
+        authz: page('talent.aiEntry'),
+        componentLoader: () => import('./pages/settings/ai-entry/index.js'),
+      },
+      {
+        // V2-07 招聘设置 (hr.admin): careers page, reminders, approvals, workforce parameters, check-ins, emails, ERP key.
+        name: 'talent-recruiting-settings',
+        path: '/recruiting',
+        navigation: { title: 'recruiting.navigation.settings', icon: UserPlus },
+        authz: page('talent.recruitingSettings'),
+        componentLoader: () => import('./pages/settings/recruiting/index.js'),
+      },
+      {
+        // V4-13 外部 AI 助手 (hr.admin): clients, tokens, the audit log and the call limit.
+        name: 'talent-agent-clients',
+        path: '/agent-clients',
+        navigation: { title: 'navigation.talentAgentClients', icon: PlugZap },
+        authz: page('talent.agentClients'),
+        componentLoader: () =>
+          import('./pages/settings/agent-clients/index.js'),
       },
     ],
-  },
-  {
-    // AI 入口 (V1-04): the unified entry's routing table, knowledge scopes and office-suite bots.
-    name: 'talent-ai-entry',
-    path: '/ai-entry',
-    navigation: { title: 'navigation.aiEntry', icon: Sparkles },
-    authz: page('talent.aiEntry'),
-    componentLoader: () => import('./pages/settings/ai-entry/index.js'),
-  },
-  {
-    // V2-07 招聘设置 (hr.admin): careers page, reminders, approvals, workforce parameters, check-ins, emails, ERP key.
-    name: 'talent-recruiting-settings',
-    path: '/recruiting',
-    navigation: { title: 'recruiting.navigation.settings', icon: UserPlus },
-    authz: page('talent.recruitingSettings'),
-    componentLoader: () => import('./pages/settings/recruiting/index.js'),
-  },
-  {
-    // V4-13 外部 AI 助手 (hr.admin): clients, tokens, the audit log and the call limit.
-    name: 'talent-agent-clients',
-    path: '/agent-clients',
-    navigation: { title: 'navigation.talentAgentClients', icon: PlugZap },
-    authz: page('talent.agentClients'),
-    componentLoader: () => import('./pages/settings/agent-clients/index.js'),
-  },
-]);
-
-const devRoutes: AppClientRouteContribution = defineDevRoutes([
-  {
-    // 模拟渠道（仅开发环境）(V1-04): send office-suite bot messages as a directory member, without a real bot.
-    name: 'talent-im-mock',
-    path: '/im-mock',
-    authz: 'skip',
-    navigation: { title: 'navigation.imMock', icon: RadioTower },
-    componentLoader: () => import('./pages/dev/im-mock.js'),
   },
 ]);
 
 const routes: readonly AppClientRouteContribution[] = [
   appRoutes,
+  defineAppRoutes(
+    DEVICE_AUTHORIZATION_ENABLED
+      ? [
+          {
+            name: 'device',
+            path: '/device',
+            auth: 'optional',
+            authz: 'skip',
+            componentLoader: () => import('./pages/auth/device.js'),
+          },
+        ]
+      : [],
+  ),
   settingsRoutes,
+  systemSettingsRoutes,
   devRoutes,
 ];
 

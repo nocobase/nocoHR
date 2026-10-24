@@ -16,9 +16,10 @@
  * `overallRating` or `finalRating`. Run records keep ids, counts and hint
  * types only — never comment text.
  */
+import type { StructuredAI } from '../../native-ai/structured.js';
 import { z } from 'zod';
 
-import { AIUnavailableError, type AIRunner } from '../ai-runner.js';
+import { AIUnavailableError } from '../ai-runner.js';
 import { authorizeAction, scopeForUser } from '../authorize.js';
 import type { AutomationRunContext } from '../automation.js';
 import { addDays, HrError, str } from '../shared.js';
@@ -79,7 +80,7 @@ const packSchema = z.object({ content: z.string().min(1).max(4000) });
 
 export function createPerformanceAssistant(deps: {
   ctx: PerformanceContext;
-  ai: AIRunner;
+  ai: StructuredAI;
   goals: GoalService;
   reviews: ReviewService;
   results: ResultService;
@@ -100,6 +101,10 @@ export function createPerformanceAssistant(deps: {
       const { data, sessionId } = await ai.structured({
         employee,
         userId,
+        authorization:
+          userId === run.owner.userId
+            ? run.owner.authz
+            : await scopeForUser(platform.authz, userId),
         title,
         prompt,
         schema,

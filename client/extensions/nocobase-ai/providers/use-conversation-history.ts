@@ -33,39 +33,49 @@ export function useConversationHistory({
   onMarkRead: (conversationId: string) => void;
   onError: (error?: Error) => void;
 }) {
-  const surfaceOpenRef = useRef(chatSurfaceOpen);
   const openVersionRef = useRef(0);
   const pendingRequestsRef = useRef(
     new Map<string, Promise<AIChatMessage[]>>(),
   );
   const [loadingId, setLoadingId] = useState<string>();
-  useEffect(() => {
-    surfaceOpenRef.current = chatSurfaceOpen;
-  }, [chatSurfaceOpen]);
+  const [pendingConversationId, setPendingConversationId] = useState<string>();
 
   const refresh = useCallback(
     (
       conversationId: string,
       targetChat: Chat<AIChatMessage>,
-      options: { updateRead?: boolean } = {},
+      options: { updateRead?: boolean; isCurrent?: () => boolean } = {},
     ) => {
       const updateRead = options.updateRead === true;
       const requestKey = `${conversationId}:${updateRead ? 'read' : 'peek'}`;
-      const pending = pendingRequestsRef.current.get(requestKey);
-      if (pending) return pending;
+      let request = pendingRequestsRef.current.get(requestKey);
+      if (!request) {
+        request = getConversationMessages(conversationId, { updateRead });
+        pendingRequestsRef.current.set(requestKey, request);
+        request.then(
+          () => {
+            if (pendingRequestsRef.current.get(requestKey) === request) {
+              pendingRequestsRef.current.delete(requestKey);
+            }
+          },
+          () => {
+            if (pendingRequestsRef.current.get(requestKey) === request) {
+              pendingRequestsRef.current.delete(requestKey);
+            }
+          },
+        );
+      }
 
-      const request = getConversationMessages(conversationId, { updateRead })
-        .then((messages) => {
-          const reconciled = reconcileRefreshedMessages(
-            targetChat.messages,
-            messages,
-          );
-          targetChat.messages = reconciled;
-          return reconciled;
-        })
-        .finally(() => pendingRequestsRef.current.delete(requestKey));
-      pendingRequestsRef.current.set(requestKey, request);
-      return request;
+      return request.then((messages) => {
+        if (options.isCurrent && !options.isCurrent())
+          return targetChat.messages;
+        const reconciled = reconcileRefreshedMessages(
+          targetChat.messages,
+          messages,
+        );
+        targetChat.messages = reconciled;
+        return reconciled;
+      });
     },
     [getConversationMessages],
   );
@@ -78,6 +88,7 @@ export function useConversationHistory({
       const openVersion = openVersionRef.current + 1;
       openVersionRef.current = openVersion;
       setLoadingId(conversationId);
+      setPendingConversationId(undefined);
       onError(undefined);
       try {
         await refresh(conversationId, targetChat, { updateRead: true });
@@ -108,11 +119,14 @@ export function useConversationHistory({
         if (
           openVersionRef.current !== openVersion ||
           getActiveConversationId() !== conversationId ||
-          isChatRunning(targetChat) ||
-          activeState !== 'streaming'
+          isChatRunning(targetChat)
         ) {
           return;
         }
+        setPendingConversationId(
+          activeState === 'pending' ? conversationId : undefined,
+        );
+        if (activeState !== 'streaming') return;
         getTransport(conversationId)?.prepareConversationResume(
           targetChat.messages,
         );
@@ -140,38 +154,21 @@ export function useConversationHistory({
     if (!chatSurfaceOpen || activeConversationId === AI_DRAFT_CONVERSATION_ID) {
       return;
     }
-    const targetChat = getChat(activeConversationId);
-    if (isChatRunning(targetChat)) return;
-
-    void refresh(activeConversationId, targetChat, { updateRead: true })
-      .then(() => {
-        if (
-          surfaceOpenRef.current &&
-          getActiveConversationId() === activeConversationId
-        ) {
-          onMarkRead(activeConversationId);
-        }
-      })
-      .catch((error: unknown) => {
-        onError(
-          error instanceof Error
-            ? error
-            : new Error('Unable to mark the conversation as read'),
-        );
-      });
-  }, [
-    activeConversationId,
-    chatSurfaceOpen,
-    getActiveConversationId,
-    getChat,
-    onError,
-    onMarkRead,
-    refresh,
-  ]);
+    // Start the asynchronous subscription after the effect is installed. A superseded
+    // surface must not start a request during Strict Mode cleanup or a conversation change.
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void load(activeConversationId);
+    });
+    return () => {
+      active = false;
+      openVersionRef.current += 1;
+    };
+  }, [activeConversationId, chatSurfaceOpen, load]);
 
   const invalidate = useCallback(() => {
     openVersionRef.current += 1;
   }, []);
 
-  return { invalidate, load, loadingId, refresh };
+  return { invalidate, load, loadingId, refresh, pendingConversationId };
 }

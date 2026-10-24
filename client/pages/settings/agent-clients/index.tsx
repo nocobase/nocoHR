@@ -28,7 +28,10 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -67,15 +70,18 @@ interface Log {
 export default function AgentClientsSettingsPage(): ReactElement {
   const { t } = useTranslation();
   const { locale } = useLocale();
-  const clients = useRemote<{ clients: Client[]; tools: { name: string; audience: string }[] }>(
-    'talent/agent-clients/clients',
-  );
+  const clients = useRemote<{
+    clients: Client[];
+    tools: { name: string; audience: string }[];
+  }>('talent/agent-clients/clients');
   const tokens = useRemote<Token[]>('talent/agent-clients/tokens');
   const [clientId, setClientId] = useState('');
-  const logs = useRemote<Log[]>('talent/agent-clients/logs', { clientId: clientId || undefined });
-  const settings = useRemote<{ value: { agentRateLimitPerMinute: number; agentTokenMaxDays: number } }>(
-    'talent/talent-reviews/settings',
-  );
+  const logs = useRemote<Log[]>('talent/agent-clients/logs', {
+    clientId: clientId || undefined,
+  });
+  const settings = useRemote<{
+    value: { agentRateLimitPerMinute: number; agentTokenMaxDays: number };
+  }>('talent/talent-reviews/settings');
   const action = useTrAction();
   const [editing, setEditing] = useState<Client | 'new' | null>(null);
   const [limit, setLimit] = useState('');
@@ -112,7 +118,9 @@ export default function AgentClientsSettingsPage(): ReactElement {
                   <TableHead>{t('talentReview.agents.name')}</TableHead>
                   <TableHead>{t('talentReview.agents.owner')}</TableHead>
                   <TableHead>{t('talentReview.agents.tools')}</TableHead>
-                  <TableHead className='text-end'>{t('talentReview.agents.activeTokens')}</TableHead>
+                  <TableHead className='text-end'>
+                    {t('talentReview.agents.activeTokens')}
+                  </TableHead>
                   <TableHead>{t('talentReview.common.status')}</TableHead>
                   <TableHead />
                 </TableRow>
@@ -123,14 +131,22 @@ export default function AgentClientsSettingsPage(): ReactElement {
                     <TableCell className='font-medium'>{c.name}</TableCell>
                     <TableCell>{c.ownerName}</TableCell>
                     <TableCell className='max-w-80 text-xs'>
-                      {c.allowedTools.map((tool) => t(`talentReview.agents.tool.${tool}`)).join('、')}
+                      {c.allowedTools
+                        .map((tool) => t(`talentReview.agents.tool.${tool}`))
+                        .join('、')}
                     </TableCell>
-                    <TableCell className='text-end tabular-nums'>{c.activeTokens}</TableCell>
+                    <TableCell className='text-end tabular-nums'>
+                      {c.activeTokens}
+                    </TableCell>
                     <TableCell>
                       <TrStatusBadge status={c.status} />
                     </TableCell>
                     <TableCell className='text-end'>
-                      <Button size='sm' variant='outline' onClick={() => setEditing(c)}>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => setEditing(c)}
+                      >
                         {t('talentReview.common.edit')}
                       </Button>
                     </TableCell>
@@ -160,7 +176,9 @@ export default function AgentClientsSettingsPage(): ReactElement {
               {(tokens.data ?? []).map((token) => (
                 <TableRow key={token.id}>
                   <TableCell>{token.userName}</TableCell>
-                  <TableCell className='font-mono text-xs'>{token.prefix}…</TableCell>
+                  <TableCell className='font-mono text-xs'>
+                    {token.prefix}…
+                  </TableCell>
                   <TableCell>{formatDate(locale, token.expiresAt)}</TableCell>
                   <TableCell>{formatDate(locale, token.lastUsedAt)}</TableCell>
                   <TableCell className='text-end'>
@@ -171,13 +189,18 @@ export default function AgentClientsSettingsPage(): ReactElement {
                         size='sm'
                         variant='outline'
                         disabled={action.busy}
-                        onClick={() => { void (async () => {
-                          const done = await action.run(
-                            { method: 'POST', path: `talent/agent-clients/tokens/${encodeURIComponent(token.id)}/revoke` },
-                            t('talentReview.agents.revoked'),
-                          );
-                          if (done) tokens.reload();
-                        })(); }}
+                        onClick={() => {
+                          void (async () => {
+                            const done = await action.run(
+                              {
+                                method: 'POST',
+                                path: `talent/agent-clients/tokens/${encodeURIComponent(token.id)}/revoke`,
+                              },
+                              t('talentReview.agents.revoked'),
+                            );
+                            if (done) tokens.reload();
+                          })();
+                        }}
                       >
                         {t('talentReview.agents.revoke')}
                       </Button>
@@ -192,8 +215,14 @@ export default function AgentClientsSettingsPage(): ReactElement {
       <Card>
         <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-2'>
           <CardTitle>{t('talentReview.agents.logs')}</CardTitle>
-          <NativeSelect aria-label={t('talentReview.agents.client')} value={clientId} onChange={(e) => setClientId(e.target.value)}>
-            <NativeSelectOption value=''>{t('talentReview.agents.allClients')}</NativeSelectOption>
+          <NativeSelect
+            aria-label={t('talentReview.agents.client')}
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+          >
+            <NativeSelectOption value=''>
+              {t('talentReview.agents.allClients')}
+            </NativeSelectOption>
             {(clients.data?.clients ?? []).map((c) => (
               <NativeSelectOption key={c.id} value={c.id}>
                 {c.name}
@@ -216,11 +245,15 @@ export default function AgentClientsSettingsPage(): ReactElement {
               {(logs.data ?? []).map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className='whitespace-nowrap'>
-                    {log.calledAt ? new Date(log.calledAt).toLocaleString(locale) : '—'}
+                    {log.calledAt
+                      ? new Date(log.calledAt).toLocaleString(locale)
+                      : '—'}
                   </TableCell>
                   <TableCell>{log.userName}</TableCell>
                   <TableCell>{log.tool}</TableCell>
-                  <TableCell>{t(`talentReview.agents.callStatus.${log.status}`)}</TableCell>
+                  <TableCell>
+                    {t(`talentReview.agents.callStatus.${log.status}`)}
+                  </TableCell>
                   <TableCell className='text-xs'>{log.summary}</TableCell>
                 </TableRow>
               ))}
@@ -235,27 +268,37 @@ export default function AgentClientsSettingsPage(): ReactElement {
           </CardHeader>
           <CardContent className='flex flex-wrap items-end gap-2'>
             <Field className='w-56'>
-              <FieldLabel htmlFor='agent-limit'>{t('talentReview.agents.ratePerMinute')}</FieldLabel>
+              <FieldLabel htmlFor='agent-limit'>
+                {t('talentReview.agents.ratePerMinute')}
+              </FieldLabel>
               <Input
                 id='agent-limit'
                 type='number'
                 min={1}
-                value={limit || String(settings.data.value.agentRateLimitPerMinute)}
+                value={
+                  limit || String(settings.data.value.agentRateLimitPerMinute)
+                }
                 onChange={(e) => setLimit(e.target.value)}
               />
             </Field>
             <Button
               disabled={action.busy || !limit}
-              onClick={() => { void (async () => {
-                const done = await action.run(
-                  { method: 'PUT', path: 'talent/talent-reviews/settings/agent', json: { agentRateLimitPerMinute: Number(limit) } },
-                  t('talentReview.agents.limitSaved'),
-                );
-                if (done) {
-                  setLimit('');
-                  settings.reload();
-                }
-              })(); }}
+              onClick={() => {
+                void (async () => {
+                  const done = await action.run(
+                    {
+                      method: 'PUT',
+                      path: 'talent/talent-reviews/settings/agent',
+                      json: { agentRateLimitPerMinute: Number(limit) },
+                    },
+                    t('talentReview.agents.limitSaved'),
+                  );
+                  if (done) {
+                    setLimit('');
+                    settings.reload();
+                  }
+                })();
+              }}
             >
               {t('talentReview.common.save')}
             </Button>
@@ -288,27 +331,43 @@ function ClientDialog({
   const { t } = useTranslation();
   const action = useTrAction();
   const [name, setName] = useState(client?.name ?? '');
-  const [allowed, setAllowed] = useState<string[]>(client?.allowedTools ?? tools);
+  const [allowed, setAllowed] = useState<string[]>(
+    client?.allowedTools ?? tools,
+  );
   const [status, setStatus] = useState(client?.status ?? 'active');
   return (
     <Dialog open onOpenChange={(value) => (value ? undefined : onClose())}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{client ? client.name : t('talentReview.agents.create')}</DialogTitle>
+          <DialogTitle>
+            {client ? client.name : t('talentReview.agents.create')}
+          </DialogTitle>
         </DialogHeader>
         <div className='flex flex-col gap-3'>
           <Field>
-            <FieldLabel htmlFor='ac-name'>{t('talentReview.agents.name')}</FieldLabel>
-            <Input id='ac-name' value={name} onChange={(e) => setName(e.target.value)} />
+            <FieldLabel htmlFor='ac-name'>
+              {t('talentReview.agents.name')}
+            </FieldLabel>
+            <Input
+              id='ac-name'
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </Field>
           <fieldset className='flex flex-col gap-1.5'>
-            <legend className='mb-1 text-sm font-medium'>{t('talentReview.agents.tools')}</legend>
+            <legend className='mb-1 text-sm font-medium'>
+              {t('talentReview.agents.tools')}
+            </legend>
             {tools.map((tool) => (
               <label key={tool} className='flex items-center gap-2 text-sm'>
                 <Checkbox
                   checked={allowed.includes(tool)}
                   onCheckedChange={(value) =>
-                    setAllowed((list) => (value === true ? [...list, tool] : list.filter((x) => x !== tool)))
+                    setAllowed((list) =>
+                      value === true
+                        ? [...list, tool]
+                        : list.filter((x) => x !== tool),
+                    )
                   }
                 />
                 {t(`talentReview.agents.tool.${tool}`)}
@@ -316,10 +375,20 @@ function ClientDialog({
             ))}
           </fieldset>
           <Field>
-            <FieldLabel htmlFor='ac-status'>{t('talentReview.common.status')}</FieldLabel>
-            <NativeSelect id='ac-status' value={status} onChange={(e) => setStatus(e.target.value)}>
-              <NativeSelectOption value='active'>{t('talentReview.status.active')}</NativeSelectOption>
-              <NativeSelectOption value='revoked'>{t('talentReview.status.revoked')}</NativeSelectOption>
+            <FieldLabel htmlFor='ac-status'>
+              {t('talentReview.common.status')}
+            </FieldLabel>
+            <NativeSelect
+              id='ac-status'
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <NativeSelectOption value='active'>
+                {t('talentReview.status.active')}
+              </NativeSelectOption>
+              <NativeSelectOption value='revoked'>
+                {t('talentReview.status.revoked')}
+              </NativeSelectOption>
             </NativeSelect>
           </Field>
           {action.error ? (
@@ -334,19 +403,29 @@ function ClientDialog({
           </Button>
           <Button
             disabled={action.busy || !name.trim() || !allowed.length}
-            onClick={() => { void (async () => {
-              const json = { name, allowedTools: allowed, status };
-              const done = await action.run(
-                client
-                  ? { method: 'PUT', path: `talent/agent-clients/clients/${encodeURIComponent(client.id)}`, json }
-                  : { method: 'POST', path: 'talent/agent-clients/clients', json },
-                t('talentReview.agents.saved'),
-              );
-              if (done) {
-                onDone();
-                onClose();
-              }
-            })(); }}
+            onClick={() => {
+              void (async () => {
+                const json = { name, allowedTools: allowed, status };
+                const done = await action.run(
+                  client
+                    ? {
+                        method: 'PUT',
+                        path: `talent/agent-clients/clients/${encodeURIComponent(client.id)}`,
+                        json,
+                      }
+                    : {
+                        method: 'POST',
+                        path: 'talent/agent-clients/clients',
+                        json,
+                      },
+                  t('talentReview.agents.saved'),
+                );
+                if (done) {
+                  onDone();
+                  onClose();
+                }
+              })();
+            }}
           >
             {t('talentReview.common.save')}
           </Button>

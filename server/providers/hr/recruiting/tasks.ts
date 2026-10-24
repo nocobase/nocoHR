@@ -44,18 +44,27 @@ export function createRecruitingTasks(
 
   async function staleReminders(asOf: string) {
     const settings = await ctx.settings();
-    const stale = await deps.candidates.stale(asOf, settings.reminders.stageStaleDays);
+    const stale = await deps.candidates.stale(
+      asOf,
+      settings.reminders.stageStaleDays,
+    );
     const byRecruiter = new Map<string, string[]>();
     for (const s of stale) {
       if (!s.recruiterUserId) continue;
-      byRecruiter.set(s.recruiterUserId, [...(byRecruiter.get(s.recruiterUserId) ?? []), s.id]);
+      byRecruiter.set(s.recruiterUserId, [
+        ...(byRecruiter.get(s.recruiterUserId) ?? []),
+        s.id,
+      ]);
     }
     for (const [userId, ids] of byRecruiter)
       await platform.notify({
         key: `recruitingStale:${asOf}:${userId}:${settings.reminders.stageStaleDays}`,
         userIds: [userId],
         message: 'recruitingStaleApplications',
-        params: { count: String(ids.length), days: String(settings.reminders.stageStaleDays) },
+        params: {
+          count: String(ids.length),
+          days: String(settings.reminders.stageStaleDays),
+        },
         path: '/talent/candidates?stale=1',
       });
     return stale.length;
@@ -77,15 +86,21 @@ export function createRecruitingTasks(
       .then((all) =>
         all.filter((r) => {
           const at = new Date(str(r.scheduledAt)).getTime();
-          return !r.reminderSentAt && at >= from.getTime() && at <= to.getTime();
+          return (
+            !r.reminderSentAt && at >= from.getTime() && at <= to.getTime()
+          );
         }),
       );
     const sent: string[] = [];
     for (const r of rows) {
       const interview = await deps.interviews.get(str(r.id));
-      const application = await deps.candidates.applicationRow(interview.applicationId);
+      const application = await deps.candidates.applicationRow(
+        interview.applicationId,
+      );
       const posting = await deps.postings.get(application.postingId);
-      const candidate = await deps.candidates.candidateRow(application.candidateId);
+      const candidate = await deps.candidates.candidateRow(
+        application.candidateId,
+      );
       if (!posting.bookingTemplate || !candidate.email) continue;
       const token = await deps.candidates.issueBookingToken(application.id);
       const values = {
@@ -111,7 +126,10 @@ export function createRecruitingTasks(
       await deps.candidates.addDraftMessage(application.id, {
         type: 'interviewReminder',
         subject: fill(posting.bookingTemplate.subject, values),
-        body: fill(posting.bookingTemplate.body, { ...values, link: '（改期链接）' }),
+        body: fill(posting.bookingTemplate.body, {
+          ...values,
+          link: '（改期链接）',
+        }),
         draftedBy: 'rule',
         interviewId: interview.id,
       });
@@ -122,8 +140,16 @@ export function createRecruitingTasks(
         .updateTable('applications')
         .set({
           messages: fresh.messages.map((m) =>
-            m.type === 'interviewReminder' && m.interviewId === interview.id && m.status === 'draft'
-              ? { ...m, status: 'sent', sentAt: new Date().toISOString(), sentBy: 'template', delivery }
+            m.type === 'interviewReminder' &&
+            m.interviewId === interview.id &&
+            m.status === 'draft'
+              ? {
+                  ...m,
+                  status: 'sent',
+                  sentAt: new Date().toISOString(),
+                  sentBy: 'template',
+                  delivery,
+                }
               : m,
           ),
         })
@@ -137,7 +163,9 @@ export function createRecruitingTasks(
   /** 待入职跟进 as the automation's work. */
   async function preboardingWork(run: AutomationRunContext, asOf: string) {
     const result = await deps.preboarding.runDaily(run, asOf);
-    return { output: { reminded: result.reminded, escalated: result.escalated } };
+    return {
+      output: { reminded: result.reminded, escalated: result.escalated },
+    };
   }
 
   /** 新员工回访 as the automation's work: ids, days and channels only in the output. */
@@ -146,9 +174,13 @@ export function createRecruitingTasks(
       const checkIn = await deps.checkIns.get(checkInId);
       const employee = await platform.employee(checkIn.employeeId);
       if (!employee?.userId) return 'notBound';
-      return ctx.im().sendText(employee.userId, await deps.checkIns.questionText(checkInId));
+      return ctx
+        .im()
+        .sendText(employee.userId, await deps.checkIns.questionText(checkInId));
     });
-    run.summarize(`${asOf} 新员工回访：新建 ${result.created.length} 次，关闭 ${result.closed} 次`);
+    run.summarize(
+      `${asOf} 新员工回访：新建 ${result.created.length} 次，关闭 ${result.closed} 次`,
+    );
     return { output: result };
   }
 
@@ -158,7 +190,12 @@ export function createRecruitingTasks(
 
     async run(
       task: RecruitingTask,
-      options: { asOf?: string; now?: Date; withAutomations?: boolean; trigger?: 'schedule' | 'manual' } = {},
+      options: {
+        asOf?: string;
+        now?: Date;
+        withAutomations?: boolean;
+        trigger?: 'schedule' | 'manual';
+      } = {},
     ) {
       const now = options.now ?? new Date();
       const asOf = options.asOf ?? localDate(now, platform.timeZone);
@@ -167,21 +204,44 @@ export function createRecruitingTasks(
       if (task === 'hourly') {
         const ids = await deps.interviews.needingPlans(now);
         const outcomes: Record<string, string> = {};
-        for (const id of ids) outcomes[id] = (await deps.assistant.onInterviewDue(id)).status;
+        for (const id of ids)
+          outcomes[id] = (await deps.assistant.onInterviewDue(id)).status;
         return { interviews: outcomes };
       }
       if (task === 'daily') {
         const stale = await staleReminders(asOf);
-        const expired = await deps.offers.expire(options.asOf ? new Date(`${asOf}T09:00:00+08:00`) : now);
+        const expired = await deps.offers.expire(
+          options.asOf ? new Date(`${asOf}T09:00:00+08:00`) : now,
+        );
         const owner = (await ctx.ownerOf(TASKS.dailyDigest)) ?? 'system';
         const anonymized = await deps.candidates.anonymizeExpired(asOf, owner);
         const result: Record<string, unknown> = { stale, expired, anonymized };
         if (options.withAutomations) {
           result.preboarding = (
-            await automation.run(PREBOARDING_TASK, trigger, { triggerRef: { asOf }, ...(trigger === 'schedule' ? { dedupeKey: `schedule:${asOf}` } : {}) }, (run) => preboardingWork(run, asOf))
+            await automation.run(
+              PREBOARDING_TASK,
+              trigger,
+              {
+                triggerRef: { asOf },
+                ...(trigger === 'schedule'
+                  ? { dedupeKey: `schedule:${asOf}` }
+                  : {}),
+              },
+              (run) => preboardingWork(run, asOf),
+            )
           ).status;
           result.checkIns = (
-            await automation.run(CHECK_IN_TASK, trigger, { triggerRef: { asOf }, ...(trigger === 'schedule' ? { dedupeKey: `schedule:${asOf}` } : {}) }, (run) => checkInWork(run, asOf))
+            await automation.run(
+              CHECK_IN_TASK,
+              trigger,
+              {
+                triggerRef: { asOf },
+                ...(trigger === 'schedule'
+                  ? { dedupeKey: `schedule:${asOf}` }
+                  : {}),
+              },
+              (run) => checkInWork(run, asOf),
+            )
           ).status;
         }
         return result;
@@ -190,7 +250,17 @@ export function createRecruitingTasks(
       const result: Record<string, unknown> = { reminders: reminders.length };
       if (options.withAutomations)
         result.digest = (
-          await automation.run(TASKS.dailyDigest, trigger, { triggerRef: { asOf }, ...(trigger === 'schedule' ? { dedupeKey: `schedule:${asOf}` } : {}) }, (run) => deps.assistant.dailyDigest(run, asOf))
+          await automation.run(
+            TASKS.dailyDigest,
+            trigger,
+            {
+              triggerRef: { asOf },
+              ...(trigger === 'schedule'
+                ? { dedupeKey: `schedule:${asOf}` }
+                : {}),
+            },
+            (run) => deps.assistant.dailyDigest(run, asOf),
+          )
         ).status;
       return result;
     },

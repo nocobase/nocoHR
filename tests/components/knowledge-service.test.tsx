@@ -5,15 +5,22 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import {
+  ClientApplicationContext,
+  apiClientToken,
+  realtimeClientToken,
+  type ClientApplication,
+} from '@nocobase/app-client';
+import { ChatProvider } from '@nocobase/app-plugin-agents/client/chat';
+import { ServiceContainer } from '@nocobase/service-provider';
+import { createRealtimeFixture } from '../fixtures/realtime-client';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { request, added, remote, triggerTask, grants } = vi.hoisted(() => ({
+const { request, added, remote, grants } = vi.hoisted(() => ({
   request: vi.fn(),
   added: vi.fn(),
   remote: new Map<string, unknown>(),
-  triggerTask: vi.fn(),
   grants: new Set<string>(),
 }));
 
@@ -69,20 +76,6 @@ vi.mock('../../client/components/talent/use-remote', () => ({
     reload: () => undefined,
   }),
 }));
-vi.mock('../../client/extensions/nocobase-ai', () => ({
-  NocoBaseAIRootProvider: ({ children }: { children: ReactNode }) => children,
-  AIChatProvider: ({ children }: { children: ReactNode }) => children,
-  AIChatWindow: () => <div>chat window</div>,
-  useAI: () => ({ configurationStatus: 'ready' }),
-  useAIChatController: () => ({ triggerTask }),
-}));
-vi.mock('../../client/components/talent/ai-tool-renderers', () => ({
-  talentToolRenderers: {},
-}));
-vi.mock('../../client/components/talent/use-employee-readiness', () => ({
-  useEmployeeReadiness: () => ({ ready: true, problem: '' }),
-}));
-
 import { UnifiedAssistant } from '../../client/components/talent/unified-assistant';
 import AiEntrySettingsPage from '../../client/pages/settings/ai-entry/index';
 import { ConflictsPanel } from '../../client/pages/talent/knowledge/conflicts-panel';
@@ -108,7 +101,6 @@ const CONFLICT = {
 beforeEach(() => {
   request.mockReset();
   added.mockReset();
-  triggerTask.mockReset();
   remote.clear();
   grants.clear();
 });
@@ -149,59 +141,39 @@ describe('document conflicts', () => {
   });
 });
 
-describe('unified AI entry', () => {
-  it('routes the first question, labels who answers and offers a hand-off', async () => {
-    remote.set('talent/ai-entry/routes', [
-      {
-        key: 'myRecord',
-        description: '我的档案、合同',
-        employee: 'hrAssistant',
-      },
-    ]);
-    request.mockResolvedValue({
-      data: {
-        key: 'myRecord',
-        employee: 'hrAssistant',
-        description: '我的档案、合同',
-        method: 'keywords',
-        alternatives: ['knowledgeAssistant'],
-      },
-    });
-    render(<UnifiedAssistant chatId='test' layout='page' />);
-    fireEvent.change(screen.getByLabelText('输入你的问题…'), {
-      target: { value: '我的合同什么时候到期？' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: '提问' }));
-
-    expect(await screen.findByText('由 人事助理 回答')).toBeInTheDocument();
-    expect(request).toHaveBeenCalledWith({
-      path: 'talent/ai-entry/route',
-      method: 'POST',
-      json: { question: '我的合同什么时候到期？' },
-    });
-    expect(triggerTask).toHaveBeenCalledWith(
-      expect.objectContaining({
-        aiEmployee: 'hrAssistant',
-        task: expect.objectContaining({
-          message: { user: '我的合同什么时候到期？' },
-          autoSend: true,
-        }),
-      }),
+describe('unified native AI entry', () => {
+  it('uses the native model and history services without the retired hand-off protocol', async () => {
+    request.mockResolvedValue({ data: [], meta: {} });
+    const services = new ServiceContainer();
+    services.instance(apiClientToken, { request } as never);
+    services.instance(realtimeClientToken, createRealtimeFixture() as never);
+    render(
+      <ClientApplicationContext.Provider
+        value={{ services } as unknown as ClientApplication}
+      >
+        <MemoryRouter>
+          <ChatProvider>
+            <UnifiedAssistant layout='page' />
+          </ChatProvider>
+        </MemoryRouter>
+      </ClientApplicationContext.Provider>,
     );
-
-    fireEvent.click(screen.getByRole('button', { name: '转给 知识助手' }));
-    expect(await screen.findByText('由 知识助手 回答')).toBeInTheDocument();
-    expect(triggerTask).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        aiEmployee: 'knowledgeAssistant',
-        task: expect.objectContaining({
-          message: { user: '我的合同什么时候到期？' },
-        }),
-      }),
+    expect(await screen.findByText('尚未配置 AI 模型')).toBeVisible();
+    fireEvent.click(screen.getByTestId('chat-history-button'));
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'agents/conversations' }),
+      ),
+    );
+    expect(screen.getByTestId('chat-history-button')).toHaveAttribute(
+      'aria-pressed',
+      'true',
     );
     expect(
-      screen.getByRole('button', { name: '转给 人事助理' }),
-    ).toBeInTheDocument();
+      request.mock.calls.every(
+        ([input]) => !String(input.path).startsWith('talent/ai-entry/'),
+      ),
+    ).toBe(true);
   });
 });
 

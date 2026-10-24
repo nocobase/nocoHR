@@ -19,9 +19,12 @@
  * - A completed record starts the certification check (发证与续发), through
  *   `practicalGate`, which the certification service asks before issuing.
  */
+import { assertUnrestrictedNativeAIEntry } from '../../native-ai/access.js';
+import { scopeForUser } from '../authorize.js';
+import type { StructuredAI } from '../../native-ai/structured.js';
 import { z } from 'zod';
 
-import { AIUnavailableError, type AIRunner } from '../ai-runner.js';
+import { AIUnavailableError } from '../ai-runner.js';
 import { authorizeAction, policyOf } from '../authorize.js';
 import type { AutomationRunContext } from '../automation.js';
 import { splitSections } from '../document-text.js';
@@ -167,13 +170,15 @@ function sentences(notes: string): string[] {
     .filter(Boolean);
 }
 
-const NEGATIVE = /未|没有|没|漏|忘|不合格|不符合|错误|超差|缺少|不规范|不到位|未按/u;
+const NEGATIVE =
+  /未|没有|没|漏|忘|不合格|不符合|错误|超差|缺少|不规范|不到位|未按/u;
 
 /** Keywords of a checklist item: its CJK bigrams and Latin words. */
 function keywords(text: string): string[] {
   const clean = text.replace(/[\s，,、（）()：:“”"]/gu, '');
   const words = new Set<string>();
-  for (const w of clean.match(/[A-Za-z0-9]{2,}/gu) ?? []) words.add(w.toLowerCase());
+  for (const w of clean.match(/[A-Za-z0-9]{2,}/gu) ?? [])
+    words.add(w.toLowerCase());
   const cjk = clean.replace(/[A-Za-z0-9]/gu, '');
   for (let i = 0; i < cjk.length - 1; i += 1) words.add(cjk.slice(i, i + 2));
   return [...words];
@@ -205,7 +210,7 @@ export function structureByRule(
 
 export function createPracticalService(
   ctx: TalentReviewContext,
-  deps: { ai: AIRunner; onCompleted: (employeeId: string) => void },
+  deps: { ai: StructuredAI; onCompleted: (employeeId: string) => void },
 ) {
   const { database, platform } = ctx;
 
@@ -311,7 +316,9 @@ export function createPracticalService(
       assessment: template,
       employeeName: employee.name,
       assessorName: await ctx.userName(record.assessorUserId),
-      witnessName: record.witnessUserId ? await ctx.userName(record.witnessUserId) : null,
+      witnessName: record.witnessUserId
+        ? await ctx.userName(record.witnessUserId)
+        : null,
       files: files.map((f) => ({
         id: str(f.id),
         filename: str(f.filename),
@@ -339,6 +346,8 @@ export function createPracticalService(
       const { data, sessionId } = await deps.ai.structured({
         employee: 'examiner',
         userId: run?.owner.userId ?? userId,
+        authorization:
+          run?.owner.authz ?? (await scopeForUser(platform.authz, userId)),
         title,
         prompt,
         schema: structuredSchema,
@@ -361,7 +370,11 @@ export function createPracticalService(
     async listTemplates(actor: ActorContext) {
       const canManage = await ctx.can(actor, RESOURCE, 'manageTemplates');
       const canConduct = await ctx.can(actor, RESOURCE, 'conduct');
-      if (!canManage && !canConduct && !(await ctx.can(actor, RESOURCE, 'view')))
+      if (
+        !canManage &&
+        !canConduct &&
+        !(await ctx.can(actor, RESOURCE, 'view'))
+      )
         throw new HrError('FORBIDDEN', 403);
       const rows = await database
         .query()
@@ -384,7 +397,9 @@ export function createPracticalService(
         templates: rows
           .map(toTemplate)
           // Assessors only see forms that may be used.
-          .filter((t) => canManage || (t.reviewStatus === 'confirmed' && t.active))
+          .filter(
+            (t) => canManage || (t.reviewStatus === 'confirmed' && t.active),
+          )
           .map((t) => ({
             ...t,
             sourceDocumentTitle: t.sourceDocumentId
@@ -470,7 +485,11 @@ export function createPracticalService(
     /** examiner.draftPracticalChecklist: a draft form from a work instruction, each item with its excerpt. */
     async draftChecklist(
       run: AutomationRunContext | null,
-      input: { documentId: string; competencyIds: string[]; ownerUserId: string },
+      input: {
+        documentId: string;
+        competencyIds: string[];
+        ownerUserId: string;
+      },
     ) {
       const doc = await database
         .query()
@@ -480,13 +499,18 @@ export function createPracticalService(
         .executeTakeFirst();
       if (!doc) throw new HrError('DOCUMENT_NOT_FOUND', 404);
       const text = str(doc.contentText ?? '');
-      run?.summarize(`起草实操考核表：${str(doc.docNo ?? '')} ${str(doc.title ?? '')}`.trim());
+      run?.summarize(
+        `起草实操考核表：${str(doc.docNo ?? '')} ${str(doc.title ?? '')}`.trim(),
+      );
       run?.reference({ documentId: input.documentId });
       let drafted: z.infer<typeof draftChecklistSchema> | null = null;
       try {
         const { data, sessionId } = await deps.ai.structured({
           employee: 'examiner',
           userId: run?.owner.userId ?? input.ownerUserId,
+          authorization:
+            run?.owner.authz ??
+            (await scopeForUser(platform.authz, input.ownerUserId)),
           title: `起草实操考核表 ${str(doc.title)}`,
           prompt: `从作业文件起草实操考核表：6–10 个可现场观察的检查项，涉及安全和质量判定的标为关键项，每项附引用的原文（sourceExcerpt 必须逐字出自原文）。
 文件：${str(doc.docNo ?? '')} ${str(doc.title)} ${str(doc.version ?? '')}
@@ -501,7 +525,9 @@ ${text.slice(0, 12_000)}`,
           ...data,
           checklist: data.checklist.map((c) => ({
             ...c,
-            sourceExcerpt: text.includes(c.sourceExcerpt) ? c.sourceExcerpt : '',
+            sourceExcerpt: text.includes(c.sourceExcerpt)
+              ? c.sourceExcerpt
+              : '',
           })),
         };
       } catch (error) {
@@ -511,10 +537,15 @@ ${text.slice(0, 12_000)}`,
       if (!drafted) {
         // Rule fallback: every list item and sentence of the procedure sections is a check item.
         // The section and critical words are settings (practicalSectionKeywords / practicalCriticalKeywords).
-        const { practicalSectionKeywords, practicalCriticalKeywords } = await ctx.settings();
+        const { practicalSectionKeywords, practicalCriticalKeywords } =
+          await ctx.settings();
         const mentions = (value: string, words: readonly string[]) =>
           words.some((word) => value.includes(word));
-        const items: { item: string; critical: boolean; sourceExcerpt: string }[] = [];
+        const items: {
+          item: string;
+          critical: boolean;
+          sourceExcerpt: string;
+        }[] = [];
         for (const section of splitSections(text)) {
           if (
             !/^\s*[4-5]/u.test(section.title) &&
@@ -537,7 +568,13 @@ ${text.slice(0, 12_000)}`,
           title: `${str(doc.title)}实操考评`,
           checklist: items.length
             ? items
-            : [{ item: '按作业文件完成操作', critical: true, sourceExcerpt: '' }],
+            : [
+                {
+                  item: '按作业文件完成操作',
+                  critical: true,
+                  sourceExcerpt: '',
+                },
+              ],
         };
       }
       const settings = await ctx.settings();
@@ -583,9 +620,11 @@ ${text.slice(0, 12_000)}`,
       const seen = new Map<string, Record<string, unknown>>();
       let allowed = false;
       for (const action of actions) {
-        const policies = await authorizeAction(actor.authz, RESOURCE, action).catch(
-          () => undefined,
-        );
+        const policies = await authorizeAction(
+          actor.authz,
+          RESOURCE,
+          action,
+        ).catch(() => undefined);
         if (!policies) continue;
         allowed = true;
         for (const row of (await database
@@ -596,8 +635,12 @@ ${text.slice(0, 12_000)}`,
             filters.employeeId || filters.assessmentId
               ? {
                   filter: {
-                    ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
-                    ...(filters.assessmentId ? { assessmentId: filters.assessmentId } : {}),
+                    ...(filters.employeeId
+                      ? { employeeId: filters.employeeId }
+                      : {}),
+                    ...(filters.assessmentId
+                      ? { assessmentId: filters.assessmentId }
+                      : {}),
                   },
                 }
               : {},
@@ -617,13 +660,17 @@ ${text.slice(0, 12_000)}`,
       );
       const out = [];
       for (const row of seen.values()) {
-        const record = toRecord(await recordRow(str(row.id)).then((r) => r as never));
+        const record = toRecord(
+          await recordRow(str(row.id)).then((r) => r as never),
+        );
         out.push({
           id: record.id,
           assessmentTitle: templates.get(record.assessmentId) ?? '',
           employeeName: employees.get(record.employeeId)?.name ?? '',
           assessorName: await ctx.userName(record.assessorUserId),
-          witnessName: record.witnessUserId ? await ctx.userName(record.witnessUserId) : null,
+          witnessName: record.witnessUserId
+            ? await ctx.userName(record.witnessUserId)
+            : null,
           conductedAt: record.conductedAt,
           status: record.status,
           passed: record.status === 'draft' ? null : record.passed,
@@ -631,13 +678,18 @@ ${text.slice(0, 12_000)}`,
             record.status === 'signed' && record.witnessUserId === actor.userId,
         });
       }
-      return out.sort((a, b) => (b.conductedAt ?? '').localeCompare(a.conductedAt ?? ''));
+      return out.sort((a, b) =>
+        (b.conductedAt ?? '').localeCompare(a.conductedAt ?? ''),
+      );
     },
 
     async getRecord(actor: ActorContext, id: string) {
       for (const action of ['view', 'conduct', 'witness'] as const) {
         try {
-          return await recordView(actor, await visibleRecord(actor, action, id));
+          return await recordView(
+            actor,
+            await visibleRecord(actor, action, id),
+          );
         } catch (error) {
           if (!(error instanceof HrError)) throw error;
         }
@@ -653,9 +705,11 @@ ${text.slice(0, 12_000)}`,
       const template = await templateRow(parsed.data.assessmentId);
       if (template.reviewStatus !== 'confirmed')
         throw new HrError('PRACTICAL_ASSESSMENT_NOT_CONFIRMED', 409);
-      if (!template.active) throw new HrError('PRACTICAL_ASSESSMENT_INACTIVE', 409);
+      if (!template.active)
+        throw new HrError('PRACTICAL_ASSESSMENT_INACTIVE', 409);
       const employee = await ctx.employee(parsed.data.employeeId);
-      if (employee.status === 'leave') throw new HrError('EMPLOYEE_NOT_FOUND', 404);
+      if (employee.status === 'leave')
+        throw new HrError('EMPLOYEE_NOT_FOUND', 404);
       if (employee.userId === actor.userId)
         throw new HrError('PRACTICAL_SELF_ASSESSMENT', 403);
       const witness = parsed.data.witnessUserId ?? null;
@@ -706,7 +760,8 @@ ${text.slice(0, 12_000)}`,
 
     async update(actor: ActorContext, id: string, input: unknown) {
       const record = await visibleRecord(actor, 'conduct', id);
-      if (record.status !== 'draft') throw new HrError('PRACTICAL_RECORD_SIGNED', 409);
+      if (record.status !== 'draft')
+        throw new HrError('PRACTICAL_RECORD_SIGNED', 409);
       if (record.assessorUserId !== actor.userId)
         throw new HrError('PRACTICAL_RECORD_NOT_FOUND', 404);
       const parsed = recordInput.safeParse(input);
@@ -738,12 +793,16 @@ ${text.slice(0, 12_000)}`,
           ...(parsed.data.observationNotes !== undefined
             ? { observationNotes: parsed.data.observationNotes }
             : {}),
-          ...(parsed.data.location !== undefined ? { location: parsed.data.location } : {}),
+          ...(parsed.data.location !== undefined
+            ? { location: parsed.data.location }
+            : {}),
           ...(parsed.data.witnessUserId !== undefined
             ? { witnessUserId: parsed.data.witnessUserId }
             : {}),
           ...(parsed.data.results ? { results: parsed.data.results } : {}),
-          ...(parsed.data.attachments ? { attachments: parsed.data.attachments } : {}),
+          ...(parsed.data.attachments
+            ? { attachments: parsed.data.attachments }
+            : {}),
           updatedAt: new Date(),
         })
         .where('id', '=', id)
@@ -754,14 +813,20 @@ ${text.slice(0, 12_000)}`,
 
     /** Authorizes 让考官整理 and answers whether the notes changed since the last structuring. */
     async prepareStructure(actor: ActorContext, id: string) {
+      assertUnrestrictedNativeAIEntry(actor.authz);
       const record = await visibleRecord(actor, 'conduct', id);
-      if (record.status !== 'draft') throw new HrError('PRACTICAL_RECORD_SIGNED', 409);
+      if (record.status !== 'draft')
+        throw new HrError('PRACTICAL_RECORD_SIGNED', 409);
       if (record.assessorUserId !== actor.userId)
         throw new HrError('PRACTICAL_RECORD_NOT_FOUND', 404);
       if (!record.observationNotes.trim())
         throw new HrError('PRACTICAL_NOTES_REQUIRED', 400);
       const notesHash = hashOf(record.observationNotes);
-      return { record, notesHash, unchanged: record.aiStructured?.notesHash === notesHash };
+      return {
+        record,
+        notesHash,
+        unchanged: record.aiStructured?.notesHash === notesHash,
+      };
     },
 
     /** examiner.structureObservation (the work; trusted, the caller was authorized by prepareStructure). */
@@ -770,7 +835,10 @@ ${text.slice(0, 12_000)}`,
       const template = await templateRow(record.assessmentId);
       const notesHash = hashOf(record.observationNotes);
       if (record.aiStructured?.notesHash === notesHash)
-        return { status: 'skipped' as const, output: { recordId: id, reason: 'unchanged' } };
+        return {
+          status: 'skipped' as const,
+          output: { recordId: id, reason: 'unchanged' },
+        };
       run?.summarize(`实操考核辅助记录：记录 ${id}`);
       run?.reference({ recordId: id, items: template.checklist.length });
       const rule = structureByRule(template.checklist, record.observationNotes);
@@ -787,9 +855,12 @@ ${record.observationNotes.slice(0, 8000)}`,
         const suggested = answer?.items.find((i) => i.key === c.key);
         const fallback = rule.find((r) => r.key === c.key)!;
         if (!suggested) return fallback;
-        const quotes = suggested.quotes.filter((q) => record.observationNotes.includes(q));
+        const quotes = suggested.quotes.filter((q) =>
+          record.observationNotes.includes(q),
+        );
         // No quoted note, no suggestion: an unrecorded item is never suggested as passed.
-        if (!quotes.length) return { key: c.key, suggestion: 'notRecorded' as const, quotes: [] };
+        if (!quotes.length)
+          return { key: c.key, suggestion: 'notRecorded' as const, quotes: [] };
         return { key: c.key, suggestion: suggested.suggestion, quotes };
       });
       const structured: Structured = {
@@ -817,14 +888,19 @@ ${record.observationNotes.slice(0, 8000)}`,
       const record = await visibleRecord(actor, 'conduct', id);
       if (record.assessorUserId !== actor.userId)
         throw new HrError('PRACTICAL_RECORD_NOT_FOUND', 404);
-      if (record.status !== 'draft') throw new HrError('PRACTICAL_RECORD_SIGNED', 409);
+      if (record.status !== 'draft')
+        throw new HrError('PRACTICAL_RECORD_SIGNED', 409);
       const template = await templateRow(record.assessmentId);
       const keys = new Set(record.results.map((r) => r.key));
       if (template.checklist.some((c) => !keys.has(c.key)))
         throw new HrError('PRACTICAL_RESULTS_INCOMPLETE', 409);
       if (template.requiresWitness && !record.witnessUserId)
         throw new HrError('PRACTICAL_WITNESS_REQUIRED', 400);
-      const passed = computePassed(template.checklist, record.results, template.passRule);
+      const passed = computePassed(
+        template.checklist,
+        record.results,
+        template.passRule,
+      );
       const status = record.witnessUserId ? 'signed' : 'completed';
       const now = new Date();
       await database
@@ -853,7 +929,8 @@ ${record.observationNotes.slice(0, 8000)}`,
       const record = await visibleRecord(actor, 'witness', id);
       if (record.witnessUserId !== actor.userId)
         throw new HrError('PRACTICAL_RECORD_NOT_FOUND', 404);
-      if (record.status !== 'signed') throw new HrError('PRACTICAL_NOT_AWAITING_WITNESS', 409);
+      if (record.status !== 'signed')
+        throw new HrError('PRACTICAL_NOT_AWAITING_WITNESS', 409);
       const now = new Date();
       await database
         .query()
@@ -871,11 +948,15 @@ ${record.observationNotes.slice(0, 8000)}`,
     async void(actor: ActorContext, id: string, input: unknown) {
       const record = await visibleRecord(actor, 'void', id);
       const reason =
-        input && typeof input === 'object' && typeof (input as { reason?: unknown }).reason === 'string'
+        input &&
+        typeof input === 'object' &&
+        typeof (input as { reason?: unknown }).reason === 'string'
           ? (input as { reason: string }).reason.trim()
           : '';
-      if (!reason || reason.length > 500) throw new HrError('PRACTICAL_VOID_REASON_REQUIRED', 400);
-      if (record.status === 'voided') throw new HrError('PRACTICAL_RECORD_VOIDED', 409);
+      if (!reason || reason.length > 500)
+        throw new HrError('PRACTICAL_VOID_REASON_REQUIRED', 400);
+      if (record.status === 'voided')
+        throw new HrError('PRACTICAL_RECORD_VOIDED', 409);
       const now = new Date();
       await database
         .query()
@@ -917,7 +998,9 @@ ${record.observationNotes.slice(0, 8000)}`,
         .orderBy('conductedAt', 'desc')
         .execute();
       const row = rows[0];
-      return row ? { recordId: str(row.id), conductedAt: iso(row.conductedAt)! } : null;
+      return row
+        ? { recordId: str(row.id), conductedAt: iso(row.conductedAt)! }
+        : null;
     },
 
     /**
@@ -951,7 +1034,11 @@ ${record.observationNotes.slice(0, 8000)}`,
       const recordIds: string[] = [];
       const missing: string[] = [];
       for (const link of links) {
-        const valid = await service.validPractical(employeeId, str(link.assessmentId), months);
+        const valid = await service.validPractical(
+          employeeId,
+          str(link.assessmentId),
+          months,
+        );
         if (valid) recordIds.push(valid.recordId);
         else missing.push(str(link.assessmentId));
       }
@@ -1034,7 +1121,10 @@ ${record.observationNotes.slice(0, 8000)}`,
       await database
         .query()
         .updateTable('practicalRecords')
-        .set({ attachments: [...record.attachments, fileId].slice(0, 30), updatedAt: new Date() })
+        .set({
+          attachments: [...record.attachments, fileId].slice(0, 30),
+          updatedAt: new Date(),
+        })
         .where('id', '=', id)
         .execute();
       return recordView(actor, await recordRow(id));
@@ -1049,20 +1139,28 @@ ${record.observationNotes.slice(0, 8000)}`,
         .findMany({})) as Record<string, unknown>[];
       const titles = await ctx.departmentTitles();
       return rows
-        .filter((r) => str(r.userId ?? '') !== actor.userId && r.status !== 'leave')
+        .filter(
+          (r) => str(r.userId ?? '') !== actor.userId && r.status !== 'leave',
+        )
         .map((r) => ({
           id: str(r.id),
           name: str(r.name),
           departmentTitle: titles.get(str(r.departmentId)) ?? '',
         }))
-        .sort((a, b) => a.departmentTitle.localeCompare(b.departmentTitle) || a.name.localeCompare(b.name));
+        .sort(
+          (a, b) =>
+            a.departmentTitle.localeCompare(b.departmentTitle) ||
+            a.name.localeCompare(b.name),
+        );
     },
 
     /** The people who may witness: active employees with an account (names only). */
     async witnessOptions(actor: ActorContext) {
       await authorizeAction(actor.authz, RESOURCE, 'conduct');
       return [...(await ctx.employees()).values()]
-        .filter((e) => e.userId && e.status !== 'leave' && e.userId !== actor.userId)
+        .filter(
+          (e) => e.userId && e.status !== 'leave' && e.userId !== actor.userId,
+        )
         .map((e) => ({ userId: e.userId!, name: e.name }));
     },
   };

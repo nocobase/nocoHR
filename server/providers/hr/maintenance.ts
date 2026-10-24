@@ -2,7 +2,7 @@
  * The HR schedules' work in one place, so the scheduler targets and the
  * "run maintenance now" endpoint do the same thing.
  */
-import { loggingToken } from '@nocobase/app-server/logging';
+import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import type { ServiceContainer } from '@nocobase/service-provider';
 
 import { runAttendanceTask } from './attendance-tasks.js';
@@ -317,55 +317,22 @@ async function aiBrief(
   timeZone: string,
 ): Promise<string | undefined> {
   try {
-    const { aiConversationsManagerToken, agentServiceFactoryToken } =
-      await import('@nocobase/app-plugin-ai-employee/server');
-    if (
-      !container.has(aiConversationsManagerToken) ||
-      !container.has(agentServiceFactoryToken)
-    )
-      return undefined;
+    const { createNativeStructuredAI } =
+      await import('../native-ai/structured.js');
     const { z } = await import('zod');
-    const skillSettings = {
-      toolsVersion: 1,
-      tools: ['listCertificates', 'teamCertificationSummary'],
-      skillsVersion: 1,
-      skills: [] as string[],
-    };
-    const conversation = await container
-      .resolve(aiConversationsManagerToken)
-      .create({
+    const { data } = await createNativeStructuredAI(container).structured({
+      employee: 'certificationSteward',
+      userId,
+      authorization: await scopeForUser(
+        container.resolve(authorizationToken),
         userId,
-        aiEmployee: { username: 'certificationSteward' },
-        title: '每周持证简报',
-        options: { skillSettings },
-      });
-    const agent = await container
-      .resolve(agentServiceFactoryToken)
-      .createAIEmployee({
-        username: 'certificationSteward',
-        state: { sessionId: conversation.sessionId, timezone: timeZone },
-        actor: { id: userId, roles: [], isRoot: false, locale: 'zh-CN' },
-        runtime: { logger: container.resolve(loggingToken).getLogger('hr') },
-        skillSettings: skillSettings,
-      });
-    const result = await agent.invoke({
-      userMessages: [
-        {
-          role: 'user',
-          // `{ type, content }`: see the note in ai-runner.ts.
-          content: {
-            type: 'text',
-            content: `请根据以下本周持证数据，为我写一份不超过 200 字的持证简报，只使用给出的数据，按到期日排序列名单，不要估算：\n${JSON.stringify(facts)}`,
-          },
-        },
-      ],
-      responseFormat: z.object({ brief: z.string() }),
-      signal: AbortSignal.timeout(60_000),
+      ),
+      title: '每周持证简报',
+      timeZone,
+      prompt: `请根据以下本周持证数据，为我写一份不超过 200 字的持证简报，只使用给出的数据，按到期日排序列名单，不要估算：\n${JSON.stringify(facts)}`,
+      schema: z.object({ brief: z.string() }),
     });
-    const brief = (
-      result.structuredResponse as { brief?: string } | undefined
-    )?.brief?.trim();
-    return brief ? brief.slice(0, 200) : undefined;
+    return data.brief.trim().slice(0, 200) || undefined;
   } catch {
     return undefined;
   }

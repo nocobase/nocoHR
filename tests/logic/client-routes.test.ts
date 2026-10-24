@@ -1,3 +1,4 @@
+import { filterRouteTree, inSurface } from '../../client/routing/surfaces.js';
 import {
   resolveAppClientContributions,
   type AppClientRegisteredRoute,
@@ -27,11 +28,7 @@ describe('app client routes', () => {
 
   it('loads every page component', async () => {
     const resolved = resolveRoutes();
-    const loaders = [
-      ...componentLoadersIn(resolved.routes),
-      ...componentLoadersIn(resolved.settingsRouteTree),
-      ...componentLoadersIn(resolved.devRouteTree),
-    ];
+    const loaders = [...componentLoadersIn(resolved.routes)];
     // The trees above are filtered by loader, so an empty list would make the loop below pass without loading
     // anything at all.
     expect(loaders).not.toHaveLength(0);
@@ -54,7 +51,14 @@ describe('app client routes', () => {
 
     // The landing page opted out of page authorization, so it is reachable by every signed-in user.
     // The talent pages each carry their own page grant; nested pages inherit the grant of their first page.
-    expect(pageAuthorizations(resolved.routes)).toEqual([
+    expect(
+      pageAuthorizations(
+        filterRouteTree(
+          resolved.routes,
+          (r) => !inSurface(r.path, 'settings') && !inSurface(r.path, 'dev'),
+        ),
+      ),
+    ).toEqual([
       { name: 'home', authorizedAs: null },
       // 通知 (站内信): every signed-in user's own inbox, like the landing page.
       { name: 'talent-inbox', authorizedAs: null },

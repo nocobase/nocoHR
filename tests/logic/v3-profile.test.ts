@@ -11,6 +11,9 @@ import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { jobExecutorServiceToken } from '@nocobase/app-server/jobs';
+import type { Socket } from 'node:net';
+import { observeFixtureClose } from '../helpers/close-diagnostics.ts';
 
 import {
   createStandaloneServer,
@@ -47,6 +50,18 @@ let server: StandaloneServer;
 let directory: string;
 let base: string;
 let writeback: Server;
+let writebackRequests = 0;
+let writebackFinished = 0;
+let writebackAborted = 0;
+const pendingWritebacks = new Set<number>();
+const writebackConnections = new Set<Socket>();
+const writebackState = () => ({
+  writebackRequests,
+  writebackFinished,
+  writebackAborted,
+  pendingWritebacks: [...pendingWritebacks],
+  openWritebackConnections: writebackConnections.size,
+});
 const received: { body: Json; signature: string | undefined }[] = [];
 let failWriteback = true;
 const cookies = new Map<string, string>();
@@ -240,6 +255,16 @@ const QI_0457 = {
 
 beforeAll(async () => {
   writeback = createServer((request, response) => {
+    const id = ++writebackRequests;
+    pendingWritebacks.add(id);
+    response.once('finish', () => {
+      writebackFinished++;
+      pendingWritebacks.delete(id);
+    });
+    response.once('close', () => {
+      if (!response.writableFinished) writebackAborted++;
+      pendingWritebacks.delete(id);
+    });
     let data = '';
     request.on('data', (chunk) => (data += chunk));
     request.on('end', () => {
@@ -250,6 +275,10 @@ beforeAll(async () => {
       response.statusCode = failWriteback ? 500 : 200;
       response.end('{}');
     });
+  });
+  writeback.on('connection', (socket) => {
+    writebackConnections.add(socket);
+    socket.once('close', () => writebackConnections.delete(socket));
   });
   await new Promise<void>((resolve) =>
     writeback.listen(0, '127.0.0.1', resolve),
@@ -299,6 +328,11 @@ beforeAll(async () => {
       storageDir: path.join(directory, 'storage'),
     },
   });
+  // Keep one-off Jobs active, while excluding unrelated calendar work from these API assertions.
+  await server.application.container
+    .resolve(jobExecutorServiceToken)
+    .getScheduleExecutor('@nocobase/app-plugin-scheduler')
+    .shutdown();
   base = `http://localhost${server.application.publicBasePath}`;
   // The integration account's key, issued as an administrator would (never written to the repository).
   const { ApiKeyService } =
@@ -345,8 +379,20 @@ beforeAll(async () => {
 }, 240_000);
 
 afterAll(async () => {
-  await server?.close();
-  await new Promise<void>((resolve) => writeback?.close(() => resolve()));
+  await observeFixtureClose({
+    suite: 'v3-profile',
+    stage: 'application',
+    application: server?.application,
+    close: () => server?.close(),
+    state: writebackState,
+  });
+  await observeFixtureClose({
+    suite: 'v3-profile',
+    stage: 'writeback',
+    close: () =>
+      new Promise<void>((resolve) => writeback?.close(() => resolve())),
+    state: writebackState,
+  });
   delete process.env.HR_DEMO_PASSWORD;
   delete process.env.HR_PAYROLL_DEMO;
   if (directory) rmSync(directory, { recursive: true, force: true });

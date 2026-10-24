@@ -15,10 +15,15 @@
  * description names are still proposed, each with the clause that names
  * them, and nothing new is invented.
  */
+import { assertUnrestrictedNativeAIEntry } from '../native-ai/access.js';
+import type { StructuredAI } from '../native-ai/structured.js';
+import { OnlineAgentResultError } from '@nocobase/app-plugin-agents/server/online-agent';
+import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
+import { generateLearningPlan } from '../native-ai/learning-plan.js';
 import type { ServiceContainer } from '@nocobase/service-provider';
 import { z } from 'zod';
 
-import { AIUnavailableError, type AIRunner } from './ai-runner.js';
+import { AIUnavailableError, AIShapeError } from './ai-runner.js';
 import { guardedWording } from './ai-text-guard.js';
 import {
   clauseListing,
@@ -62,6 +67,7 @@ import { json } from './platform.js';
 import { addDays, HrError, newId, str } from './shared.js';
 import { driveManagerToken } from '@nocobase/app-server/drive';
 import {
+  aiEntryServiceToken,
   certificationServiceToken,
   checklistServiceToken,
   complianceServiceToken,
@@ -152,7 +158,7 @@ export interface AutomationTasks {
 export interface AutomationTasksDeps {
   readonly container: ServiceContainer;
   readonly automation: AutomationService;
-  readonly ai: AIRunner;
+  readonly ai: StructuredAI;
   readonly platform: Platform;
   readonly organization: () => OrganizationService;
   /** The application's default language. */
@@ -194,6 +200,7 @@ export function createAutomationTasks(
     const { data, sessionId } = await ai.structured({
       employee,
       userId: run.owner.userId,
+      authorization: run.owner.authz,
       title,
       prompt,
       schema,
@@ -251,7 +258,8 @@ export function createAutomationTasks(
     ).filter(
       (p) =>
         // V3-08: a position with only an uploaded 岗位说明书 qualifies too.
-        ((p.responsibilities != null && str(p.responsibilities).trim() !== '') ||
+        ((p.responsibilities != null &&
+          str(p.responsibilities).trim() !== '') ||
           (p.jdStatus === 'ready' &&
             p.jdText != null &&
             str(p.jdText).trim() !== '')) &&
@@ -1411,8 +1419,7 @@ export function createAutomationTasks(
     // V3-09: 转正准备 includes the learning during probation, read as each recipient.
     learning: async (ctx, employeeId) =>
       (await probationLearning(platform, ctx, employeeId)) as
-        | Record<string, unknown>
-        | undefined,
+        Record<string, unknown> | undefined,
     learningText: (learning) =>
       probationLearningText(learning as unknown as ProbationLearning),
   });
@@ -1444,6 +1451,8 @@ export function createAutomationTasks(
     platform,
     knowledge,
     structured,
+    questionScope: () =>
+      container.resolve(aiEntryServiceToken).scopeFor('knowledgeAssistant'),
     hrRecipients: () =>
       container.resolve(hrCoreServiceToken).hrAdministrators(),
   });
@@ -1452,6 +1461,32 @@ export function createAutomationTasks(
     container,
     platform,
     structured,
+    structuredPlan: async (run, _employee, _title, prompt, schema) => {
+      const agents = container.resolve(agentsToken);
+      if (!(await agents.models.services.defaults()).effectiveChat)
+        throw new AIUnavailableError('No enabled native chat model');
+      try {
+        const result = await generateLearningPlan(
+          agents.onlineAgent,
+          {
+            user: { id: run.owner.userId },
+            authorization: run.owner.authz,
+            credentials: run,
+          },
+          prompt,
+          schema,
+        );
+        run.usedConversation(result.sessionId);
+        return result.data;
+      } catch (error) {
+        if (
+          error instanceof OnlineAgentResultError &&
+          error.code === 'OUTPUT_INVALID'
+        )
+          throw new AIShapeError(error.message);
+        throw error;
+      }
+    },
     worded,
   });
 
@@ -1668,7 +1703,10 @@ export function createAutomationTasks(
       return automation.run(
         'hrAssistant.replacementSuggest',
         'event',
-        { triggerRef: { scheduleId, reason: 'certificationMissing' }, dedupeKey },
+        {
+          triggerRef: { scheduleId, reason: 'certificationMissing' },
+          dedupeKey,
+        },
         (run) => hrAttendance.replacementSuggest(run, scheduleId),
       );
     },
@@ -1752,7 +1790,10 @@ export function createAutomationTasks(
       return automation.run(
         'hrAssistant.compliance',
         'event',
-        { triggerRef: { employeeId }, dedupeKey: `compliance:${employeeId}:${Date.now()}` },
+        {
+          triggerRef: { employeeId },
+          dedupeKey: `compliance:${employeeId}:${Date.now()}`,
+        },
         (run) => hrChanges.complianceCheck(run, employeeId),
       );
     },
@@ -1783,6 +1824,7 @@ export function createAutomationTasks(
     },
 
     async retryRun(ctx, runId) {
+      assertUnrestrictedNativeAIEntry(ctx.authz);
       const { task, triggerRef } = await automation.retryTarget(ctx, runId);
       const ref = (name: string): string => {
         const value = triggerRef[name];
@@ -1852,7 +1894,9 @@ export function createAutomationTasks(
         scheduled[task] ??
         events[task]?.() ??
         // V3-11: the coach's recommendation content and the writer's version revision.
-        container.resolve(profileServicesToken).analyst.retry(task, triggerRef) ??
+        container
+          .resolve(profileServicesToken)
+          .analyst.retry(task, triggerRef) ??
         // V4-12: the performance assistant's event work.
         container.resolve(performanceServicesToken).retry(task, triggerRef) ??
         // V4-13: the talent-review step's event work.

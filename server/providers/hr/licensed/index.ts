@@ -22,9 +22,9 @@
  * Certificate states and permissions follow rules only; no AI employee
  * changes a certificate, a permission or a schedule.
  */
+import type { StructuredAI } from '../../native-ai/structured.js';
 import { z } from 'zod';
 
-import type { AIRunner } from '../ai-runner.js';
 import { AIUnavailableError } from '../ai-runner.js';
 import { authorizeAction, policyOf, tryAuthorizeAction } from '../authorize.js';
 import type {
@@ -81,7 +81,7 @@ export interface LicensedServicesDeps {
   readonly demoBatch: () => DemoBatchService;
   readonly industryPacks: () => IndustryPackService;
   readonly automation: () => AutomationService;
-  readonly ai: AIRunner;
+  readonly ai: StructuredAI;
   readonly titleText: (title: unknown) => string;
   readonly audit: (event: Record<string, unknown>) => void;
   /** V2-05 顶班推荐, with its own dedupe key (automation-tasks.ts). */
@@ -285,6 +285,7 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
       const { data, sessionId } = await deps.ai.structured({
         employee: 'certificationSteward',
         userId: run.owner.userId,
+        authorization: run.owner.authz,
         title: '调岗资质检查',
         prompt: [
           '员工调岗后仍持有新岗位不再要求、但带来操作权限的证书。请写一段不超过 150 字的提醒给 HR 和新部门负责人：只陈述事实（仍持有哪张证书、仍能使用哪些操作、新岗位是否要求），建议由 HR 决定保留或吊销，不替 HR 决定。只写姓名、证书名称和操作名称，不写证书编号或个人信息。只使用给出的数据：',
@@ -618,17 +619,15 @@ export function createLicensedServices(deps: LicensedServicesDeps) {
     async runTransferCheck(eventId: string): Promise<RunOutcome | undefined> {
       if (!(await transfer.active())) return undefined;
       if (!(await transfer.judgeEvent(eventId))) return undefined;
-      return deps
-        .automation()
-        .run(
-          TRANSFER_CHECK_TASK,
-          'event',
-          {
-            triggerRef: { jobEventId: eventId },
-            dedupeKey: `jobEvent:${eventId}`,
-          },
-          (run) => transferCheckWork(run, eventId),
-        );
+      return deps.automation().run(
+        TRANSFER_CHECK_TASK,
+        'event',
+        {
+          triggerRef: { jobEventId: eventId },
+          dedupeKey: `jobEvent:${eventId}`,
+        },
+        (run) => transferCheckWork(run, eventId),
+      );
     },
 
     // ---------- 认证管家 tools ----------

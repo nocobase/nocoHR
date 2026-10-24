@@ -71,9 +71,14 @@ describe('application authentication pages', () => {
         password: 'password',
       });
     });
+    const forgotPasswordLink = screen.getByRole('link', {
+      name: 'Forgot password?',
+    });
+    expect(forgotPasswordLink).toHaveAttribute('href', '/forgot-password');
     expect(
-      screen.getByRole('link', { name: 'Forgot password?' }),
-    ).toHaveAttribute('href', '/forgot-password');
+      passwordInput.compareDocumentPosition(forgotPasswordLink) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('puts the brand panel beside the form on wide screens', () => {

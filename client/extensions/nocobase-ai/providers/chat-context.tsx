@@ -48,6 +48,7 @@ export type AIChatContextValue = {
   send: () => Promise<void>;
   stop: () => Promise<void>;
   regenerate: () => Promise<void>;
+  continueReply?: () => Promise<void>;
   retryMessage: (message: AIChatMessage) => Promise<void>;
   decideToolCall: (decision: AIToolCallDecision) => Promise<void>;
   startNewConversation: () => void;

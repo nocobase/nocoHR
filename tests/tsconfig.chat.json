@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": ["node"]
+  },
+  "include": [
+    "../client/extensions/nocobase-ai/providers/chat-transport.ts",
+    "../client/extensions/nocobase-ai/providers/ui-message-stream.ts",
+    "../client/extensions/nocobase-ai/providers/use-chat-runtime.ts",
+    "../client/extensions/nocobase-ai/providers/use-chat-message-actions.ts",
+    "../client/extensions/nocobase-ai/providers/types.ts",
+    "./components/assistant-sdk-chat.test.tsx"
+  ],
+  "exclude": []
+}

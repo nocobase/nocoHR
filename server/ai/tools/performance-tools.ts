@@ -6,7 +6,7 @@
  * No tool returns a bonus coefficient, another person's rating or a peer's
  * identity.
  */
-import { defineTools } from '@nocobase/ai-employee';
+import { defineTools } from '../contracts.js';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { z } from 'zod';
 

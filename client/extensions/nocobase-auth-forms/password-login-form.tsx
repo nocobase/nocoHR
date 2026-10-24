@@ -6,9 +6,9 @@ import {
   type ReactNode,
 } from 'react';
 
-import { Button } from '@/components/ui/button';
-import { FieldGroup } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { Button } from '#components/ui/button';
+import { FieldGroup } from '#components/ui/field';
+import { Input } from '#components/ui/input';
 
 import { invalidProps } from './field-props.js';
 import { AuthField, AuthFormStatus, AuthFormSubmit } from './form-parts.js';
@@ -46,7 +46,7 @@ export interface PasswordLoginFormProps {
   readonly error?: ReactNode;
   readonly fieldErrors?: Partial<Record<keyof PasswordLoginValues, ReactNode>>;
   readonly labels?: Partial<PasswordLoginLabels>;
-  /** Rendered beside the password label, usually a link to the forgot-password page. */
+  /** Rendered under the password input, usually a link to the forgot-password page. */
   readonly forgotPasswordLink?: ReactNode;
   /** Rendered under the submit button, usually a line linking to sign-up. */
   readonly footer?: ReactNode;
@@ -95,10 +95,10 @@ export function PasswordLoginForm({
           />
         </AuthField>
         <AuthField
+          below={forgotPasswordLink}
           error={fieldErrors?.password}
           id={passwordId}
           label={labels.password}
-          labelAside={forgotPasswordLink}
         >
           <PasswordInput
             autoComplete='current-password'

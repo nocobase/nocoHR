@@ -27,6 +27,7 @@ import { SurfaceEmpty, type SurfaceCopy } from './components/surface-empty.js';
 import { HeaderActions } from './components/header-actions.js';
 
 import { useClientApplication } from '@nocobase/app-client';
+import { surfaceRoutes } from '../routing/surfaces.js';
 export interface DevLayoutProps {
   readonly routeTree: readonly AppClientRegisteredRoute[];
   readonly routes?: readonly AppClientRegisteredRoute[];
@@ -50,9 +51,12 @@ export function DevLayout({
   };
 
   const { items: navEntries, loading, denied } = useRouteNavigation(routeTree);
-  const settingsNavigation = useRouteNavigation(
-    useClientApplication().runtime.settingsRouteTree,
+  const runtimeRoutes = useClientApplication().runtime.routes;
+  const settingsTree = useMemo(
+    () => surfaceRoutes(runtimeRoutes, 'settings'),
+    [runtimeRoutes],
   );
+  const settingsNavigation = useRouteNavigation(settingsTree);
   const selectedKey = selectedNavigationId(
     routeTree,
     location.pathname,
@@ -79,7 +83,12 @@ export function DevLayout({
     matches
       ?.filter(({ route }) => route.componentLoader)
       .slice(0, 1)
-      .some(({ route }) => denied.has(routeKey(route))) ||
+      .some(
+        ({ route }) =>
+          route.source === 'plugin' &&
+          (route.navigation || route.children?.length) &&
+          denied.has(routeKey(route)),
+      ) ||
     !matches?.some(({ route }) => route.componentLoader)
   ) {
     return visible[0] ? (

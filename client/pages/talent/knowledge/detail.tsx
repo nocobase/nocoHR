@@ -19,7 +19,6 @@ import {
   useSearchParams,
 } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -59,7 +58,6 @@ export default function DocumentDetailPage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         {document.error ? (
           <LoadError error={document.error} onRetry={document.reload} />
         ) : !document.data ? (

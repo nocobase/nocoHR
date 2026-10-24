@@ -4,7 +4,7 @@
  * the pages: traces and transfer checks return only people in the caller's
  * steward scope. No tool changes a certificate, a permission or a schedule.
  */
-import { defineTools, type AIEmployeeOptions } from '@nocobase/ai-employee';
+import { defineTools, type AIEmployeeOptions } from '../contracts.js';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { z } from 'zod';
 

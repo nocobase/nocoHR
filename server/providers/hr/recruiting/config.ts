@@ -103,9 +103,7 @@ export const recruitingSettingsSchema = z
         maxResumeMb: z.number().int().min(1).max(20),
       })
       .strict(),
-    retention: z
-      .object({ months: z.number().int().min(1).max(120) })
-      .strict(),
+    retention: z.object({ months: z.number().int().min(1).max(120) }).strict(),
     reminders: z
       .object({
         /** 投递在同一阶段停留超过此天数未处理，提醒招聘负责人. */
@@ -295,7 +293,7 @@ export async function readRecruitingSettings(
       ];
       merged[key] =
         base && typeof base === 'object' && !Array.isArray(base)
-          ? { ...(base), ...(stored[key] as object) }
+          ? { ...base, ...(stored[key] as object) }
           : stored[key];
     }
   const parsed = recruitingSettingsSchema.safeParse(merged);

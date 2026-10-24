@@ -12,6 +12,7 @@
  * nothing in a message changes who it goes to or what it contains.
  */
 import type { AutomationRunContext } from '../automation.js';
+import { runMailTask } from './task-result.js';
 import { tryAuthorizeAction } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
 import type { ReconciliationLine } from '../payroll/vendor-bills.js';
@@ -201,7 +202,8 @@ export function createBillingMailHandler(deps: {
   }
 
   async function sort(message: MailMessage, attempt?: string) {
-    await deps.run(
+    await runMailTask(
+      deps.run,
       MAIL_SORT_BILLING,
       {
         dedupeKey: attempt ? `${message.id}:${attempt}` : message.id,
@@ -255,17 +257,24 @@ export function createBillingMailHandler(deps: {
         run.summarize('来信未识别为账单，已放入待归类');
         return { output: { mailId: message.id, billId: null } };
       },
+      async () => {
+        const after = await mail.row(message.id);
+        if (after.status === 'received')
+          await mail.leaveUnmatched(
+            message.id,
+            null,
+            '未自动识别，请人工归类。',
+          );
+      },
     );
     // Without an owner (or with the task switched off) the message still waits for a person.
-    const after = await mail.row(message.id);
-    if (after.status === 'received')
-      await mail.leaveUnmatched(message.id, null, '未自动识别，请人工归类。');
   }
 
   async function reply(message: MailMessage) {
     if (message.refType !== 'laborVendorBill' || !message.refId) return;
     const billId = message.refId;
-    await deps.run(
+    await runMailTask(
+      deps.run,
       MAIL_SORT_BILLING,
       { dedupeKey: message.id, triggerRef: { mailId: message.id, billId } },
       async (run) => {
@@ -348,7 +357,8 @@ export function createBillingMailHandler(deps: {
     async draftForBill(billId: string) {
       const mailId = await deps.billSourceMail(billId);
       if (!mailId) return;
-      await deps.run(
+      await runMailTask(
+        deps.run,
         MAIL_REPLY_BILLING,
         { dedupeKey: `${billId}:${mailId}`, triggerRef: { billId, mailId } },
         async (run) => {

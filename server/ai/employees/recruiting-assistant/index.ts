@@ -1,4 +1,4 @@
-import { defineAIEmployee } from '@nocobase/ai-employee';
+import { defineAIEmployee } from '../../contracts.js';
 
 /**
  * V2-07 招聘助理: prepares the recruiter's and interviewers' work — posting

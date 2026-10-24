@@ -78,7 +78,10 @@ export const talentReviewServerZh: typeof talentReviewServerEn = {
       '继任候选推荐：{{department}}{{position}}',
       '人才分析师推荐了 {{count}} 名候选人并附差距说明，请选择准备度后确认继任计划。',
     ),
-    successionRisk: n('继任风险提醒：{{department}}{{position}}', '{{summary}}'),
+    successionRisk: n(
+      '继任风险提醒：{{department}}{{position}}',
+      '{{summary}}',
+    ),
     practicalWitness: n(
       '实操考核待你见证签字：{{title}}',
       '{{name}} 的实操考核已由考评员签字，请在你的账号中核对并签字。',

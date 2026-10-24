@@ -5,8 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { resolveAppClientContributions } from '@nocobase/app-client/plugins';
 
 import clientPlugins from '../../client/plugins.js';
+import applicationRoutes from '../../client/routes.js';
 
 const appRoot = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -35,20 +37,29 @@ describe('client plugin registry consistency', () => {
   });
 
   it('mounts the standard user and API key pages under Settings', () => {
-    for (const [packageName, routePath] of [
-      ['@nocobase/app-plugin-users', '/users'],
-      ['@nocobase/app-plugin-api-keys', '/api-keys'],
+    const { routes } = resolveAppClientContributions([
+      { packageName: 'hr', source: 'application', routes: applicationRoutes },
+      ...clientPlugins.plugins.map((plugin) => ({
+        packageName: plugin.packageName,
+        source: 'plugin' as const,
+        routes: plugin.routes,
+      })),
+    ]);
+    const settings = routes.find((route) => route.name === 'settings');
+    for (const [routePath, resourceId] of [
+      ['/settings/users', 'users'],
+      ['/settings/api-keys', 'api-keys'],
     ]) {
-      const plugin = clientPlugins.plugins.find(
-        (entry) => entry.packageName === packageName,
-      );
-      expect(plugin?.routes).toEqual(
+      expect(settings?.children).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            parent: 'settings',
-            routes: expect.arrayContaining([
-              expect.objectContaining({ path: routePath }),
-            ]),
+            path: routePath,
+            source: 'application',
+            componentLoader: expect.any(Function),
+            authz: {
+              resource: { type: 'page', id: resourceId },
+              action: 'access',
+            },
           }),
         ]),
       );

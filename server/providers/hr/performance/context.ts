@@ -5,7 +5,7 @@
  * these only for rows the action already covers (or for non-sensitive facts
  * such as cycle titles and deadlines).
  */
-import type { AIRunner } from '../ai-runner.js';
+import type { StructuredAI } from '../../native-ai/structured.js';
 import type { AutomationService } from '../automation.js';
 import type { CustomFieldService } from '../custom-fields.js';
 import type { ActorContext } from '../framework-service.js';
@@ -17,7 +17,7 @@ import { readPerformanceSettings, type PerformanceSettings } from './config.js';
 
 export interface PerformanceDeps {
   readonly platform: Platform;
-  readonly ai: AIRunner;
+  readonly ai: StructuredAI;
   readonly automation: () => AutomationService;
   readonly plans: () => PlanService;
   readonly customFields: () => CustomFieldService;

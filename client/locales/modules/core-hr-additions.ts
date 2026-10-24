@@ -106,7 +106,7 @@ const en = {
       confirmed: 'Scope confirmed',
       build: 'Build the audit pack',
       rebuild: 'Build again',
-      packBuilt: 'Audit pack built; the reply is drafted',
+      packBuilt: 'Audit pack built',
       download: 'Download the pack',
       risksHint:
         'For internal use: never in the reply. Whether to tell the auditor is the quality department’s call.',
@@ -887,7 +887,7 @@ const zh: Shape = {
       confirmed: '范围已确认',
       build: '生成审核包',
       rebuild: '重新生成',
-      packBuilt: '审核包已生成，回复已起草',
+      packBuilt: '审核包已生成',
       download: '下载审核包',
       risksHint: '仅供内部处理，不写进回复；是否告知审核方由质量部决定。',
       share: '分享链接',

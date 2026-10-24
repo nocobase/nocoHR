@@ -8,6 +8,7 @@
  * `POST /api/talent/signals:ingest` takes an API key bound to the integration
  * account, whose only permission is `talent.signal.ingest`.
  */
+import { createNativeStructuredAI } from '../../providers/native-ai/structured.js';
 import { authenticationToken } from '@nocobase/app-plugin-authentication';
 import { ApiKeyService } from '@nocobase/app-plugin-api-keys/server';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
@@ -20,10 +21,7 @@ import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
 import { authorizeAction, policyOf } from '../../providers/hr/authorize.js';
-import {
-  AIUnavailableError,
-  createAIRunner,
-} from '../../providers/hr/ai-runner.js';
+import { AIUnavailableError } from '../../providers/hr/ai-runner.js';
 import { HrError, isRecord, str } from '../../providers/hr/shared.js';
 import {
   profileServicesToken,
@@ -290,7 +288,7 @@ export const profileApiRoutes: AppApiRouteContribution<Application> =
         ctx,
         await ownId(c, c.req.param('employeeId')),
       );
-      await profile().analyst.regenerateSummary(ctx.userId, employee.id);
+      await profile().analyst.regenerateSummary(ctx, employee.id);
       return c.json({
         data: await profile().insights.summary(ctx, employee.id),
       });
@@ -326,9 +324,12 @@ export const profileApiRoutes: AppApiRouteContribution<Application> =
       let parsedBy: 'ai' | 'rules' = 'rules';
       try {
         const lookups = await insights.lookups();
-        const { data } = await createAIRunner(app.container).structured({
+        const { data } = await createNativeStructuredAI(
+          app.container,
+        ).structured({
           employee: 'talentAnalyst',
           userId: ctx.userId,
+          authorization: ctx.authz,
           title: '找人 · 解析条件',
           prompt: `把这句话转成结构化找人条件，只能使用下列清单中的 id：${JSON.stringify({ text, ...lookups })}`,
           schema: z.object({
@@ -357,7 +358,6 @@ export const profileApiRoutes: AppApiRouteContribution<Application> =
             activeOnly: z.boolean(),
           }),
           timeZone: 'Asia/Shanghai',
-          unattended: false,
         });
         conditions = await insights.cleanConditions(data);
         parsedBy = 'ai';

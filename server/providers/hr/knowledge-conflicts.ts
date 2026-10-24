@@ -15,7 +15,8 @@
 import { z } from 'zod';
 
 import { AIUnavailableError } from './ai-runner.js';
-import { authorizeAction, scopeForUser } from './authorize.js';
+import { assertUnrestrictedNativeAIEntry } from '../native-ai/access.js';
+import { authorizeAction, policyOf, scopeForUser } from './authorize.js';
 import type { AutomationRunContext } from './automation.js';
 import { numericConflicts, type SectionChange } from './document-changes.js';
 import { splitSections } from './document-text.js';
@@ -36,6 +37,10 @@ export function createConflictCheck(deps: {
   readonly platform: Platform;
   readonly knowledge: () => KnowledgeService;
   readonly structured: Structured;
+  readonly questionScope: () => Promise<{
+    docNos: readonly string[];
+    categories: readonly string[];
+  }>;
   readonly hrRecipients: () => Promise<string[]>;
 }) {
   const { platform, structured } = deps;
@@ -45,17 +50,91 @@ export function createConflictCheck(deps: {
     run: AutomationRunContext,
     documentId: string,
   ) {
-    await authorizeAction(run.owner.authz, 'talent.knowledgeAssistant', 'use');
-    const doc = await database
-      .query()
-      .selectFrom('kbDocuments')
-      .selectAll()
-      .where('id', '=', documentId)
-      .executeTakeFirst();
-    if (!doc || doc.parseStatus !== 'ready' || doc.supersededById)
+    // Never replace a scoped entry with an unrestricted task owner.
+    assertUnrestrictedNativeAIEntry(run.owner.authz);
+    const eligibilityFields = [
+      'id',
+      'docNo',
+      'category',
+      'active',
+      'parseStatus',
+      'supersededById',
+      'reviewStatus',
+      'translationOfId',
+      'updatedAt',
+    ] as const;
+    async function selectCurrent() {
+      const scope = await deps.questionScope();
+      const owner = {
+        userId: run.owner.userId,
+        authz: await scopeForUser(platform.authz, run.owner.userId),
+      };
+      const use = await authorizeAction(
+        owner.authz,
+        'talent.knowledgeAssistant',
+        'use',
+      );
+      const view = await authorizeAction(
+        owner.authz,
+        'talent.kbDocument',
+        'view',
+      );
+      const repo = database
+        .repository('kbDocuments')
+        .withPolicy(policyOf(use, 'kbDocuments'))
+        .narrow(policyOf(view, 'kbDocuments'));
+      // Apply both existing row/field policies before fetching even metadata; no
+      // full text enters memory until the current question-source rules also pass.
+      const eligible = (row: Record<string, unknown>) =>
+        (row.reviewStatus ?? 'confirmed') !== 'draft' &&
+        !row.translationOfId &&
+        (!scope.docNos.length || scope.docNos.includes(str(row.docNo ?? ''))) &&
+        (!scope.categories.length ||
+          scope.categories.includes(str(row.category)));
+      const base = { active: true, parseStatus: 'ready', supersededById: null };
+      const doc = await repo.findOne({
+        filter: { ...base, id: documentId },
+        select: (select) => select.fields(...eligibilityFields),
+      });
+      if (!doc || !eligible(doc)) return undefined;
+      const others = (
+        await repo.findMany({
+          filter: base,
+          select: (select) => select.fields(...eligibilityFields),
+        })
+      ).filter(
+        (row) =>
+          str(row.id) !== documentId &&
+          eligible(row) &&
+          (!doc.docNo || str(row.docNo ?? '') !== str(doc.docNo)),
+      );
+      return { owner, repo, doc, others };
+    }
+    async function readCurrent() {
+      const selected = await selectCurrent();
+      if (!selected) return undefined;
+      const rows = await selected.repo.findMany({
+        filter: (f) =>
+          f.or(
+            [documentId, ...selected.others.map((row) => str(row.id))].map(
+              (id) => f.string('id').eq(id),
+            ),
+          ),
+      });
+      const doc = rows.find((row) => row.id === documentId);
+      if (!doc) return undefined;
+      return {
+        owner: selected.owner,
+        doc,
+        others: rows.filter((row) => row.id !== documentId),
+      };
+    }
+    let input = await readCurrent();
+    if (!input)
       return { status: 'skipped' as const, output: { reason: 'notCurrent' } };
-    const sections = splitSections(doc.contentText as string | null);
-    const changed = doc.previousVersionId
+    let { doc, others } = input;
+    let sections = splitSections(doc.contentText as string | null);
+    let changed = doc.previousVersionId
       ? new Set(
           json<SectionChange[]>(doc.changeSummary, [])
             .filter(
@@ -64,25 +143,14 @@ export function createConflictCheck(deps: {
             .map((c) => c.sectionTitle),
         )
       : null;
-    const targets = changed
-      ? sections.filter((s) => changed.has(s.title))
+    let targets = changed
+      ? sections.filter((s) => changed?.has(s.title))
       : sections;
     if (!targets.length)
       return {
         status: 'skipped' as const,
         output: { reason: 'noChangedSections' },
       };
-    const others = (
-      await database
-        .query()
-        .selectFrom('kbDocuments')
-        .selectAll()
-        .where('active', '=', true)
-        .where('parseStatus', '=', 'ready')
-        .where('supersededById', 'is', null)
-        .where('id', '!=', documentId)
-        .execute()
-    ).filter((o) => !doc.docNo || str(o.docNo ?? '') !== str(doc.docNo));
     type Candidate = {
       sectionTitle: string;
       otherDocumentId: string;
@@ -91,28 +159,54 @@ export function createConflictCheck(deps: {
       otherExcerpt: string;
       description: string;
     };
-    let candidates: Candidate[] = [];
-    for (const section of targets)
-      for (const other of others)
-        for (const otherSection of splitSections(
-          other.contentText as string | null,
-        )) {
-          const hits = numericConflicts(section.text, otherSection.text);
-          if (!hits.length) continue;
-          const hit = hits[0];
-          candidates.push({
-            sectionTitle: section.title,
-            otherDocumentId: str(other.id),
-            otherSectionTitle: otherSection.title,
-            excerpt: hit.sentence,
-            otherExcerpt: hit.otherSentence,
-            description: `《${str(doc.title)}》${section.title}：“${hit.sentence}”；《${str(other.title)}》${otherSection.title}：“${hit.otherSentence}”`,
-          });
-        }
+    function compare() {
+      const candidates: Candidate[] = [];
+      for (const section of targets)
+        for (const other of others)
+          for (const otherSection of splitSections(
+            other.contentText as string | null,
+          )) {
+            const hits = numericConflicts(section.text, otherSection.text);
+            if (!hits.length) continue;
+            const hit = hits[0];
+            candidates.push({
+              sectionTitle: section.title,
+              otherDocumentId: str(other.id),
+              otherSectionTitle: otherSection.title,
+              excerpt: hit.sentence,
+              otherExcerpt: hit.otherSentence,
+              description: `《${str(doc.title)}》${section.title}：“${hit.sentence}”；《${str(other.title)}》${otherSection.title}：“${hit.otherSentence}”`,
+            });
+          }
+      return candidates;
+    }
+    let candidates = compare();
+    if (candidates.length) {
+      // Refresh current subjects, policies, source eligibility and text immediately
+      // before generation. Notification-time filtering cannot protect model input.
+      input = await readCurrent();
+      if (!input)
+        return { status: 'skipped' as const, output: { reason: 'notCurrent' } };
+      ({ doc, others } = input);
+      sections = splitSections(doc.contentText as string | null);
+      changed = doc.previousVersionId
+        ? new Set(
+            json<SectionChange[]>(doc.changeSummary, [])
+              .filter(
+                (s) => s.changeType === 'added' || s.changeType === 'modified',
+              )
+              .map((s) => s.sectionTitle),
+          )
+        : null;
+      targets = changed
+        ? sections.filter((s) => changed?.has(s.title))
+        : sections;
+      candidates = compare();
+    }
     if (candidates.length) {
       try {
         const verdict = await structured(
-          run,
+          { ...run, owner: input.owner },
           'knowledgeAssistant',
           '文档冲突检查',
           `下面是两份文档中疑似说法不一致的句子对。只有双方对同一事项给出不同的数值、时限、责任人或步骤时才算冲突，措辞不同但意思一致的不算。对每一对返回 index、isConflict 和 description（双方原文并列，不判断哪份正确，不超过 200 字）。\n${JSON.stringify(
@@ -143,6 +237,24 @@ export function createConflictCheck(deps: {
         if (!(error instanceof AIUnavailableError)) throw error;
         run.markFallback();
       }
+    }
+    // Slow model calls do not preserve a revoked write/input entitlement. Recheck
+    // without rereading full text and discard changed versions or hidden sources.
+    if (candidates.length) {
+      const current = await selectCurrent();
+      if (!current || str(current.doc.updatedAt) !== str(doc.updatedAt))
+        return { status: 'skipped' as const, output: { reason: 'notCurrent' } };
+      candidates = candidates.filter((candidate) => {
+        const before = others.find(
+          (row) => str(row.id) === candidate.otherDocumentId,
+        );
+        const after = current.others.find(
+          (row) => str(row.id) === candidate.otherDocumentId,
+        );
+        return (
+          before && after && str(before.updatedAt) === str(after.updatedAt)
+        );
+      });
     }
     let created = 0;
     const byOther = new Map<string, number>();

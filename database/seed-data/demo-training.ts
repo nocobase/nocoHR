@@ -61,8 +61,7 @@ export const DEMO_V2_COURSES: readonly DemoCourseV2[] = [
   {
     id: 'course-assembly-intro',
     title: '装配岗位操作入门',
-    description:
-      '装配车间制动卡钳的装配流程、拧紧与防错、安全操作基础。',
+    description: '装配车间制动卡钳的装配流程、拧紧与防错、安全操作基础。',
     deliveryMode: 'online',
     sourceDocumentId: null,
     competencyIds: ['comp-safety', 'comp-quality-record'],

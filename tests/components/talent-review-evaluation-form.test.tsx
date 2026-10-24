@@ -20,7 +20,9 @@ describe('EvaluationForm', () => {
   it('submits once every question is answered', () => {
     const onSubmit = vi.fn();
     render(<EvaluationForm questions={QUESTIONS} onSubmit={onSubmit} />);
-    const submit = screen.getByRole('button', { name: 'talentReview.evaluations.submit' });
+    const submit = screen.getByRole('button', {
+      name: 'talentReview.evaluations.submit',
+    });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getAllByRole('radio', { name: /"value":4/u })[0]!);
     fireEvent.click(screen.getAllByRole('radio', { name: /"value":5/u })[1]!);
@@ -30,7 +32,11 @@ describe('EvaluationForm', () => {
     });
     expect((submit as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(submit);
-    expect(onSubmit).toHaveBeenCalledWith({ useful: 4, clear: 5, example: '按新流程做首件检验' });
+    expect(onSubmit).toHaveBeenCalledWith({
+      useful: 4,
+      clear: 5,
+      example: '按新流程做首件检验',
+    });
   });
 
   it('shows an answered questionnaire read-only', () => {
@@ -42,7 +48,9 @@ describe('EvaluationForm', () => {
         onSubmit={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('button', { name: 'talentReview.evaluations.submit' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'talentReview.evaluations.submit' }),
+    ).toBeNull();
     expect(screen.getAllByRole('radio', { checked: true })).toHaveLength(2);
   });
 });

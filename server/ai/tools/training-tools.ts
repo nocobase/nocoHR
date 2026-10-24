@@ -6,7 +6,7 @@
  * notices, exam recommendations) run in the automations, not through tools,
  * and practice conversations are driven by the practice service.
  */
-import { defineTools } from '@nocobase/ai-employee';
+import { defineTools } from '../contracts.js';
 import {
   authorizationToken,
   type AppAuthorization,

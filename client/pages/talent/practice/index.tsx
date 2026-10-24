@@ -13,7 +13,6 @@ import {
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { errorMessage } from '@/components/talent/errors';
@@ -58,7 +57,6 @@ export default function PracticePage(): ReactElement {
   );
   return (
     <PageContainer>
-      <Breadcrumbs />
       {practice.error ? (
         <LoadError error={practice.error} onRetry={practice.reload} />
       ) : !practice.data ? (
@@ -70,19 +68,44 @@ export default function PracticePage(): ReactElement {
   );
 }
 
+type Turn = NonNullable<Practice['transcript']>[number];
+type DisplayTurn = Turn & { uiId: number };
+
+function practiceState(data: Practice, previous: readonly DisplayTurn[] = []) {
+  // reply appends turns; finish preserves them. Only the confirmed prefix keeps
+  // its local identity. The server payload and timestamps are never used as keys.
+  let prefix = true;
+  let nextId = previous.reduce(
+    (next, turn) => Math.max(next, turn.uiId + 1),
+    0,
+  );
+  const turns = (data.transcript ?? []).map((turn, index) => {
+    const old = previous[index];
+    prefix =
+      prefix &&
+      !!old &&
+      old.role === turn.role &&
+      old.text === turn.text &&
+      old.at === turn.at;
+    return { ...turn, uiId: prefix ? old.uiId : nextId++ };
+  });
+  return { data, turns };
+}
+
 function PracticeBody({ initial }: { initial: Practice }): ReactElement {
   const { t } = useTranslation();
   const api = useApiClient();
   const navigate = useNavigate();
-  const [data, setData] = useState(initial);
+  const [state, setState] = useState(() => practiceState(initial));
+  const { data, turns } = state;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState<'reply' | 'finish' | 'again' | null>(null);
   const [confirmFinish, setConfirmFinish] = useState(false);
-  const end = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   const inProgress = data.status === 'inProgress';
 
   useEffect(() => {
-    end.current?.scrollIntoView({ block: 'end' });
+    endRef.current?.scrollIntoView({ block: 'end' });
   }, [data.transcript?.length]);
 
   async function send(): Promise<void> {
@@ -95,7 +118,7 @@ function PracticeBody({ initial }: { initial: Practice }): ReactElement {
         method: 'POST',
         json: { text: message },
       });
-      setData(result.data);
+      setState((previous) => practiceState(result.data, previous.turns));
       setText('');
     } catch (cause) {
       toast.add({ type: 'error', title: errorMessage(cause, t) });
@@ -112,7 +135,7 @@ function PracticeBody({ initial }: { initial: Practice }): ReactElement {
         path: `talent/practice/${encodeURIComponent(data.id)}/finish`,
         method: 'POST',
       });
-      setData(result.data);
+      setState((previous) => practiceState(result.data, previous.turns));
     } catch (cause) {
       toast.add({ type: 'error', title: errorMessage(cause, t) });
     } finally {
@@ -216,9 +239,9 @@ function PracticeBody({ initial }: { initial: Practice }): ReactElement {
                 className='max-h-[55svh] space-y-3 overflow-y-auto pr-1'
                 aria-live='polite'
               >
-                {(data.transcript ?? []).map((turn, index) => (
+                {turns.map((turn) => (
                   <div
-                    key={`${turn.at}-${index}`}
+                    key={turn.uiId}
                     className={cn(
                       'flex gap-2',
                       turn.role === 'employee' && 'flex-row-reverse',
@@ -257,7 +280,7 @@ function PracticeBody({ initial }: { initial: Practice }): ReactElement {
                     <Spinner /> {t('talent.practice.thinking')}
                   </p>
                 ) : null}
-                <div ref={end} />
+                <div ref={endRef} />
               </div>
               {data.coachSuggestsEnd && inProgress ? (
                 <Alert>

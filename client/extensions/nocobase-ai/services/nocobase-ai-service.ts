@@ -67,7 +67,7 @@ const toHistoryMessage = (
   const rawServerMessageId = content.messageId ?? message.messageId;
   const serverMessageId =
     typeof rawServerMessageId === 'number' ||
-    (typeof rawServerMessageId === 'string' && /^\d+$/.test(rawServerMessageId))
+    (typeof rawServerMessageId === 'string' && rawServerMessageId.length > 0)
       ? String(rawServerMessageId)
       : undefined;
   const messageId = serverMessageId ?? toText(message.key, `history-${index}`);
@@ -272,6 +272,7 @@ export class NocoBaseAIService implements AIService {
     private readonly client: ApiClient = createApiClient({
       baseURL: resolveAppUrl('/api'),
     }),
+    private readonly routePath: (path: string) => string = (path) => path,
   ) {}
 
   /** Calls an AI route and returns its `data`. */
@@ -280,7 +281,7 @@ export class NocoBaseAIService implements AIService {
     options: AIRequestOptions = {},
   ): Promise<T> {
     const payload = await this.client.request<{ data: T } | undefined>(
-      createRequestOptions(path, options),
+      createRequestOptions(this.routePath(path), options),
     );
     return payload?.data as T;
   }
@@ -289,7 +290,9 @@ export class NocoBaseAIService implements AIService {
     path: string,
     options: AIRequestOptions = {},
   ): Promise<ReadableStream<Uint8Array>> {
-    return this.client.stream(createRequestOptions(path, options));
+    return this.client.stream(
+      createRequestOptions(this.routePath(path), options),
+    );
   }
 
   private runStream(
@@ -419,7 +422,9 @@ export class NocoBaseAIService implements AIService {
   async getConversationActiveState(sessionId: string) {
     const conversation = await this.aiRequest<{
       llmActiveState?: unknown;
+      state?: unknown;
     }>(aiPath('aiEmployee', 'conversations', sessionId));
+    if (conversation?.state === 'pending') return 'pending' as const;
     const state = conversation?.llmActiveState;
     return state === 'idle' || state === 'streaming' || state === 'invoking'
       ? state

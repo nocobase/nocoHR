@@ -1,3 +1,13 @@
+import flowDiagram from './system/flow-diagram-zh-CN.js';
+import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
+import authorizationInspector from './modules/authorization-inspector-zh-CN.js';
+import defaultAccess from './modules/default-access-zh-CN.js';
+import sharingRules from './modules/sharing-rules-zh-CN.js';
+import restrictionRules from './modules/restriction-rules-zh-CN.js';
+import databaseExplorer from './modules/database-explorer-zh-CN.js';
+import apiKeys from './modules/api-keys-zh-CN.js';
+import templateSettings from './system/settings-zh-CN.js';
+import deviceApproval from '#extensions/nocobase-device-approval/locales/zh-CN';
 import { coreHrAdditions } from './modules/core-hr-additions.js';
 // V3-10
 import { examAdditions } from './modules/exam-additions.js';
@@ -23,6 +33,46 @@ import { payrollOpeningAdditions } from './modules/payroll-opening.js';
 import type { AppResource } from './en-US.js';
 
 const zhCN: AppResource = {
+  ...agentChat,
+  flowDiagram,
+  nativeKnowledge: {
+    users: '用户',
+    sourceForbidden: '你没有此来源的检索权限。',
+    tab: '双源检索',
+    description: '分别检索 HR 资料与原生知识，保留各自的权限和引用。',
+    query: '检索知识',
+    search: '检索',
+    legacy: 'HR 资料',
+    native: '原生知识',
+    spaces: '已授权的原生空间',
+    noSpaces: '尚无已授权的原生知识空间。',
+    noResults: '没有匹配的授权资料。',
+    sourceUnavailable: '此来源暂不可用，请稍后重试。',
+    semanticUnavailable: '语义检索暂不可用，当前显示原生文本匹配。',
+    version: '版本 {{version}}',
+    back: '返回双源检索',
+    qaDeferred: '持久知识问答尚未启用，检索结果不会启动聊天。',
+  },
+  nativeAI: {
+    models: '模型设置',
+    title: '人事助手',
+    description: '查询本人信息，或提交资料修改申请交人事审核。',
+    noModel: '尚未配置 AI 模型',
+    noModelHelp: '请联系有权限的管理员，在设置 → 模型设置中配置并启用模型。',
+  },
+  authorizationInspector,
+  defaultAccess,
+  sharingRules,
+  restrictionRules,
+  databaseExplorer,
+  apiKeys,
+  'auth.preparingSession': '正在准备登录会话…',
+  'auth.connectionFailed': '连接失败',
+  'auth.connectionFailedDescription':
+    '实时连接暂时无法准备就绪。请重试后进入应用，或退出登录。',
+  'auth.retry': '重试',
+
+  ...deviceApproval,
   // AI chat tool-call cards (client/extensions/nocobase-ai/components/chat/tool-call-card.tsx).
   aiTools: aiToolNames.zh,
   // V1-02 additions (client/locales/modules/core-hr-additions.ts).
@@ -1335,9 +1385,47 @@ const zhCN: AppResource = {
     page: '{{title}}页面',
   },
   settings: {
+    notificationLogs: '通知投递日志',
+    revokeAssignmentFor: '撤销“{{name}}”的角色授权？',
+    authorizationInspector: '权限检查器',
+    defaultAccess: '默认数据范围',
+    sharingRules: '共享规则',
+    databaseExplorer: '数据库浏览器',
+    revokeAssignment: '撤销这项角色授权？',
+    assignments: '授权对象',
+    revoke: '撤销',
+    assign: '授权',
+    subjectType: '对象类型',
+    subjectSearch: '搜索人员或团队',
+    subject: '授权对象',
+
+    ...templateSettings,
+    allRoles: '全部角色',
+    roleFilterIncomplete: '请同时指定角色范围与角色，或清除筛选条件。',
+    roleType: '类型',
+    usersReadOnlyEmpty:
+      '请联系管理员添加用户，或授予创建用户和分配角色所需的权限。',
+    rolesReadOnlyEmpty: '请联系管理员创建角色，或授予你创建角色的权限。',
+    invalidRequest: '部分内容无效，请检查填写内容或筛选条件后重试。',
+    apiKeys: 'API 密钥',
     title: '设置',
     emptyTitle: '暂无可用设置',
     emptyDescription: '没有已启用的插件提供你有权访问的设置页面。',
+    pageAccessHint:
+      '控制此角色可以进入哪些页面。页面中的数据和操作仍需单独授权。',
+    businessOperationsHint:
+      '设置此角色可以执行的业务操作，以及每项操作可使用的数据范围。',
+    userAccountsHint:
+      '管理用户资料、账号安全和角色分配，请逐项确认需要授予的权限。',
+    systemToolsHint: '管理系统配置与工具，授权前请确认每项操作包含的能力。',
+    scopeHintFor: '关于“{{name}}”的数据范围',
+    scopeExplanation:
+      '每项范围分别约束对应数据，实际操作还需通过相应的权限检查。',
+    noAdditionalScopeHint:
+      '此操作在这里不额外授予数据访问权限，实际可访问范围仍取决于默认数据范围、共享与限制规则。',
+    dataRanges: '数据范围（{{count}}）',
+    preservedRecordScope: '保留现有配置',
+    noRecordScope: '不额外授权数据范围',
   },
   dev: {
     componentExamples: '组件示例',
@@ -1382,6 +1470,7 @@ const zhCN: AppResource = {
     signingOut: '正在退出…',
   },
   navigation: {
+    breadcrumbMore: '显示中间层级',
     ...coreHrAdditions.zh.navigation,
     // V3-10
     ...examAdditions.zh.navigation,
@@ -1428,7 +1517,7 @@ const zhCN: AppResource = {
     learningCenter: '学习与培训',
     training: '培训管理',
     talentMyLearning: '我的学习',
-    talentKnowledgeQa: '知识问答',
+    talentKnowledgeQa: '人事助手',
     talentKnowledge: '知识库',
     talentCourses: '课程管理',
     talentAssignments: '学习任务',

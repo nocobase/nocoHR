@@ -13,9 +13,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { databaseManagerToken, type DatabaseManager } from '@nocobase/db';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { notificationServiceToken } from '@nocobase/app-plugin-notification';
+import { userManagementServiceToken } from '@nocobase/app-plugin-users/server/tokens';
 
 import { scopeForUser } from '../../server/providers/hr/authorize.ts';
 import { certificateChecklistProvider } from '../../server/providers/hr/certificate-hooks.ts';
+import { certificateResource } from '../../server/providers/hr/exam-resources.ts';
 import {
   computeLoss,
   isFlagged,
@@ -85,6 +87,8 @@ beforeAll(async () => {
         seeds: { autoRun: true },
       },
       hub: { host: { enabled: false } },
+      feishu: { appId: '', appSecret: '', longConnection: { enabled: false } },
+      mail: { providers: {} },
     }),
   );
   process.env.HR_DEMO_PASSWORD = PASSWORD;
@@ -100,6 +104,9 @@ beforeAll(async () => {
       DB_SEEDS_AUTO_RUN: 'true',
       APP_PUBLIC_ORIGIN: 'http://localhost',
       APP_CONFIG_FILE: config,
+      FEISHU_APP_ID: '',
+      FEISHU_APP_SECRET: '',
+      FEISHU_LONG_CONNECTION_ENABLED: 'false',
     },
     paths: {
       rootDir: root,
@@ -1083,10 +1090,82 @@ describe('certificate lifecycle, renewal and external certificates', () => {
       `/external-certificates/${id}/scan`,
     );
     expect(scan.json.data.id).toBe(fileId);
+    expect(scan.json.data.contentUrl).toContain(
+      `/uploads/certificate-scans/${fileId}.png`,
+    );
+    const contentPath = scan.json.data.contentUrl as string;
+    const readScanFile = async (username: string | null) => {
+      const headers: Record<string, string> = {};
+      if (username) headers.cookie = await signIn(username);
+      return server.fetch(new Request(new URL(contentPath, base), { headers }));
+    };
+    const ownerContent = await readScanFile('emp_njl_1');
+    expect(ownerContent.status).toBe(200);
+    expect(ownerContent.headers.get('cache-control')).toContain('no-store');
+    expect(new Uint8Array(await ownerContent.arrayBuffer())).toEqual(png);
     expect(
       (await call('emp_njl_2', 'GET', `/external-certificates/${id}/scan`))
         .status,
     ).toBe(404);
+    expect((await readScanFile('emp_njl_2')).status).toBe(404);
+    expect((await readScanFile(null)).status).toBe(401);
+
+    const viewer = await server.application.container
+      .resolve(userManagementServiceToken)
+      .create({
+        name: 'Review certificate viewer',
+        username: 'review_certificate_viewer',
+        email: 'review-certificate-viewer@example.invalid',
+        password: PASSWORD,
+      });
+    expect(
+      (
+        await call(
+          'review_certificate_viewer',
+          'GET',
+          `/external-certificates/${id}/scan`,
+        )
+      ).status,
+    ).toBe(404);
+    expect((await readScanFile('review_certificate_viewer')).status).toBe(404);
+
+    const authz = server.application.container.resolve(authorizationToken);
+    await authz.permissionSets.create({
+      key: 'review-certificate-viewer',
+      grants: [
+        certificateResource
+          .reference()
+          .grant({ view: { employeeCertificates: 'allRecords' } }),
+      ],
+    });
+    const assignment = await authz.permissionSets.assign({
+      subject: { type: 'user', id: viewer.id },
+      permissionSet: 'review-certificate-viewer',
+    });
+    expect(
+      (
+        await call(
+          'review_certificate_viewer',
+          'GET',
+          `/external-certificates/${id}/scan`,
+        )
+      ).status,
+    ).toBe(200);
+    const viewerContent = await readScanFile('review_certificate_viewer');
+    expect(viewerContent.status).toBe(200);
+    expect(new Uint8Array(await viewerContent.arrayBuffer())).toEqual(png);
+
+    await authz.permissionSets.revoke(assignment.id);
+    expect(
+      (
+        await call(
+          'review_certificate_viewer',
+          'GET',
+          `/external-certificates/${id}/scan`,
+        )
+      ).status,
+    ).toBe(404);
+    expect((await readScanFile('review_certificate_viewer')).status).toBe(404);
   });
 });
 

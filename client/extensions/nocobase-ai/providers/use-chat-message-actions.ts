@@ -1,12 +1,17 @@
 import type { Chat } from '@ai-sdk/react';
 import {
   useCallback,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
 } from 'react';
 import type { AIChatAction, AIChatState } from './chat-reducer.js';
-import { findChatMessage, isAIToolPart } from './chat-message-utils.js';
+import {
+  findChatMessage,
+  isAIToolPart,
+  getDecidedToolMessage,
+} from './chat-message-utils.js';
 import { getAIWorkContextToolScope } from './page-context-utils.js';
 import type { NocoBaseChatTransport } from './chat-transport.js';
 import type { useAI } from './ai-context.js';
@@ -32,11 +37,25 @@ export type AIMessageEditingSnapshot = {
 type RefreshConversationMessages = (
   conversationId: string,
   targetChat: Chat<AIChatMessage>,
-  options?: { updateRead?: boolean },
+  options?: { updateRead?: boolean; isCurrent?: () => boolean },
 ) => Promise<AIChatMessage[]>;
 
 const isChatRunning = (chat: Chat<AIChatMessage>) =>
   chat.status === 'streaming' || chat.status === 'submitted';
+
+const removeEmptyResponsePlaceholder = (
+  chat: Chat<AIChatMessage>,
+  responseMessageId?: string,
+) => {
+  if (!responseMessageId) return;
+  const response = chat.messages.find(
+    (message) => message.id === responseMessageId,
+  );
+  if (!response || response.parts.length > 0) return;
+  chat.messages = chat.messages.filter(
+    (message) => message.id !== responseMessageId,
+  );
+};
 
 const getToolInvocationContext = ({
   conversationId,
@@ -92,6 +111,7 @@ export function useChatMessageActions({
   setConversationWorkContext,
   dispatch,
   requestComposerFocus,
+  actionTokenRef: sharedActionTokenRef,
 }: {
   ai: AIContextValue;
   activeChat: Chat<AIChatMessage>;
@@ -116,12 +136,30 @@ export function useChatMessageActions({
   ) => void;
   dispatch: Dispatch<AIChatAction>;
   requestComposerFocus: () => void;
+  actionTokenRef?: MutableRefObject<Map<string, symbol>>;
 }) {
+  const localActionTokenRef = useRef<Map<string, symbol>>(new Map());
+  const actionTokenRef = sharedActionTokenRef ?? localActionTokenRef;
+  const beginAction = useCallback(
+    (conversationId: string) => {
+      const token = Symbol(conversationId);
+      actionTokenRef.current.set(conversationId, token);
+      return token;
+    },
+    [actionTokenRef],
+  );
+  const isCurrentAction = useCallback(
+    (conversationId: string, token: symbol) =>
+      actionTokenRef.current.get(conversationId) === token,
+    [actionTokenRef],
+  );
+
   const resolveServerMessage = useCallback(
     async (
       conversationId: string,
       targetChat: Chat<AIChatMessage>,
       message: AIChatMessage,
+      isCurrent: () => boolean = () => true,
     ) => {
       let messages = targetChat.messages;
       const resolvedMessage = findChatMessage(messages, message.id);
@@ -140,8 +178,10 @@ export function useChatMessageActions({
             updateRead:
               stateRef.current.activeConversationId === conversationId &&
               chatSurfaceOpenRef.current,
+            isCurrent,
           },
         );
+        if (!isCurrent()) return;
         const refreshedMatch = findChatMessage(messages, message.id);
         const refreshedTarget = refreshedMatch?.targetMessage;
         if (!refreshedTarget) {
@@ -174,13 +214,19 @@ export function useChatMessageActions({
         return;
       }
 
-      setHistoryError(undefined);
+      const conversationId = stateRef.current.activeConversationId;
+      const actionToken = beginAction(conversationId);
+      if (stateRef.current.activeConversationId === conversationId) {
+        setHistoryError(undefined);
+      }
       try {
         const resolved = await resolveServerMessage(
-          stateRef.current.activeConversationId,
+          conversationId,
           activeChat,
           message,
+          () => isCurrentAction(conversationId, actionToken),
         );
+        if (!isCurrentAction(conversationId, actionToken) || !resolved) return;
         if (!resolved.serverMessageId) {
           throw new Error('The server message id is unavailable for retry.');
         }
@@ -192,17 +238,28 @@ export function useChatMessageActions({
         try {
           await activeChat.regenerate({ messageId: resolved.targetMessage.id });
         } catch (error) {
-          transport.cancelResend(resolved.serverMessageId);
+          if (isCurrentAction(conversationId, actionToken)) {
+            transport.cancelResend(resolved.serverMessageId);
+          }
           throw error;
         }
       } catch (error) {
-        setHistoryError(
-          error instanceof Error ? error : new Error('Unable to retry message'),
-        );
+        if (
+          isCurrentAction(conversationId, actionToken) &&
+          stateRef.current.activeConversationId === conversationId
+        ) {
+          setHistoryError(
+            error instanceof Error
+              ? error
+              : new Error('Unable to retry message'),
+          );
+        }
       }
     },
     [
       activeChat,
+      beginAction,
+      isCurrentAction,
       resolveServerMessage,
       setHistoryError,
       stateRef,
@@ -219,7 +276,11 @@ export function useChatMessageActions({
     ) => {
       if (isChatRunning(targetChat)) return;
 
-      setHistoryError(undefined);
+      const actionToken = beginAction(conversationId);
+      if (stateRef.current.activeConversationId === conversationId) {
+        setHistoryError(undefined);
+      }
+      let responseMessageId: string | undefined;
       try {
         const message = findChatMessage(
           targetChat.messages,
@@ -232,7 +293,9 @@ export function useChatMessageActions({
           conversationId,
           targetChat,
           message,
+          () => isCurrentAction(conversationId, actionToken),
         );
+        if (!isCurrentAction(conversationId, actionToken) || !resolved) return;
         if (!resolved.serverMessageId) {
           throw new Error(
             'The server message id is unavailable for this tool decision.',
@@ -305,6 +368,7 @@ export function useChatMessageActions({
           toolCallId: decision.toolCallId,
           userDecision,
         });
+        if (!isCurrentAction(conversationId, actionToken)) return;
         if (!result.updated) {
           await refreshConversationMessages(
             resolved.conversationId,
@@ -313,8 +377,10 @@ export function useChatMessageActions({
               updateRead:
                 stateRef.current.activeConversationId ===
                   resolved.conversationId && chatSurfaceOpenRef.current,
+              isCurrent: () => isCurrentAction(conversationId, actionToken),
             },
           );
+          if (!isCurrentAction(conversationId, actionToken)) return;
           return;
         }
 
@@ -335,6 +401,7 @@ export function useChatMessageActions({
         const toolCallIds = result.toolCalls.map((toolCall) => toolCall.id);
         const toolCallResults: Array<{ id: string; result: unknown }> = [];
         for (const toolCall of result.toolCalls) {
+          if (!isCurrentAction(conversationId, actionToken)) return;
           const invocation = await ai.invokeToolCall(
             toolCall.name,
             toolCall.args,
@@ -344,6 +411,7 @@ export function useChatMessageActions({
               toolName: toolCall.name,
             },
           );
+          if (!isCurrentAction(conversationId, actionToken)) return;
           if (invocation.handled) {
             toolCallResults.push({
               id: toolCall.id,
@@ -352,6 +420,7 @@ export function useChatMessageActions({
           }
         }
 
+        if (!isCurrentAction(conversationId, actionToken)) return;
         const transport = transportsRef.current.get(resolved.conversationId);
         if (!transport) {
           throw new Error('The NocoBase chat transport is unavailable.');
@@ -362,7 +431,7 @@ export function useChatMessageActions({
             resolved.rootIndex + 1,
           );
         }
-        const responseMessageId = `assistant-${crypto.randomUUID()}`;
+        responseMessageId = `assistant-${crypto.randomUUID()}`;
         targetChat.messages = [
           ...targetChat.messages,
           {
@@ -383,14 +452,25 @@ export function useChatMessageActions({
         );
         try {
           await targetChat.resumeStream();
+          if (!isCurrentAction(conversationId, actionToken)) return;
+          // Chat reports transport/stream failures through status and resolves
+          // resumeStream, so handle that outcome just like explicit Continue.
+          if (targetChat.status === 'error')
+            throw targetChat.error ?? new Error('Unable to continue the reply');
         } catch (error) {
-          transport.cancelToolResume(resolved.serverMessageId);
-          targetChat.messages = targetChat.messages.filter(
-            (item) => item.id !== responseMessageId,
-          );
+          if (isCurrentAction(conversationId, actionToken)) {
+            transport.cancelToolResume(resolved.serverMessageId);
+            removeEmptyResponsePlaceholder(targetChat, responseMessageId);
+          }
           throw error;
         }
       } catch (error) {
+        if (
+          !isCurrentAction(conversationId, actionToken) ||
+          stateRef.current.activeConversationId !== conversationId
+        ) {
+          return;
+        }
         setHistoryError(
           error instanceof Error
             ? error
@@ -401,8 +481,10 @@ export function useChatMessageActions({
     },
     [
       ai,
+      beginAction,
       chatSurfaceOpenRef,
       getRuntimeContext,
+      isCurrentAction,
       refreshConversationMessages,
       resolveServerMessage,
       setHistoryError,
@@ -410,6 +492,73 @@ export function useChatMessageActions({
       transportsRef,
     ],
   );
+
+  const continuingRef = useRef(new Set<string>());
+  const continueReply = useCallback(async () => {
+    const conversationId = stateRef.current.activeConversationId;
+    const targetChat = getChat(conversationId);
+    if (isChatRunning(targetChat) || continuingRef.current.has(conversationId))
+      return;
+    const message = getDecidedToolMessage(targetChat.messages);
+    if (!message) return;
+    const transport = transportsRef.current.get(conversationId);
+    if (!transport) return;
+    const actionToken = beginAction(conversationId);
+    continuingRef.current.add(conversationId);
+    if (stateRef.current.activeConversationId === conversationId) {
+      setHistoryError(undefined);
+    }
+    const responseMessageId = `assistant-${crypto.randomUUID()}`;
+    targetChat.messages = [
+      ...targetChat.messages,
+      {
+        id: responseMessageId,
+        role: 'assistant',
+        metadata: {
+          createdAt: new Date().toISOString(),
+          employeeUsername: getRuntimeContext(conversationId).employeeUsername,
+        },
+        parts: [],
+      },
+    ];
+    transport.prepareToolResume(
+      message.metadata!.serverMessageId!,
+      responseMessageId,
+      message.parts.filter(isAIToolPart).map((part) => part.toolCallId),
+      [],
+    );
+    try {
+      await targetChat.resumeStream();
+      if (!isCurrentAction(conversationId, actionToken)) return;
+      if (targetChat.status === 'error')
+        throw targetChat.error ?? new Error('Unable to continue the reply');
+    } catch (error) {
+      if (isCurrentAction(conversationId, actionToken)) {
+        transport.cancelToolResume(message.metadata!.serverMessageId!);
+        removeEmptyResponsePlaceholder(targetChat, responseMessageId);
+      }
+      if (
+        isCurrentAction(conversationId, actionToken) &&
+        stateRef.current.activeConversationId === conversationId
+      ) {
+        setHistoryError(
+          error instanceof Error
+            ? error
+            : new Error('Unable to continue the reply'),
+        );
+      }
+    } finally {
+      continuingRef.current.delete(conversationId);
+    }
+  }, [
+    beginAction,
+    getChat,
+    getRuntimeContext,
+    isCurrentAction,
+    setHistoryError,
+    stateRef,
+    transportsRef,
+  ]);
 
   const decideToolCall = useCallback(
     (decision: AIToolCallDecision) =>
@@ -544,6 +693,7 @@ export function useChatMessageActions({
 
   return {
     retryMessage,
+    continueReply,
     decideToolCall,
     startEditingMessage,
     cancelEditingMessage,

@@ -26,7 +26,11 @@ export interface PlacementEvidence {
     positionMedianDays: number | null;
   };
   competencyGrowth: { competency: string; from: number; to: number }[];
-  exams: { attempted: number; firstPassed: number; firstPassRate: number | null };
+  exams: {
+    attempted: number;
+    firstPassed: number;
+    firstPassRate: number | null;
+  };
   practice: { sessions: number; averageScore: number | null };
 }
 
@@ -67,7 +71,10 @@ async function pathDays(
       ),
     );
     const previous = map.get(str(row.employeeId));
-    map.set(str(row.employeeId), previous === undefined ? days : Math.min(previous, days));
+    map.set(
+      str(row.employeeId),
+      previous === undefined ? days : Math.min(previous, days),
+    );
   }
   return map;
 }
@@ -248,7 +255,8 @@ export function evidenceLines(evidence: PlacementEvidence): string[] {
       `陪练 ${evidence.practice.sessions} 次，平均 ${evidence.practice.averageScore} 分`,
     );
   for (const item of evidence.potential.items)
-    if (item.example) lines.push(`主管记录的事例：${item.example.slice(0, 120)}`);
+    if (item.example)
+      lines.push(`主管记录的事例：${item.example.slice(0, 120)}`);
   return lines;
 }
 

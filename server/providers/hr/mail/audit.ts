@@ -36,6 +36,7 @@ import {
 import type { DatabaseManager } from '@nocobase/db';
 
 import type { AutomationRunContext } from '../automation.js';
+import { runMailTask } from './task-result.js';
 import { authorizeAction, tryAuthorizeAction } from '../authorize.js';
 import type { ActorContext } from '../framework-service.js';
 import type { AuditRisk, AuditScope } from '../profile/audit.js';
@@ -454,7 +455,8 @@ export function createAuditMail(deps: {
   }
 
   async function sort(message: MailMessage, attempt?: string) {
-    await deps.run<{ mailId: string; requestId: string | null }>(
+    await runMailTask<{ mailId: string; requestId: string | null }>(
+      deps.run,
       MAIL_SORT_AUDIT,
       {
         dedupeKey: attempt ? `${message.id}:${attempt}` : message.id,
@@ -525,10 +527,16 @@ export function createAuditMail(deps: {
         );
         return { output: { mailId: message.id, requestId: id } };
       },
+      async () => {
+        const after = await mail.row(message.id);
+        if (after.status === 'received')
+          await mail.leaveUnmatched(
+            message.id,
+            null,
+            '未自动识别，请人工归类。',
+          );
+      },
     );
-    const after = await mail.row(message.id);
-    if (after.status === 'received')
-      await mail.leaveUnmatched(message.id, null, '未自动识别，请人工归类。');
   }
 
   async function reply(message: MailMessage) {

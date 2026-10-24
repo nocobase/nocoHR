@@ -12,11 +12,20 @@ import { useTrAction } from './talent-review-lib.js';
 import { useRemote } from './use-remote.js';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 
 interface Requirement {
   assessmentIds: string[];
@@ -34,19 +43,23 @@ export function CertificationPracticalsCard({
   const { t } = useTranslation();
   const path = `talent/practicals/certifications/${encodeURIComponent(certificationId)}`;
   const requirement = useRemote<Requirement>(path);
-  const templates = useRemote<{ templates: { id: string; title: string; reviewStatus: string }[] }>(
-    canManage ? 'talent/practicals/templates' : null,
-  );
+  const templates = useRemote<{
+    templates: { id: string; title: string; reviewStatus: string }[];
+  }>(canManage ? 'talent/practicals/templates' : null);
   const action = useTrAction();
   const [draft, setDraft] = useState<Requirement | null>(null);
   if (!requirement.data) return null;
   const value = draft ?? requirement.data;
-  const titleOf = new Map((templates.data?.templates ?? []).map((tpl) => [tpl.id, tpl.title]));
+  const titleOf = new Map(
+    (templates.data?.templates ?? []).map((tpl) => [tpl.id, tpl.title]),
+  );
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t('talentReview.certPracticals.title')}</CardTitle>
-        <CardDescription>{t('talentReview.certPracticals.description')}</CardDescription>
+        <CardDescription>
+          {t('talentReview.certPracticals.description')}
+        </CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-3 text-sm'>
         {canManage ? (
@@ -64,7 +77,9 @@ export function CertificationPracticalsCard({
                           assessmentIds:
                             on === true
                               ? [...value.assessmentIds, tpl.id]
-                              : value.assessmentIds.filter((id) => id !== tpl.id),
+                              : value.assessmentIds.filter(
+                                  (id) => id !== tpl.id,
+                                ),
                         })
                       }
                     />
@@ -74,11 +89,19 @@ export function CertificationPracticalsCard({
             </div>
             <div className='grid gap-3 sm:grid-cols-2'>
               <Field>
-                <FieldLabel htmlFor='cp-for'>{t('talentReview.certPracticals.requiredFor')}</FieldLabel>
+                <FieldLabel htmlFor='cp-for'>
+                  {t('talentReview.certPracticals.requiredFor')}
+                </FieldLabel>
                 <NativeSelect
                   id='cp-for'
                   value={value.practicalRequiredFor}
-                  onChange={(e) => setDraft({ ...value, practicalRequiredFor: e.target.value as Requirement['practicalRequiredFor'] })}
+                  onChange={(e) =>
+                    setDraft({
+                      ...value,
+                      practicalRequiredFor: e.target
+                        .value as Requirement['practicalRequiredFor'],
+                    })
+                  }
                 >
                   {(['initial', 'recert', 'both'] as const).map((k) => (
                     <NativeSelectOption key={k} value={k}>
@@ -88,13 +111,20 @@ export function CertificationPracticalsCard({
                 </NativeSelect>
               </Field>
               <Field>
-                <FieldLabel htmlFor='cp-months'>{t('talentReview.certPracticals.validMonths')}</FieldLabel>
+                <FieldLabel htmlFor='cp-months'>
+                  {t('talentReview.certPracticals.validMonths')}
+                </FieldLabel>
                 <Input
                   id='cp-months'
                   type='number'
                   min={1}
                   value={value.practicalValidMonths}
-                  onChange={(e) => setDraft({ ...value, practicalValidMonths: Number(e.target.value) || 1 })}
+                  onChange={(e) =>
+                    setDraft({
+                      ...value,
+                      practicalValidMonths: Number(e.target.value) || 1,
+                    })
+                  }
                 />
               </Field>
             </div>
@@ -107,13 +137,18 @@ export function CertificationPracticalsCard({
               size='sm'
               className='self-end'
               disabled={action.busy || !draft}
-              onClick={() => { void (async () => {
-                const done = await action.run({ method: 'PUT', path, json: value }, t('talentReview.certPracticals.saved'));
-                if (done) {
-                  setDraft(null);
-                  requirement.reload();
-                }
-              })(); }}
+              onClick={() => {
+                void (async () => {
+                  const done = await action.run(
+                    { method: 'PUT', path, json: value },
+                    t('talentReview.certPracticals.saved'),
+                  );
+                  if (done) {
+                    setDraft(null);
+                    requirement.reload();
+                  }
+                })();
+              }}
             >
               {t('talentReview.common.save')}
             </Button>
@@ -121,13 +156,19 @@ export function CertificationPracticalsCard({
         ) : value.assessmentIds.length ? (
           <p>
             {t('talentReview.certPracticals.summary', {
-              list: value.assessmentIds.map((id) => titleOf.get(id) ?? id).join('、'),
-              for: t(`talentReview.certPracticals.for.${value.practicalRequiredFor}`),
+              list: value.assessmentIds
+                .map((id) => titleOf.get(id) ?? id)
+                .join('、'),
+              for: t(
+                `talentReview.certPracticals.for.${value.practicalRequiredFor}`,
+              ),
               months: value.practicalValidMonths,
             })}
           </p>
         ) : (
-          <p className='text-muted-foreground'>{t('talentReview.certPracticals.none')}</p>
+          <p className='text-muted-foreground'>
+            {t('talentReview.certPracticals.none')}
+          </p>
         )}
       </CardContent>
     </Card>

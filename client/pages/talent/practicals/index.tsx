@@ -14,7 +14,11 @@ import { Link, Outlet, useNavigate, useSearchParams } from 'react-router';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
-import { BlockSkeleton, EmptyState, LoadError } from '@/components/talent/states';
+import {
+  BlockSkeleton,
+  EmptyState,
+  LoadError,
+} from '@/components/talent/states';
 import { useTrAction } from '@/components/talent/talent-review-lib';
 import { TrStatusBadge } from '@/components/talent/talent-review-shared';
 import { useRemote } from '@/components/talent/use-remote';
@@ -31,7 +35,10 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -77,9 +84,10 @@ interface RecordRow {
 export default function PracticalsPage(): ReactElement {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
-  const templates = useRemote<{ templates: Template[]; can: { manage: boolean; conduct: boolean } }>(
-    'talent/practicals/templates',
-  );
+  const templates = useRemote<{
+    templates: Template[];
+    can: { manage: boolean; conduct: boolean };
+  }>('talent/practicals/templates');
   const records = useRemote<RecordRow[]>('talent/practicals/records');
   const [editing, setEditing] = useState<Template | 'new' | null>(null);
   const [drafting, setDrafting] = useState(false);
@@ -127,8 +135,12 @@ export default function PracticalsPage(): ReactElement {
         }}
       >
         <TabsList>
-          <TabsTrigger value='templates'>{t('talentReview.practicals.templates')}</TabsTrigger>
-          <TabsTrigger value='records'>{t('talentReview.practicals.records')}</TabsTrigger>
+          <TabsTrigger value='templates'>
+            {t('talentReview.practicals.templates')}
+          </TabsTrigger>
+          <TabsTrigger value='records'>
+            {t('talentReview.practicals.records')}
+          </TabsTrigger>
         </TabsList>
       </Tabs>
       {tab === 'templates' ? (
@@ -143,7 +155,9 @@ export default function PracticalsPage(): ReactElement {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('talentReview.practicals.templateTitle')}</TableHead>
+                  <TableHead>
+                    {t('talentReview.practicals.templateTitle')}
+                  </TableHead>
                   <TableHead>{t('talentReview.practicals.items')}</TableHead>
                   <TableHead>{t('talentReview.practicals.document')}</TableHead>
                   <TableHead>{t('talentReview.common.status')}</TableHead>
@@ -164,7 +178,8 @@ export default function PracticalsPage(): ReactElement {
                     <TableCell>
                       {t('talentReview.practicals.itemCount', {
                         count: tpl.checklist.length,
-                        critical: tpl.checklist.filter((c) => c.critical).length,
+                        critical: tpl.checklist.filter((c) => c.critical)
+                          .length,
                       })}
                     </TableCell>
                     <TableCell>{tpl.sourceDocumentTitle ?? '—'}</TableCell>
@@ -173,8 +188,14 @@ export default function PracticalsPage(): ReactElement {
                     </TableCell>
                     <TableCell className='text-end'>
                       {can?.manage ? (
-                        <Button size='sm' variant='outline' onClick={() => setEditing(tpl)}>
-                          {tpl.reviewStatus === 'draft' ? t('talentReview.practicals.review') : t('talentReview.common.edit')}
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          onClick={() => setEditing(tpl)}
+                        >
+                          {tpl.reviewStatus === 'draft'
+                            ? t('talentReview.practicals.review')
+                            : t('talentReview.common.edit')}
                         </Button>
                       ) : null}
                     </TableCell>
@@ -196,7 +217,9 @@ export default function PracticalsPage(): ReactElement {
             <TableHeader>
               <TableRow>
                 <TableHead>{t('talentReview.practicals.person')}</TableHead>
-                <TableHead>{t('talentReview.practicals.templateTitle')}</TableHead>
+                <TableHead>
+                  {t('talentReview.practicals.templateTitle')}
+                </TableHead>
                 <TableHead>{t('talentReview.practicals.assessor')}</TableHead>
                 <TableHead>{t('talentReview.common.status')}</TableHead>
                 <TableHead>{t('talentReview.practicals.result')}</TableHead>
@@ -206,11 +229,16 @@ export default function PracticalsPage(): ReactElement {
               {records.data.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>
-                    <Link className='font-medium underline-offset-4 hover:underline' to={`records/${encodeURIComponent(r.id)}`}>
+                    <Link
+                      className='font-medium underline-offset-4 hover:underline'
+                      to={`records/${encodeURIComponent(r.id)}`}
+                    >
                       {r.employeeName}
                     </Link>
                     {r.waitingForMe ? (
-                      <Badge className='ms-2'>{t('talentReview.practicals.waitingForMe')}</Badge>
+                      <Badge className='ms-2'>
+                        {t('talentReview.practicals.waitingForMe')}
+                      </Badge>
                     ) : null}
                   </TableCell>
                   <TableCell>{r.assessmentTitle}</TableCell>
@@ -219,7 +247,11 @@ export default function PracticalsPage(): ReactElement {
                     <TrStatusBadge status={r.status} />
                   </TableCell>
                   <TableCell>
-                    {r.passed === null ? '—' : r.passed ? t('talentReview.practicals.passed') : t('talentReview.practicals.failed')}
+                    {r.passed === null
+                      ? '—'
+                      : r.passed
+                        ? t('talentReview.practicals.passed')
+                        : t('talentReview.practicals.failed')}
                   </TableCell>
                 </TableRow>
               ))}
@@ -228,11 +260,20 @@ export default function PracticalsPage(): ReactElement {
         </div>
       )}
       {editing ? (
-        <TemplateDialog template={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onDone={reload} />
+        <TemplateDialog
+          template={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onDone={reload}
+        />
       ) : null}
-      {drafting ? <DraftDialog onClose={() => setDrafting(false)} onDone={reload} /> : null}
+      {drafting ? (
+        <DraftDialog onClose={() => setDrafting(false)} onDone={reload} />
+      ) : null}
       {starting && templates.data ? (
-        <StartDialog templates={templates.data.templates} onClose={() => setStarting(false)} />
+        <StartDialog
+          templates={templates.data.templates}
+          onClose={() => setStarting(false)}
+        />
       ) : null}
       <Outlet context={{ reload }} />
     </PageContainer>
@@ -251,25 +292,40 @@ function TemplateDialog({
   const { t } = useTranslation();
   const action = useTrAction();
   const [title, setTitle] = useState(template?.title ?? '');
-  const [competencies, setCompetencies] = useState((template?.competencyIds ?? []).join(','));
-  const [items, setItems] = useState<ChecklistItem[]>(
-    template?.checklist ?? [{ key: 'item1', item: '', critical: true, sourceExcerpt: null }],
+  const [competencies, setCompetencies] = useState(
+    (template?.competencyIds ?? []).join(','),
   );
-  const [minPassRate, setMinPassRate] = useState(String(template?.passRule.minPassRate ?? 80));
-  const [allCritical, setAllCritical] = useState(template?.passRule.allCriticalPass ?? true);
+  const [items, setItems] = useState<ChecklistItem[]>(
+    template?.checklist ?? [
+      { key: 'item1', item: '', critical: true, sourceExcerpt: null },
+    ],
+  );
+  const [minPassRate, setMinPassRate] = useState(
+    String(template?.passRule.minPassRate ?? 80),
+  );
+  const [allCritical, setAllCritical] = useState(
+    template?.passRule.allCriticalPass ?? true,
+  );
   const [witness, setWitness] = useState(template?.requiresWitness ?? false);
   const save = async () => {
     const json = {
       title,
       competencyIds: competencies.split(/[,，\s]+/u).filter(Boolean),
       checklist: items.map((c, i) => ({ ...c, key: c.key || `item${i + 1}` })),
-      passRule: { allCriticalPass: allCritical, minPassRate: Number(minPassRate) || 0 },
+      passRule: {
+        allCriticalPass: allCritical,
+        minPassRate: Number(minPassRate) || 0,
+      },
       sourceDocumentId: template?.sourceDocumentId ?? null,
       requiresWitness: witness,
     };
     const done = await action.run(
       template
-        ? { method: 'PUT', path: `talent/practicals/templates/${encodeURIComponent(template.id)}`, json }
+        ? {
+            method: 'PUT',
+            path: `talent/practicals/templates/${encodeURIComponent(template.id)}`,
+            json,
+          }
         : { method: 'POST', path: 'talent/practicals/templates', json },
       t('talentReview.practicals.templateSaved'),
     );
@@ -282,33 +338,64 @@ function TemplateDialog({
     <Dialog open onOpenChange={(value) => (value ? undefined : onClose())}>
       <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-3xl'>
         <DialogHeader>
-          <DialogTitle>{template ? template.title : t('talentReview.practicals.newTemplate')}</DialogTitle>
+          <DialogTitle>
+            {template
+              ? template.title
+              : t('talentReview.practicals.newTemplate')}
+          </DialogTitle>
         </DialogHeader>
         <div className='flex flex-col gap-3'>
           {template?.reviewStatus === 'draft' ? (
             <Alert>
-              <AlertDescription>{t('talentReview.practicals.draftNotice')}</AlertDescription>
+              <AlertDescription>
+                {t('talentReview.practicals.draftNotice')}
+              </AlertDescription>
             </Alert>
           ) : null}
           <Field>
-            <FieldLabel htmlFor='pt-title'>{t('talentReview.practicals.templateTitle')}</FieldLabel>
-            <Input id='pt-title' value={title} onChange={(e) => setTitle(e.target.value)} />
+            <FieldLabel htmlFor='pt-title'>
+              {t('talentReview.practicals.templateTitle')}
+            </FieldLabel>
+            <Input
+              id='pt-title'
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
           </Field>
           <Field>
-            <FieldLabel htmlFor='pt-comp'>{t('talentReview.practicals.competencies')}</FieldLabel>
-            <Input id='pt-comp' value={competencies} onChange={(e) => setCompetencies(e.target.value)} />
+            <FieldLabel htmlFor='pt-comp'>
+              {t('talentReview.practicals.competencies')}
+            </FieldLabel>
+            <Input
+              id='pt-comp'
+              value={competencies}
+              onChange={(e) => setCompetencies(e.target.value)}
+            />
           </Field>
           {items.map((item, index) => (
-            <div key={item.key} className='grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_auto_auto]'>
+            <div
+              key={item.key}
+              className='grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_auto_auto]'
+            >
               <div className='flex flex-col gap-1'>
                 <Input
-                  aria-label={t('talentReview.practicals.item', { no: index + 1 })}
+                  aria-label={t('talentReview.practicals.item', {
+                    no: index + 1,
+                  })}
                   value={item.item}
-                  onChange={(e) => setItems((list) => list.map((x, i) => (i === index ? { ...x, item: e.target.value } : x)))}
+                  onChange={(e) =>
+                    setItems((list) =>
+                      list.map((x, i) =>
+                        i === index ? { ...x, item: e.target.value } : x,
+                      ),
+                    )
+                  }
                 />
                 {item.sourceExcerpt ? (
                   <span className='text-muted-foreground text-xs'>
-                    {t('talentReview.practicals.excerpt', { text: item.sourceExcerpt })}
+                    {t('talentReview.practicals.excerpt', {
+                      text: item.sourceExcerpt,
+                    })}
                   </span>
                 ) : null}
               </div>
@@ -316,12 +403,22 @@ function TemplateDialog({
                 <Checkbox
                   checked={item.critical}
                   onCheckedChange={(value) =>
-                    setItems((list) => list.map((x, i) => (i === index ? { ...x, critical: value === true } : x)))
+                    setItems((list) =>
+                      list.map((x, i) =>
+                        i === index ? { ...x, critical: value === true } : x,
+                      ),
+                    )
                   }
                 />
                 {t('talentReview.practicals.critical')}
               </label>
-              <Button size='sm' variant='ghost' onClick={() => setItems((list) => list.filter((_, i) => i !== index))}>
+              <Button
+                size='sm'
+                variant='ghost'
+                onClick={() =>
+                  setItems((list) => list.filter((_, i) => i !== index))
+                }
+              >
                 {t('talentReview.common.remove')}
               </Button>
             </div>
@@ -331,22 +428,45 @@ function TemplateDialog({
             variant='outline'
             className='self-start'
             onClick={() =>
-              setItems((list) => [...list, { key: `item${Date.now()}`, item: '', critical: false, sourceExcerpt: null }])
+              setItems((list) => [
+                ...list,
+                {
+                  key: `item${Date.now()}`,
+                  item: '',
+                  critical: false,
+                  sourceExcerpt: null,
+                },
+              ])
             }
           >
             {t('talentReview.practicals.addItem')}
           </Button>
           <div className='grid gap-3 sm:grid-cols-3'>
             <Field>
-              <FieldLabel htmlFor='pt-rate'>{t('talentReview.practicals.minPassRate')}</FieldLabel>
-              <Input id='pt-rate' type='number' min={0} max={100} value={minPassRate} onChange={(e) => setMinPassRate(e.target.value)} />
+              <FieldLabel htmlFor='pt-rate'>
+                {t('talentReview.practicals.minPassRate')}
+              </FieldLabel>
+              <Input
+                id='pt-rate'
+                type='number'
+                min={0}
+                max={100}
+                value={minPassRate}
+                onChange={(e) => setMinPassRate(e.target.value)}
+              />
             </Field>
             <label className='flex items-center gap-2 text-sm'>
-              <Checkbox checked={allCritical} onCheckedChange={(v) => setAllCritical(v === true)} />
+              <Checkbox
+                checked={allCritical}
+                onCheckedChange={(v) => setAllCritical(v === true)}
+              />
               {t('talentReview.practicals.allCriticalPass')}
             </label>
             <label className='flex items-center gap-2 text-sm'>
-              <Checkbox checked={witness} onCheckedChange={(v) => setWitness(v === true)} />
+              <Checkbox
+                checked={witness}
+                onCheckedChange={(v) => setWitness(v === true)}
+              />
               {t('talentReview.practicals.requiresWitness')}
             </label>
           </div>
@@ -364,21 +484,29 @@ function TemplateDialog({
             <Button
               variant='outline'
               disabled={action.busy}
-              onClick={() => { void (async () => {
-                const done = await action.run(
-                  { method: 'POST', path: `talent/practicals/templates/${encodeURIComponent(template.id)}/confirm` },
-                  t('talentReview.practicals.confirmed'),
-                );
-                if (done) {
-                  onDone();
-                  onClose();
-                }
-              })(); }}
+              onClick={() => {
+                void (async () => {
+                  const done = await action.run(
+                    {
+                      method: 'POST',
+                      path: `talent/practicals/templates/${encodeURIComponent(template.id)}/confirm`,
+                    },
+                    t('talentReview.practicals.confirmed'),
+                  );
+                  if (done) {
+                    onDone();
+                    onClose();
+                  }
+                })();
+              }}
             >
               {t('talentReview.practicals.confirmTemplate')}
             </Button>
           ) : null}
-          <Button disabled={action.busy || !title.trim() || !items.length} onClick={() => void save()}>
+          <Button
+            disabled={action.busy || !title.trim() || !items.length}
+            onClick={() => void save()}
+          >
             {t('talentReview.common.save')}
           </Button>
         </DialogFooter>
@@ -387,20 +515,36 @@ function TemplateDialog({
   );
 }
 
-function DraftDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }): ReactElement {
+function DraftDialog({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+}): ReactElement {
   const { t } = useTranslation();
-  const documents = useRemote<{ items: { id: string; title: string; docNo: string | null }[] }>('talent/kb/documents');
+  const documents = useRemote<{
+    items: { id: string; title: string; docNo: string | null }[];
+  }>('talent/kb/documents');
   const action = useTrAction();
   const [documentId, setDocumentId] = useState('');
   return (
     <Dialog open onOpenChange={(value) => (value ? undefined : onClose())}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('talentReview.practicals.draftFromDocument')}</DialogTitle>
+          <DialogTitle>
+            {t('talentReview.practicals.draftFromDocument')}
+          </DialogTitle>
         </DialogHeader>
         <Field>
-          <FieldLabel htmlFor='pt-doc'>{t('talentReview.practicals.document')}</FieldLabel>
-          <NativeSelect id='pt-doc' value={documentId} onChange={(e) => setDocumentId(e.target.value)}>
+          <FieldLabel htmlFor='pt-doc'>
+            {t('talentReview.practicals.document')}
+          </FieldLabel>
+          <NativeSelect
+            id='pt-doc'
+            value={documentId}
+            onChange={(e) => setDocumentId(e.target.value)}
+          >
             <NativeSelectOption value=''>—</NativeSelectOption>
             {(documents.data?.items ?? []).map((d) => (
               <NativeSelectOption key={d.id} value={d.id}>
@@ -410,7 +554,9 @@ function DraftDialog({ onClose, onDone }: { onClose: () => void; onDone: () => v
             ))}
           </NativeSelect>
         </Field>
-        <p className='text-muted-foreground text-sm'>{t('talentReview.practicals.draftHint')}</p>
+        <p className='text-muted-foreground text-sm'>
+          {t('talentReview.practicals.draftHint')}
+        </p>
         {action.error ? (
           <Alert variant='destructive'>
             <AlertDescription>{action.error}</AlertDescription>
@@ -422,16 +568,22 @@ function DraftDialog({ onClose, onDone }: { onClose: () => void; onDone: () => v
           </Button>
           <Button
             disabled={action.busy || !documentId}
-            onClick={() => { void (async () => {
-              const done = await action.run(
-                { method: 'POST', path: 'talent/practicals/templates/draft', json: { documentId, competencyIds: [] } },
-                t('talentReview.practicals.drafted'),
-              );
-              if (done) {
-                onDone();
-                onClose();
-              }
-            })(); }}
+            onClick={() => {
+              void (async () => {
+                const done = await action.run(
+                  {
+                    method: 'POST',
+                    path: 'talent/practicals/templates/draft',
+                    json: { documentId, competencyIds: [] },
+                  },
+                  t('talentReview.practicals.drafted'),
+                );
+                if (done) {
+                  onDone();
+                  onClose();
+                }
+              })();
+            }}
           >
             {t('talentReview.practicals.draft')}
           </Button>
@@ -441,13 +593,25 @@ function DraftDialog({ onClose, onDone }: { onClose: () => void; onDone: () => v
   );
 }
 
-function StartDialog({ templates, onClose }: { templates: Template[]; onClose: () => void }): ReactElement {
+function StartDialog({
+  templates,
+  onClose,
+}: {
+  templates: Template[];
+  onClose: () => void;
+}): ReactElement {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const employees = useRemote<{ id: string; name: string; departmentTitle: string }[]>('talent/practicals/employees');
-  const witnesses = useRemote<{ userId: string; name: string }[]>('talent/practicals/witnesses');
+  const employees = useRemote<
+    { id: string; name: string; departmentTitle: string }[]
+  >('talent/practicals/employees');
+  const witnesses = useRemote<{ userId: string; name: string }[]>(
+    'talent/practicals/witnesses',
+  );
   const action = useTrAction();
-  const usable = templates.filter((tpl) => tpl.reviewStatus === 'confirmed' && tpl.active);
+  const usable = templates.filter(
+    (tpl) => tpl.reviewStatus === 'confirmed' && tpl.active,
+  );
   const [assessmentId, setAssessmentId] = useState(usable[0]?.id ?? '');
   const [employeeId, setEmployeeId] = useState('');
   const [witnessUserId, setWitnessUserId] = useState('');
@@ -461,8 +625,14 @@ function StartDialog({ templates, onClose }: { templates: Template[]; onClose: (
         </DialogHeader>
         <div className='flex flex-col gap-3'>
           <Field>
-            <FieldLabel htmlFor='ps-tpl'>{t('talentReview.practicals.templateTitle')}</FieldLabel>
-            <NativeSelect id='ps-tpl' value={assessmentId} onChange={(e) => setAssessmentId(e.target.value)}>
+            <FieldLabel htmlFor='ps-tpl'>
+              {t('talentReview.practicals.templateTitle')}
+            </FieldLabel>
+            <NativeSelect
+              id='ps-tpl'
+              value={assessmentId}
+              onChange={(e) => setAssessmentId(e.target.value)}
+            >
               {usable.map((tpl) => (
                 <NativeSelectOption key={tpl.id} value={tpl.id}>
                   {tpl.title}
@@ -471,8 +641,14 @@ function StartDialog({ templates, onClose }: { templates: Template[]; onClose: (
             </NativeSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor='ps-emp'>{t('talentReview.practicals.person')}</FieldLabel>
-            <NativeSelect id='ps-emp' value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+            <FieldLabel htmlFor='ps-emp'>
+              {t('talentReview.practicals.person')}
+            </FieldLabel>
+            <NativeSelect
+              id='ps-emp'
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+            >
               <NativeSelectOption value=''>—</NativeSelectOption>
               {(employees.data ?? []).map((e) => (
                 <NativeSelectOption key={e.id} value={e.id}>
@@ -486,7 +662,11 @@ function StartDialog({ templates, onClose }: { templates: Template[]; onClose: (
               {t('talentReview.practicals.witness')}
               {chosen?.requiresWitness ? ` *` : ''}
             </FieldLabel>
-            <NativeSelect id='ps-wit' value={witnessUserId} onChange={(e) => setWitnessUserId(e.target.value)}>
+            <NativeSelect
+              id='ps-wit'
+              value={witnessUserId}
+              onChange={(e) => setWitnessUserId(e.target.value)}
+            >
               <NativeSelectOption value=''>—</NativeSelectOption>
               {(witnesses.data ?? []).map((w) => (
                 <NativeSelectOption key={w.userId} value={w.userId}>
@@ -496,8 +676,15 @@ function StartDialog({ templates, onClose }: { templates: Template[]; onClose: (
             </NativeSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor='ps-loc'>{t('talentReview.practicals.location')}</FieldLabel>
-            <Textarea id='ps-loc' rows={1} value={location} onChange={(e) => setLocation(e.target.value)} />
+            <FieldLabel htmlFor='ps-loc'>
+              {t('talentReview.practicals.location')}
+            </FieldLabel>
+            <Textarea
+              id='ps-loc'
+              rows={1}
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+            />
           </Field>
           {action.error ? (
             <Alert variant='destructive'>
@@ -510,15 +697,28 @@ function StartDialog({ templates, onClose }: { templates: Template[]; onClose: (
             {t('talentReview.common.cancel')}
           </Button>
           <Button
-            disabled={action.busy || !assessmentId || !employeeId || (chosen?.requiresWitness && !witnessUserId)}
-            onClick={() => { void (async () => {
-              const created = await action.run<{ id: string }>({
-                method: 'POST',
-                path: 'talent/practicals/records',
-                json: { assessmentId, employeeId, witnessUserId: witnessUserId || null, location: location || null },
-              });
-              if (created) void navigate(`records/${encodeURIComponent(created.id)}`);
-            })(); }}
+            disabled={
+              action.busy ||
+              !assessmentId ||
+              !employeeId ||
+              (chosen?.requiresWitness && !witnessUserId)
+            }
+            onClick={() => {
+              void (async () => {
+                const created = await action.run<{ id: string }>({
+                  method: 'POST',
+                  path: 'talent/practicals/records',
+                  json: {
+                    assessmentId,
+                    employeeId,
+                    witnessUserId: witnessUserId || null,
+                    location: location || null,
+                  },
+                });
+                if (created)
+                  void navigate(`records/${encodeURIComponent(created.id)}`);
+              })();
+            }}
           >
             {t('talentReview.practicals.begin')}
           </Button>

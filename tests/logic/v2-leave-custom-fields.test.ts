@@ -165,7 +165,6 @@ function addDays(date: string, days: number): string {
 const day = (n: number) => addDays(today(), n);
 const local = (date: string, time: string) => `${date}T${time}:00+08:00`;
 
-
 async function db() {
   const { databaseManagerToken } = await import('@nocobase/db');
   return server.application.container.resolve(databaseManagerToken);
@@ -237,7 +236,9 @@ describe('V2-05 请假单 with 工作交接人', () => {
       [handover.key]: '钱进',
       [diagnosis.key]: '不宜公开',
     });
-    const stored = await (await db())
+    const stored = await (
+      await db()
+    )
       .query()
       .selectFrom('leaveRequests')
       .select(['customFields'])
@@ -278,7 +279,11 @@ describe('V2-05 请假单 with 工作交接人', () => {
   });
 
   it('shows 工作交接人 to mgr_njl while approving, but not the sensitive field; hr01 sees both', async () => {
-    const approver = await call('mgr_njl', 'GET', `/leave/requests/${requestId}`);
+    const approver = await call(
+      'mgr_njl',
+      'GET',
+      `/leave/requests/${requestId}`,
+    );
     expect(approver.status).toBe(200);
     expect(approver.json.data.canApprove).toBe(true);
     expect(approver.json.data.customFields).toEqual({ [handover.key]: '钱进' });
@@ -305,10 +310,15 @@ describe('V2-05 请假单 with 工作交接人', () => {
 
   it('refuses to submit without a required field, and saves the draft without it', async () => {
     // The patch restates the placements: the definitions API resets omitted ones to their defaults.
-    const required = await call('hr01', 'PATCH', `/custom-fields/${handover.id}`, {
-      required: true,
-      placements: ['form', 'detail'],
-    });
+    const required = await call(
+      'hr01',
+      'PATCH',
+      `/custom-fields/${handover.id}`,
+      {
+        required: true,
+        placements: ['form', 'detail'],
+      },
+    );
     expect(required.status).toBe(200);
     const draft = await call('emp_njl_2', 'POST', '/leave/requests', {
       leaveTypeId: 'leave-personal',
@@ -416,7 +426,12 @@ describe('V2-05 考勤申请 with added fields', () => {
   });
 
   it('refuses 钱进’s overtime without 加班项目 and records it with one', async () => {
-    const missing = await call('emp_njl_3', 'POST', '/adjustments', overtime(day(9)));
+    const missing = await call(
+      'emp_njl_3',
+      'POST',
+      '/adjustments',
+      overtime(day(9)),
+    );
     expect(missing.status).toBe(400);
     expect(missing.json.code).toBe('CUSTOM_FIELD_INVALID');
     expect(missing.json.details.fields).toEqual({
@@ -439,12 +454,24 @@ describe('V2-05 考勤申请 with added fields', () => {
       overtime(day(9), { [project.key]: 'mo-24031' }),
     );
     expect(created.status).toBe(201);
-    expect(created.json.data.customFields).toEqual({ [project.key]: 'mo-24031' });
-    const detail = await call('mgr_njl', 'GET', `/adjustments/${created.json.data.id}`);
+    expect(created.json.data.customFields).toEqual({
+      [project.key]: 'mo-24031',
+    });
+    const detail = await call(
+      'mgr_njl',
+      'GET',
+      `/adjustments/${created.json.data.id}`,
+    );
     expect(detail.status).toBe(200);
     expect(detail.json.data.canDecide).toBe(true);
-    expect(detail.json.data.customFields).toEqual({ [project.key]: 'mo-24031' });
-    const todo = await call('mgr_njl', 'GET', '/adjustments?view=todo&type=overtime');
+    expect(detail.json.data.customFields).toEqual({
+      [project.key]: 'mo-24031',
+    });
+    const todo = await call(
+      'mgr_njl',
+      'GET',
+      '/adjustments?view=todo&type=overtime',
+    );
     expect(
       todo.json.data.find((r: Json) => r.id === created.json.data.id)
         ?.customFields,
@@ -475,7 +502,11 @@ describe('V2-05 考勤申请 with added fields', () => {
         updatedAt: stamp,
       })
       .execute();
-    const refused = await call('emp_njl_3', 'POST', `/adjustments/${id}/submit`);
+    const refused = await call(
+      'emp_njl_3',
+      'POST',
+      `/adjustments/${id}/submit`,
+    );
     expect(refused.status).toBe(400);
     expect(refused.json.code).toBe('CUSTOM_FIELD_INVALID');
     const submitted = await call(

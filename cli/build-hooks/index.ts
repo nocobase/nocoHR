@@ -11,6 +11,19 @@ const buildHooks: AppCliPlugin = defineCliPlugin({
   packageName: '@hr/build-hooks',
   description: "The application's own build hooks.",
   buildHooks: {
+    afterServerBuild: [
+      {
+        label: 'Compile registered process artifacts',
+        command: [
+          'pnpm',
+          'nocobase',
+          'app',
+          'build-processes',
+          '--out',
+          'dist/server/processes/artifacts',
+        ],
+      },
+    ],
     afterBuild: [
       {
         label: 'Settle install scripts in dist/pnpm-workspace.yaml',

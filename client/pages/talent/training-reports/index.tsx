@@ -87,35 +87,51 @@ interface TrainingReport {
   }[];
   details: {
     completion: {
+      readonly rowKey: string;
       employee: string;
       target: string;
       status: string;
       dueDate: string | null;
     }[];
-    overdue: { employee: string; target: string; dueDate: string | null }[];
+    overdue: {
+      readonly rowKey: string;
+      employee: string;
+      target: string;
+      dueDate: string | null;
+    }[];
     exams: {
+      readonly rowKey: string;
       employee: string;
       exam: string;
       firstPassed: boolean;
       passed: boolean;
     }[];
     coverageMissing: {
+      readonly rowKey: string;
       employee: string;
       position: string;
       certification: string;
     }[];
     expiring: {
+      readonly rowKey: string;
       employee: string;
       certification: string;
       expiresAt: string | null;
     }[];
     expired: {
+      readonly rowKey: string;
       employee: string;
       certification: string;
       expiresAt: string | null;
     }[];
-    gaps: { question: string; askCount: number; lastAskedAt: string }[];
+    gaps: {
+      readonly rowKey: string;
+      question: string;
+      askCount: number;
+      lastAskedAt: string;
+    }[];
     paths: {
+      readonly rowKey: string;
       employee: string;
       path: string;
       status: string;
@@ -124,6 +140,7 @@ interface TrainingReport {
       onTime: boolean;
     }[];
     attendance: {
+      readonly rowKey: string;
       employee: string;
       session: string;
       startAt: string | null;
@@ -131,6 +148,7 @@ interface TrainingReport {
       method: string | null;
     }[];
     practice: {
+      readonly rowKey: string;
       employee: string;
       scenario: string;
       score: number | null;
@@ -187,8 +205,8 @@ export default function TrainingReportsPage(): ReactElement {
   });
   const [departmentId, setDepartmentId] = useState('');
   const [positionId, setPositionId] = useState('');
-  const [from, setFrom] = useState(isoDate(-364));
-  const [to, setTo] = useState(isoDate(0));
+  const [from, setFrom] = useState(() => isoDate(-364));
+  const [to, setTo] = useState(() => isoDate(0));
   const [detail, setDetail] = useState<MetricKey | null>(null);
   const report = useRemote<TrainingReport>('talent/training-report', {
     departmentId: departmentId || undefined,
@@ -466,7 +484,7 @@ export default function TrainingReportsPage(): ReactElement {
   );
 }
 
-function DetailTable({
+export function DetailTable({
   report,
   list,
 }: {
@@ -486,7 +504,11 @@ function DetailTable({
     attendance: ['employee', 'session', 'startAt', 'attendance', 'method'],
     practice: ['employee', 'scenario', 'score', 'completedAt'],
   };
-  const rows = (report.details[list] as readonly Record<string, unknown>[]).map(
+  const rows = (
+    report.details[list] as readonly (Record<string, unknown> & {
+      rowKey: string;
+    })[]
+  ).map(
     // The attendance list's status is an enrollment status, labelled apart from task statuses.
     (row) => (list === 'attendance' ? { ...row, attendance: row.status } : row),
   );
@@ -527,8 +549,8 @@ function DetailTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row, index) => (
-          <TableRow key={index}>
+        {rows.map((row) => (
+          <TableRow key={row.rowKey}>
             {columns[list].map((column) => (
               <TableCell key={column}>{cell(column, row[column])}</TableCell>
             ))}

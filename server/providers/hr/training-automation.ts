@@ -64,6 +64,7 @@ export interface TrainingAutomationDeps {
   readonly container: ServiceContainer;
   readonly platform: Platform;
   readonly structured: Structured;
+  readonly structuredPlan: Structured;
   readonly worded: Worded;
 }
 
@@ -86,7 +87,7 @@ function dateOnly(value: unknown): string {
 }
 
 export function createTrainingAutomation(deps: TrainingAutomationDeps) {
-  const { container, platform, structured, worded } = deps;
+  const { container, platform, structured, structuredPlan, worded } = deps;
   const { database } = platform;
   const plans = () => container.resolve(planServiceToken);
   const practice = () => container.resolve(practiceServiceToken);
@@ -341,7 +342,7 @@ export function createTrainingAutomation(deps: TrainingAutomationDeps) {
       };
       let draft: Draft;
       try {
-        draft = await structured(
+        draft = await structuredPlan(
           run,
           'learningCoach',
           `学习计划：${str(person.name)}`,
@@ -993,7 +994,7 @@ export function createTrainingAutomation(deps: TrainingAutomationDeps) {
       return { summary, items };
     };
     try {
-      const draft = await structured(
+      const draft = await structuredPlan(
         run,
         'learningCoach',
         input.title,

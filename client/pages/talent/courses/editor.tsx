@@ -20,7 +20,6 @@ import {
 import { useState, type ReactElement, type ReactNode } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -95,7 +94,6 @@ export default function CourseEditorPage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         {courseId && course.error ? (
           <LoadError error={course.error} onRetry={course.reload} />
         ) : courseId && !course.data ? (
@@ -320,7 +318,9 @@ function Editor({
   const actions: ReactNode[] = [];
   // V4-13 生成英文版 (the server checks the owner or hr.admin).
   if (course && canWrite.can)
-    actions.push(<TranslateButton key='translate' type='course' id={course.id} />);
+    actions.push(
+      <TranslateButton key='translate' type='course' id={course.id} />,
+    );
   if (course && canWrite.can && canDraftQuestions.can) {
     actions.push(
       <AssistantLauncher

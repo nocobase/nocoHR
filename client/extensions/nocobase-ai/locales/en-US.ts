@@ -22,6 +22,7 @@ const enUS = {
   'actions.disableWebSearch': 'Disable web search',
   'actions.webSearchUnsupported': 'Web search is not supported by this model',
 
+  'chat.continueReply': 'Continue reply',
   'chat.aiEmployee': 'AI employee',
   'chat.newConversation': 'New conversation',
   'chat.conversationList': 'Conversation list',

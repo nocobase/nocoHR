@@ -13,6 +13,13 @@ import { licensedServerEn } from './modules/licensed.js';
 // The application's own server-side wording: the in-app notifications the
 // talent platform sends. Plugin wording stays in each plugin's namespace.
 const enUS = {
+  processes: {
+    authorization: {
+      section: 'Automation',
+      title: 'Workflows',
+      manage: 'Manage workflows',
+    },
+  },
   workbench: {
     title: 'Workbench',
     description:
@@ -719,6 +726,16 @@ const enUS = {
         rejected: 'rejected',
         cancelled: 'withdrawn',
       },
+    },
+    nativeApproval: {
+      title: 'Approve assistant action',
+      sent: 'Check the proposed changes on the approval card.',
+      unavailable:
+        'This approval is unavailable or you no longer have permission. Check NocoHR.',
+      recorded:
+        'Your decision was recorded. Check the conversation for the result.',
+      approved: 'Approved. The assistant has continued the conversation.',
+      rejected: 'Declined. The assistant has continued the conversation.',
     },
     profileChange: {
       title: 'Profile change request',

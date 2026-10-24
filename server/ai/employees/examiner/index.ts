@@ -1,4 +1,4 @@
-import { defineAIEmployee } from '@nocobase/ai-employee';
+import { defineAIEmployee } from '../../contracts.js';
 
 /**
  * V3-10 考官: suggests scores for short answers so instructors grade faster

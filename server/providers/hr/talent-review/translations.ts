@@ -20,9 +20,12 @@
  *   stem and options in an exam paper; the ids stay the original's, so
  *   progress and grading are the same (同一题的译文与原文算同一题).
  */
+import { assertUnrestrictedNativeAIEntry } from '../../native-ai/access.js';
+import { scopeForUser } from '../authorize.js';
+import type { StructuredAI } from '../../native-ai/structured.js';
 import { z } from 'zod';
 
-import { AIUnavailableError, type AIRunner } from '../ai-runner.js';
+import { AIUnavailableError } from '../ai-runner.js';
 import { authorizeAction, policyOf } from '../authorize.js';
 import type { AutomationRunContext } from '../automation.js';
 import type { ActorContext } from '../framework-service.js';
@@ -31,11 +34,19 @@ import type { TalentReviewContext } from './context.js';
 import { hashOf, iso, json } from './context.js';
 
 const RESOURCE = 'talent.translation';
-export const CONTENT_TYPES = ['course', 'question', 'document', 'scenario'] as const;
+export const CONTENT_TYPES = [
+  'course',
+  'question',
+  'document',
+  'scenario',
+] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 export const TARGET_LOCALE = 'en-US';
 
-const TABLE: Record<ContentType, 'courses' | 'questions' | 'kbDocuments' | 'practiceScenarios'> = {
+const TABLE: Record<
+  ContentType,
+  'courses' | 'questions' | 'kbDocuments' | 'practiceScenarios'
+> = {
   course: 'courses',
   question: 'questions',
   document: 'kbDocuments',
@@ -116,19 +127,27 @@ function mapStrings(value: unknown, fn: (s: string) => string): unknown {
     return Object.fromEntries(
       Object.entries(value).map(([k, v]) => [
         k,
-        k === 'id' || k === 'key' || k === 'competencyId' ? v : mapStrings(v, fn),
+        k === 'id' || k === 'key' || k === 'competencyId'
+          ? v
+          : mapStrings(v, fn),
       ]),
     );
   return value;
 }
 
-const translatedSchema = z.object({ fields: z.record(z.string(), z.unknown()) });
+const translatedSchema = z.object({
+  fields: z.record(z.string(), z.unknown()),
+});
 
 export function createTranslationService(
   ctx: TalentReviewContext,
   deps: {
-    ai: AIRunner;
-    onRequested: (type: ContentType, id: string, hash: string) => Promise<unknown>;
+    ai: StructuredAI;
+    onRequested: (
+      type: ContentType,
+      id: string,
+      hash: string,
+    ) => Promise<unknown>;
   },
 ) {
   const { database, platform } = ctx;
@@ -141,22 +160,28 @@ export function createTranslationService(
       .where('id', '=', id)
       .executeTakeFirst();
     if (!row) throw new HrError('CONTENT_NOT_FOUND', 404);
-    if (row.translationOfId) throw new HrError('TRANSLATION_OF_TRANSLATION', 400);
+    if (row.translationOfId)
+      throw new HrError('TRANSLATION_OF_TRANSLATION', 400);
     return row as Record<string, unknown>;
   }
 
   async function translationsOf(type: ContentType, originalId: string) {
-    return (await database
+    return await database
       .query()
       .selectFrom(TABLE[type])
       .selectAll()
       .where('translationOfId', '=', originalId)
       .where('locale', '=', TARGET_LOCALE)
-      .execute());
+      .execute();
   }
 
   /** The caller's action reaches the original (owner scope for instructors, all for hr.admin). */
-  async function assertReach(actor: ActorContext, action: 'draft' | 'review', type: ContentType, id: string) {
+  async function assertReach(
+    actor: ActorContext,
+    action: 'draft' | 'review',
+    type: ContentType,
+    id: string,
+  ) {
     const policies = await authorizeAction(actor.authz, RESOURCE, action);
     const visible = await database
       .repository(TABLE[type])
@@ -177,11 +202,15 @@ export function createTranslationService(
     userId: string,
   ) {
     const settings = await ctx.settings();
-    const fallback = mapStrings(texts, (s) => applyGlossary(s, settings.glossary)) as Fields;
+    const fallback = mapStrings(texts, (s) =>
+      applyGlossary(s, settings.glossary),
+    ) as Fields;
     try {
       const { data, sessionId } = await deps.ai.structured({
         employee: 'contentWriter',
         userId: run?.owner.userId ?? userId,
+        authorization:
+          run?.owner.authz ?? (await scopeForUser(platform.authz, userId)),
         title: `译文起草 ${title}`,
         prompt: `把下列培训内容翻译成英文（en-US），按原结构返回 fields。保留编号、数字、单位和作业文件条款号不变（如 SOP-0231、4.3、10 分钟 → 10 minutes）；id 和 key 不翻译。术语按术语表翻译：${settings.glossary.map((g) => `${g.zh} → ${g.en}`).join('；')}。
 内容（JSON）：${JSON.stringify(texts).slice(0, 30_000)}`,
@@ -205,7 +234,9 @@ export function createTranslationService(
   const service = {
     /** 生成英文版 (the owner or hr.admin). */
     async request(actor: ActorContext, type: ContentType, id: string) {
-      if (!CONTENT_TYPES.includes(type)) throw new HrError('INVALID_INPUT', 400);
+      assertUnrestrictedNativeAIEntry(actor.authz);
+      if (!CONTENT_TYPES.includes(type))
+        throw new HrError('INVALID_INPUT', 400);
       await assertReach(actor, 'draft', type, id);
       const row = await original(type, id);
       const hash = await contentHash(type, row);
@@ -214,13 +245,26 @@ export function createTranslationService(
     },
 
     /** contentWriter.translationDraft (trusted; the request authorized the caller). */
-    async draft(run: AutomationRunContext | null, type: ContentType, id: string) {
+    async draft(
+      run: AutomationRunContext | null,
+      type: ContentType,
+      id: string,
+    ) {
       const row = await original(type, id);
       const texts = await textsOf(ctx, type, row);
       const hash = hashOf(texts);
       const existing = await translationsOf(type, id);
-      if (existing.some((t) => str(t.sourceHash ?? '') === hash && str(t.translationStatus ?? '') !== 'superseded'))
-        return { status: 'skipped' as const, output: { reason: 'sameVersion' } };
+      if (
+        existing.some(
+          (t) =>
+            str(t.sourceHash ?? '') === hash &&
+            str(t.translationStatus ?? '') !== 'superseded',
+        )
+      )
+        return {
+          status: 'skipped' as const,
+          output: { reason: 'sameVersion' },
+        };
       run?.summarize(`译文起草：${type} ${id}`);
       run?.reference({ type, id });
       const { fields, source } = await translate(
@@ -231,7 +275,9 @@ export function createTranslationService(
       );
       const now = new Date();
       const open = existing.find(
-        (t) => str(t.reviewStatus ?? '') === 'draft' && str(t.translationStatus ?? '') !== 'superseded',
+        (t) =>
+          str(t.reviewStatus ?? '') === 'draft' &&
+          str(t.translationStatus ?? '') !== 'superseded',
       );
       const base = {
         locale: TARGET_LOCALE,
@@ -249,8 +295,17 @@ export function createTranslationService(
         };
         if (open) {
           translationId = str(open.id);
-          await database.query().updateTable('courses').set(values).where('id', '=', translationId).execute();
-          await database.query().deleteFrom('lessons').where('courseId', '=', translationId).execute();
+          await database
+            .query()
+            .updateTable('courses')
+            .set(values)
+            .where('id', '=', translationId)
+            .execute();
+          await database
+            .query()
+            .deleteFrom('lessons')
+            .where('courseId', '=', translationId)
+            .execute();
         } else {
           translationId = newId();
           const { id: _id, createdAt: _c, ...rest } = row;
@@ -276,11 +331,18 @@ export function createTranslationService(
           .where('courseId', '=', id)
           .execute();
         const translated = new Map(
-          (json<{ id: string; title: string; content: string }[]>(fields.lessons, [])).map((l) => [l.id, l]),
+          json<{ id: string; title: string; content: string }[]>(
+            fields.lessons,
+            [],
+          ).map((l) => [l.id, l]),
         );
         for (const lesson of lessons) {
           const t = translated.get(str(lesson.id));
-          const { id: lessonId, createdAt: _c, ...rest } = lesson as Record<string, unknown>;
+          const {
+            id: lessonId,
+            createdAt: _c,
+            ...rest
+          } = lesson as Record<string, unknown>;
           await database
             .query()
             .insertInto('lessons')
@@ -308,7 +370,12 @@ export function createTranslationService(
         };
         if (open) {
           translationId = str(open.id);
-          await database.query().updateTable('questions').set(values).where('id', '=', translationId).execute();
+          await database
+            .query()
+            .updateTable('questions')
+            .set(values)
+            .where('id', '=', translationId)
+            .execute();
         } else {
           translationId = newId();
           const { id: _id, createdAt: _c, ...rest } = row;
@@ -331,13 +398,21 @@ export function createTranslationService(
           title: str(fields.title ?? row.title).slice(0, 255),
           persona: str(fields.persona ?? row.persona),
           situation: str(fields.situation ?? row.situation),
-          openingLine: str(fields.openingLine ?? row.openingLine).slice(0, 1000),
+          openingLine: str(fields.openingLine ?? row.openingLine).slice(
+            0,
+            1000,
+          ),
           rubric: json(fields.rubric, json(row.rubric, [])),
           ...base,
         };
         if (open) {
           translationId = str(open.id);
-          await database.query().updateTable('practiceScenarios').set(values).where('id', '=', translationId).execute();
+          await database
+            .query()
+            .updateTable('practiceScenarios')
+            .set(values)
+            .where('id', '=', translationId)
+            .execute();
         } else {
           translationId = newId();
           const { id: _id, createdAt: _c, ...rest } = row;
@@ -357,11 +432,19 @@ export function createTranslationService(
       } else {
         const contentText = str(fields.contentText ?? row.contentText ?? '');
         const title = str(fields.title ?? row.title).slice(0, 255);
-        const fileId = await ctx.storeTextFile(`${title}.en-US.md`, contentText);
+        const fileId = await ctx.storeTextFile(
+          `${title}.en-US.md`,
+          contentText,
+        );
         const values = { title, contentText, fileId, ...base };
         if (open) {
           translationId = str(open.id);
-          await database.query().updateTable('kbDocuments').set(values).where('id', '=', translationId).execute();
+          await database
+            .query()
+            .updateTable('kbDocuments')
+            .set(values)
+            .where('id', '=', translationId)
+            .execute();
         } else {
           translationId = newId();
           const { id: _id, createdAt: _c, ...rest } = row;
@@ -392,23 +475,36 @@ export function createTranslationService(
         params: { title: str(row.title ?? row.stem ?? '').slice(0, 60) },
         path: '/talent/translations',
       });
-      await run?.recordItems(`translation:${type}`, [{ id: translationId, hash }]);
+      await run?.recordItems(`translation:${type}`, [
+        { id: translationId, hash },
+      ]);
       return { output: { type, id, translationId, source } };
     },
 
     /** Marks translations whose original changed as outdated; answers the originals to redraft. */
-    async scanOutdated(): Promise<{ type: ContentType; id: string; hash: string }[]> {
+    async scanOutdated(): Promise<
+      { type: ContentType; id: string; hash: string }[]
+    > {
       const redraft: { type: ContentType; id: string; hash: string }[] = [];
       for (const type of CONTENT_TYPES) {
-        const rows = (await database
+        const rows = await database
           .query()
           .selectFrom(TABLE[type])
-          .select(['id', 'translationOfId', 'translationStatus', 'sourceHash', 'reviewStatus'])
+          .select([
+            'id',
+            'translationOfId',
+            'translationStatus',
+            'sourceHash',
+            'reviewStatus',
+          ])
           .where('translationOfId', 'is not', null)
-          .execute());
+          .execute();
         const byOriginal = new Map<string, Record<string, unknown>[]>();
         for (const r of rows)
-          byOriginal.set(str(r.translationOfId), [...(byOriginal.get(str(r.translationOfId)) ?? []), r]);
+          byOriginal.set(str(r.translationOfId), [
+            ...(byOriginal.get(str(r.translationOfId)) ?? []),
+            r,
+          ]);
         for (const [originalId, list] of byOriginal) {
           const source = await database
             .query()
@@ -420,7 +516,11 @@ export function createTranslationService(
           const hash = await contentHash(type, source);
           let stale = false;
           for (const t of list) {
-            if (str(t.translationStatus ?? '') !== 'upToDate' || str(t.sourceHash ?? '') === hash) continue;
+            if (
+              str(t.translationStatus ?? '') !== 'upToDate' ||
+              str(t.sourceHash ?? '') === hash
+            )
+              continue;
             stale = true;
             await database
               .query()
@@ -462,15 +562,16 @@ export function createTranslationService(
           .withPolicy(policyOf(policies, TABLE[type]))
           .findMany({})) as Record<string, unknown>[];
         const reach = new Map(originals.map((o) => [str(o.id), o]));
-        const rows = (await database
+        const rows = await database
           .query()
           .selectFrom(TABLE[type])
           .selectAll()
           .where('translationOfId', 'is not', null)
-          .execute());
+          .execute();
         for (const t of rows) {
           const source = reach.get(str(t.translationOfId));
-          if (!source || str(t.translationStatus ?? '') === 'superseded') continue;
+          if (!source || str(t.translationStatus ?? '') === 'superseded')
+            continue;
           out.push({
             type,
             id: str(t.id),
@@ -484,20 +585,33 @@ export function createTranslationService(
         }
       }
       const rank = (r: { reviewStatus: string; translationStatus: string }) =>
-        r.reviewStatus === 'draft' ? 0 : r.translationStatus === 'outdated' ? 1 : 2;
+        r.reviewStatus === 'draft'
+          ? 0
+          : r.translationStatus === 'outdated'
+            ? 1
+            : 2;
       return {
-        items: out.sort((a, b) => rank(a) - rank(b) || (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')),
+        items: out.sort(
+          (a, b) =>
+            rank(a) - rank(b) ||
+            (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''),
+        ),
       };
     },
 
-    async detail(actor: ActorContext, type: ContentType, translationId: string) {
+    async detail(
+      actor: ActorContext,
+      type: ContentType,
+      translationId: string,
+    ) {
       const row = await database
         .query()
         .selectFrom(TABLE[type])
         .selectAll()
         .where('id', '=', translationId)
         .executeTakeFirst();
-      if (!row?.translationOfId) throw new HrError('TRANSLATION_NOT_FOUND', 404);
+      if (!row?.translationOfId)
+        throw new HrError('TRANSLATION_NOT_FOUND', 404);
       await assertReach(actor, 'review', type, str(row.translationOfId));
       const source = await original(type, str(row.translationOfId));
       const translatedTexts =
@@ -529,31 +643,50 @@ export function createTranslationService(
       };
     },
 
-    async save(actor: ActorContext, type: ContentType, translationId: string, input: unknown) {
+    async save(
+      actor: ActorContext,
+      type: ContentType,
+      translationId: string,
+      input: unknown,
+    ) {
       const current = await service.detail(actor, type, translationId);
-      if (current.reviewStatus !== 'draft') throw new HrError('TRANSLATION_NOT_DRAFT', 409);
+      if (current.reviewStatus !== 'draft')
+        throw new HrError('TRANSLATION_NOT_DRAFT', 409);
       const fields =
-        input && typeof input === 'object' ? ((input as { fields?: unknown }).fields as Fields | undefined) : undefined;
-      if (!fields || typeof fields !== 'object') throw new HrError('INVALID_INPUT', 400);
+        input && typeof input === 'object'
+          ? ((input as { fields?: unknown }).fields as Fields | undefined)
+          : undefined;
+      if (!fields || typeof fields !== 'object')
+        throw new HrError('INVALID_INPUT', 400);
       const now = new Date();
       if (type === 'course') {
         await database
           .query()
           .updateTable('courses')
           .set({
-            ...(typeof fields.title === 'string' ? { title: fields.title.slice(0, 255) } : {}),
-            ...(typeof fields.description === 'string' ? { description: fields.description } : {}),
+            ...(typeof fields.title === 'string'
+              ? { title: fields.title.slice(0, 255) }
+              : {}),
+            ...(typeof fields.description === 'string'
+              ? { description: fields.description }
+              : {}),
             updatedAt: now,
           })
           .where('id', '=', translationId)
           .execute();
-        for (const lesson of json<{ id: string; title?: string; content?: string }[]>(fields.lessons, []))
+        for (const lesson of json<
+          { id: string; title?: string; content?: string }[]
+        >(fields.lessons, []))
           await database
             .query()
             .updateTable('lessons')
             .set({
-              ...(typeof lesson.title === 'string' ? { title: lesson.title.slice(0, 255) } : {}),
-              ...(typeof lesson.content === 'string' ? { content: lesson.content } : {}),
+              ...(typeof lesson.title === 'string'
+                ? { title: lesson.title.slice(0, 255) }
+                : {}),
+              ...(typeof lesson.content === 'string'
+                ? { content: lesson.content }
+                : {}),
               updatedAt: now,
             })
             .where('courseId', '=', translationId)
@@ -567,16 +700,27 @@ export function createTranslationService(
           scenario: ['title', 'persona', 'situation', 'openingLine', 'rubric'],
         };
         const values: Record<string, unknown> = { updatedAt: now };
-        for (const key of allowed[type]) if (key in fields) values[key] = fields[key];
-        await database.query().updateTable(TABLE[type]).set(values).where('id', '=', translationId).execute();
+        for (const key of allowed[type])
+          if (key in fields) values[key] = fields[key];
+        await database
+          .query()
+          .updateTable(TABLE[type])
+          .set(values)
+          .where('id', '=', translationId)
+          .execute();
       }
       return service.detail(actor, type, translationId);
     },
 
     /** 确认: the translation is shown to English readers; an earlier confirmed one is superseded. */
-    async confirm(actor: ActorContext, type: ContentType, translationId: string) {
+    async confirm(
+      actor: ActorContext,
+      type: ContentType,
+      translationId: string,
+    ) {
       const current = await service.detail(actor, type, translationId);
-      if (current.reviewStatus !== 'draft') throw new HrError('TRANSLATION_NOT_DRAFT', 409);
+      if (current.reviewStatus !== 'draft')
+        throw new HrError('TRANSLATION_NOT_DRAFT', 409);
       const row = await database
         .query()
         .selectFrom(TABLE[type])
@@ -585,7 +729,10 @@ export function createTranslationService(
         .executeTakeFirst();
       const now = new Date();
       for (const other of await translationsOf(type, str(row!.translationOfId)))
-        if (str(other.id) !== translationId && str(other.reviewStatus ?? '') === 'confirmed')
+        if (
+          str(other.id) !== translationId &&
+          str(other.reviewStatus ?? '') === 'confirmed'
+        )
           await database
             .query()
             .updateTable(TABLE[type])
@@ -605,7 +752,9 @@ export function createTranslationService(
     /** The confirmed, up-to-date translation of an original (trusted). */
     async current(type: ContentType, originalId: string) {
       return (await translationsOf(type, originalId)).find(
-        (t) => str(t.reviewStatus ?? '') === 'confirmed' && str(t.translationStatus ?? '') === 'upToDate',
+        (t) =>
+          str(t.reviewStatus ?? '') === 'confirmed' &&
+          str(t.translationStatus ?? '') === 'upToDate',
       );
     },
 
@@ -625,18 +774,24 @@ export function createTranslationService(
         .select(['translationOfId', 'title', 'content'])
         .where('courseId', '=', str(translation.id))
         .execute();
-      const byOriginal = new Map(lessons.map((l) => [str(l.translationOfId), l]));
+      const byOriginal = new Map(
+        lessons.map((l) => [str(l.translationOfId), l]),
+      );
       return {
         ...view,
         locale: TARGET_LOCALE,
         course: {
           ...view.course,
           title: str(translation.title),
-          description: translation.description ? str(translation.description) : null,
+          description: translation.description
+            ? str(translation.description)
+            : null,
         },
         lessons: view.lessons.map((lesson) => {
           const t = byOriginal.get(lesson.id);
-          return t ? { ...lesson, title: str(t.title), content: str(t.content ?? '') } : lesson;
+          return t
+            ? { ...lesson, title: str(t.title), content: str(t.content ?? '') }
+            : lesson;
         }),
       };
     },
@@ -645,18 +800,32 @@ export function createTranslationService(
     async questionTexts(
       ids: readonly string[],
       locale: string,
-    ): Promise<Map<string, { stem: string; options: { key: string; text: string }[] }>> {
-      const map = new Map<string, { stem: string; options: { key: string; text: string }[] }>();
+    ): Promise<
+      Map<string, { stem: string; options: { key: string; text: string }[] }>
+    > {
+      const map = new Map<
+        string,
+        { stem: string; options: { key: string; text: string }[] }
+      >();
       if (locale !== TARGET_LOCALE || !ids.length) return map;
       const rows = await database
         .query()
         .selectFrom('questions')
-        .select(['translationOfId', 'stem', 'options', 'reviewStatus', 'translationStatus'])
+        .select([
+          'translationOfId',
+          'stem',
+          'options',
+          'reviewStatus',
+          'translationStatus',
+        ])
         .where('translationOfId', 'in', [...ids])
         .where('locale', '=', TARGET_LOCALE)
         .execute();
       for (const r of rows)
-        if (str(r.reviewStatus) === 'confirmed' && str(r.translationStatus ?? '') === 'upToDate')
+        if (
+          str(r.reviewStatus) === 'confirmed' &&
+          str(r.translationStatus ?? '') === 'upToDate'
+        )
           map.set(str(r.translationOfId), {
             stem: str(r.stem),
             options: json(r.options, []),

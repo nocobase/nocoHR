@@ -47,8 +47,12 @@ export interface EvaluationView {
 export function createEvaluationService(ctx: TalentReviewContext) {
   const { database, platform } = ctx;
 
-  async function titleOf(targetType: string, targetId: string): Promise<string> {
-    const table = targetType === 'trainingSession' ? 'trainingSessions' : 'courses';
+  async function titleOf(
+    targetType: string,
+    targetId: string,
+  ): Promise<string> {
+    const table =
+      targetType === 'trainingSession' ? 'trainingSessions' : 'courses';
     const row = await database
       .query()
       .selectFrom(table)
@@ -137,8 +141,15 @@ export function createEvaluationService(ctx: TalentReviewContext) {
     const attended = await database
       .query()
       .selectFrom('trainingEnrollments')
-      .innerJoin('trainingSessions', 'trainingSessions.id', 'trainingEnrollments.sessionId')
-      .select(['trainingSessions.id as id', 'trainingEnrollments.checkedInAt as checkedInAt'])
+      .innerJoin(
+        'trainingSessions',
+        'trainingSessions.id',
+        'trainingEnrollments.sessionId',
+      )
+      .select([
+        'trainingSessions.id as id',
+        'trainingEnrollments.checkedInAt as checkedInAt',
+      ])
       .where('trainingEnrollments.employeeId', '=', employeeId)
       .where('trainingSessions.courseId', '=', courseId)
       .where('trainingEnrollments.status', '=', 'attended')
@@ -149,7 +160,10 @@ export function createEvaluationService(ctx: TalentReviewContext) {
       attended.checkedInAt &&
       Date.now() - new Date(str(attended.checkedInAt)).getTime() < DAY_MS
     )
-      return { targetType: 'trainingSession' as const, targetId: str(attended.id) };
+      return {
+        targetType: 'trainingSession' as const,
+        targetId: str(attended.id),
+      };
     return { targetType: 'course' as const, targetId: courseId };
   }
 
@@ -191,7 +205,9 @@ export function createEvaluationService(ctx: TalentReviewContext) {
       const settings = await ctx.settings();
       const report = { l1: 0, l3: 0, reminded: 0, expired: 0 };
       // Completions: course tasks and attended sessions.
-      const horizon = new Date(now.getTime() - (settings.l3AfterDays + 60) * DAY_MS);
+      const horizon = new Date(
+        now.getTime() - (settings.l3AfterDays + 60) * DAY_MS,
+      );
       const assignments = await database
         .query()
         .selectFrom('assignments')
@@ -203,7 +219,11 @@ export function createEvaluationService(ctx: TalentReviewContext) {
       const enrollments = await database
         .query()
         .selectFrom('trainingEnrollments')
-        .innerJoin('trainingSessions', 'trainingSessions.id', 'trainingEnrollments.sessionId')
+        .innerJoin(
+          'trainingSessions',
+          'trainingSessions.id',
+          'trainingEnrollments.sessionId',
+        )
         .select([
           'trainingEnrollments.employeeId as employeeId',
           'trainingSessions.id as sessionId',
@@ -236,7 +256,8 @@ export function createEvaluationService(ctx: TalentReviewContext) {
       }
       for (const a of assignments) {
         // An offline course's task completes with its session: the session is the target.
-        if (sessionCourses.has(`${str(a.employeeId)}:${str(a.courseId)}`)) continue;
+        if (sessionCourses.has(`${str(a.employeeId)}:${str(a.courseId)}`))
+          continue;
         completions.push({
           employeeId: str(a.employeeId),
           courseId: str(a.courseId),
@@ -318,7 +339,8 @@ export function createEvaluationService(ctx: TalentReviewContext) {
         }
         if (
           !row.remindedAt &&
-          due.getTime() - now.getTime() <= settings.evaluationReminderDays * DAY_MS
+          due.getTime() - now.getTime() <=
+            settings.evaluationReminderDays * DAY_MS
         ) {
           await platform.notify({
             key: `evaluation:${str(row.id)}:reminder`,
@@ -358,9 +380,11 @@ export function createEvaluationService(ctx: TalentReviewContext) {
 
     async get(actor: ActorContext, id: string) {
       for (const action of ['respond', 'view'] as const) {
-        const policies = await authorizeAction(actor.authz, RESOURCE, action).catch(
-          () => undefined,
-        );
+        const policies = await authorizeAction(
+          actor.authz,
+          RESOURCE,
+          action,
+        ).catch(() => undefined);
         if (!policies) continue;
         const row = (await database
           .repository('trainingEvaluations')
@@ -382,7 +406,8 @@ export function createEvaluationService(ctx: TalentReviewContext) {
         throw new HrError('EVALUATION_NOT_FOUND', 404);
       if (row.status !== 'pending') throw new HrError('EVALUATION_CLOSED', 409);
       const settings = await ctx.settings();
-      const questions = str(row.level) === 'l1' ? settings.l1Questions : settings.l3Questions;
+      const questions =
+        str(row.level) === 'l1' ? settings.l1Questions : settings.l3Questions;
       const answers =
         input && typeof input === 'object'
           ? (input as { answers?: unknown }).answers
@@ -394,23 +419,38 @@ export function createEvaluationService(ctx: TalentReviewContext) {
         const value = (answers as Record<string, unknown>)[q.key];
         if (q.kind === 'scale') {
           const parsed = z.number().int().min(1).max(5).safeParse(value);
-          if (!parsed.success) throw new HrError('EVALUATION_ANSWERS_REQUIRED', 400, { key: q.key });
+          if (!parsed.success)
+            throw new HrError('EVALUATION_ANSWERS_REQUIRED', 400, {
+              key: q.key,
+            });
           clean[q.key] = parsed.data;
         } else {
           const parsed = z.string().trim().min(1).max(2000).safeParse(value);
-          if (!parsed.success) throw new HrError('EVALUATION_ANSWERS_REQUIRED', 400, { key: q.key });
+          if (!parsed.success)
+            throw new HrError('EVALUATION_ANSWERS_REQUIRED', 400, {
+              key: q.key,
+            });
           clean[q.key] = parsed.data;
         }
       }
-      const scale = Object.values(clean).filter((v): v is number => typeof v === 'number');
+      const scale = Object.values(clean).filter(
+        (v): v is number => typeof v === 'number',
+      );
       const score = scale.length
-        ? Math.round((scale.reduce((a, b) => a + b, 0) / scale.length) * 100) / 100
+        ? Math.round((scale.reduce((a, b) => a + b, 0) / scale.length) * 100) /
+          100
         : null;
       const now = new Date();
       await database
         .query()
         .updateTable('trainingEvaluations')
-        .set({ answers: clean, score, status: 'submitted', submittedAt: now, updatedAt: now })
+        .set({
+          answers: clean,
+          score,
+          status: 'submitted',
+          submittedAt: now,
+          updatedAt: now,
+        })
         .where('id', '=', id)
         .where('status', '=', 'pending')
         .execute();
@@ -419,14 +459,22 @@ export function createEvaluationService(ctx: TalentReviewContext) {
     },
 
     /** 按课程、班次、讲师汇总 (view: all, own courses and sessions, or the head's departments). */
-    async summary(actor: ActorContext, filters: { from?: string; to?: string }) {
+    async summary(
+      actor: ActorContext,
+      filters: { from?: string; to?: string },
+    ) {
       const policies = await authorizeAction(actor.authz, RESOURCE, 'view');
-      const rows = ((await database
-        .repository('trainingEvaluations')
-        .withPolicy(policyOf(policies, 'trainingEvaluations'))
-        .findMany({})) as Record<string, unknown>[]).filter((r) => {
+      const rows = (
+        (await database
+          .repository('trainingEvaluations')
+          .withPolicy(policyOf(policies, 'trainingEvaluations'))
+          .findMany({})) as Record<string, unknown>[]
+      ).filter((r) => {
         const at = iso(r.completedAt)?.slice(0, 10) ?? '';
-        return (!filters.from || at >= filters.from) && (!filters.to || at <= filters.to);
+        return (
+          (!filters.from || at >= filters.from) &&
+          (!filters.to || at <= filters.to)
+        );
       });
       return service.aggregate(rows);
     },
@@ -435,15 +483,28 @@ export function createEvaluationService(ctx: TalentReviewContext) {
     async aggregate(rows: readonly Record<string, unknown>[]) {
       const courses = new Map(
         (
-          await database.query().selectFrom('courses').select(['id', 'title', 'ownerUserId']).execute()
-        ).map((c) => [str(c.id), { title: str(c.title), ownerUserId: str(c.ownerUserId) }]),
+          await database
+            .query()
+            .selectFrom('courses')
+            .select(['id', 'title', 'ownerUserId'])
+            .execute()
+        ).map((c) => [
+          str(c.id),
+          { title: str(c.title), ownerUserId: str(c.ownerUserId) },
+        ]),
       );
       const sessions = new Map(
         (
           await database
             .query()
             .selectFrom('trainingSessions')
-            .select(['id', 'title', 'courseId', 'instructorUserId', 'instructorProfileId'])
+            .select([
+              'id',
+              'title',
+              'courseId',
+              'instructorUserId',
+              'instructorProfileId',
+            ])
             .execute()
         ).map((s) => [str(s.id), s]),
       );
@@ -456,24 +517,44 @@ export function createEvaluationService(ctx: TalentReviewContext) {
         if (str(row.targetType) === 'trainingSession') {
           const s = sessions.get(str(row.targetId));
           if (!s) return null;
-          if (s.instructorProfileId) return `profile:${str(s.instructorProfileId)}`;
+          if (s.instructorProfileId)
+            return `profile:${str(s.instructorProfileId)}`;
           return s.instructorUserId ? `user:${str(s.instructorUserId)}` : null;
         }
-        const owner = courses.get(str(row.courseId ?? row.targetId))?.ownerUserId;
+        const owner = courses.get(
+          str(row.courseId ?? row.targetId),
+        )?.ownerUserId;
         return owner ? `user:${owner}` : null;
       };
       const nameOf = async (key: string) => {
         const [kind, id] = key.split(':');
-        if (kind === 'profile') return str(profiles.find((p) => str(p.id) === id)?.name ?? '');
+        if (kind === 'profile')
+          return str(profiles.find((p) => str(p.id) === id)?.name ?? '');
         const profile = profiles.find((p) => str(p.userId ?? '') === id);
         return profile ? str(profile.name) : await ctx.userName(id);
       };
-      type Bucket = { l1: number[]; l3: number[]; l1Total: number; l3Total: number; l1Expired: number };
-      const empty = (): Bucket => ({ l1: [], l3: [], l1Total: 0, l3Total: 0, l1Expired: 0 });
+      type Bucket = {
+        l1: number[];
+        l3: number[];
+        l1Total: number;
+        l3Total: number;
+        l1Expired: number;
+      };
+      const empty = (): Bucket => ({
+        l1: [],
+        l3: [],
+        l1Total: 0,
+        l3Total: 0,
+        l1Expired: 0,
+      });
       const byCourse = new Map<string, Bucket>();
       const bySession = new Map<string, Bucket>();
       const byInstructor = new Map<string, Bucket>();
-      const add = (map: Map<string, Bucket>, key: string | null, row: Record<string, unknown>) => {
+      const add = (
+        map: Map<string, Bucket>,
+        key: string | null,
+        row: Record<string, unknown>,
+      ) => {
         if (!key) return;
         const bucket = map.get(key) ?? empty();
         const level = str(row.level) as 'l1' | 'l3';
@@ -481,12 +562,14 @@ export function createEvaluationService(ctx: TalentReviewContext) {
         else bucket.l3Total += 1;
         if (row.status === 'expired' && level === 'l1') bucket.l1Expired += 1;
         const score = num(row.score);
-        if (row.status === 'submitted' && score !== null) bucket[level].push(score);
+        if (row.status === 'submitted' && score !== null)
+          bucket[level].push(score);
         map.set(key, bucket);
       };
       for (const row of rows) {
         add(byCourse, str(row.courseId ?? row.targetId), row);
-        if (str(row.targetType) === 'trainingSession') add(bySession, str(row.targetId), row);
+        if (str(row.targetType) === 'trainingSession')
+          add(bySession, str(row.targetId), row);
         add(byInstructor, instructorOf(row), row);
       }
       // l2: the pass rate of the exams a certification requires together with the course.
@@ -520,11 +603,16 @@ export function createEvaluationService(ctx: TalentReviewContext) {
           .execute();
         if (!attempts.length) return null;
         return Math.round(
-          (attempts.filter((a) => a.status === 'passed').length / attempts.length) * 100,
+          (attempts.filter((a) => a.status === 'passed').length /
+            attempts.length) *
+            100,
         );
       };
       const avg = (list: number[]) =>
-        list.length ? Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 10) / 10 : null;
+        list.length
+          ? Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 10) /
+            10
+          : null;
       const shape = (bucket: Bucket) => ({
         l1Average: avg(bucket.l1),
         l1Responses: bucket.l1.length,

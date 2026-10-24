@@ -15,10 +15,7 @@ import { createRecruitingAssistant } from './assistant.js';
 import { createCalendar } from './calendar.js';
 import { createCandidateService } from './candidates.js';
 import { classifyReply, createCheckIns } from './checkins.js';
-import {
-  readRecruitingSettings,
-  writeRecruitingSettings,
-} from './config.js';
+import { readRecruitingSettings, writeRecruitingSettings } from './config.js';
 import { createRecruitingContext, type RecruitingDeps } from './context.js';
 import { createInterviewService } from './interviews.js';
 import { createOfferService } from './offers.js';
@@ -88,7 +85,11 @@ export function createRecruitingServices(deps: RecruitingDeps) {
         assistant.onAllScored(id),
       ),
   });
-  const offers = createOfferService(ctx, { candidates, requisitions, templates });
+  const offers = createOfferService(ctx, {
+    candidates,
+    requisitions,
+    templates,
+  });
   const preboarding = createPreboarding(ctx, { offers, templates });
   const publicPages = createPublicService(ctx, {
     postings,
@@ -160,10 +161,9 @@ export function createRecruitingServices(deps: RecruitingDeps) {
           // 按制度说明能怎么办（附出处）: the employee's own knowledge search.
           const actor: ActorContext = {
             userId,
-            authz: await (await import('../authorize.js')).scopeForUser(
-              deps.platform.authz,
-              userId,
-            ),
+            authz: await (
+              await import('../authorize.js')
+            ).scopeForUser(deps.platform.authz, userId),
           };
           const passages = await ctx
             .knowledge()
@@ -183,7 +183,9 @@ export function createRecruitingServices(deps: RecruitingDeps) {
           return [
             t('recruiting.checkIns.received'),
             cite,
-            routedTo ? t('recruiting.checkIns.routed', { names: routedTo }) : '',
+            routedTo
+              ? t('recruiting.checkIns.routed', { names: routedTo })
+              : '',
           ]
             .filter(Boolean)
             .join('\n');
@@ -195,7 +197,14 @@ export function createRecruitingServices(deps: RecruitingDeps) {
   const apiKeys = () => new ApiKeyService(ctx.authentication(), 'default');
 
   async function keyRows(): Promise<
-    { id: string; name: string; userId: string; createdAt: string; createdBy: string; disabledAt?: string | null }[]
+    {
+      id: string;
+      name: string;
+      userId: string;
+      createdAt: string;
+      createdBy: string;
+      disabledAt?: string | null;
+    }[]
   > {
     const row = await ctx.database
       .query()
@@ -204,7 +213,8 @@ export function createRecruitingServices(deps: RecruitingDeps) {
       .where('id', '=', KEYS_ID)
       .executeTakeFirst();
     let value: unknown = row?.value;
-    for (let i = 0; i < 3 && typeof value === 'string'; i++) value = JSON.parse(value);
+    for (let i = 0; i < 3 && typeof value === 'string'; i++)
+      value = JSON.parse(value);
     return Array.isArray(value) ? (value as never) : [];
   }
 
@@ -220,14 +230,26 @@ export function createRecruitingServices(deps: RecruitingDeps) {
       await ctx.database
         .query()
         .updateTable('personnelSettings')
-        .set({ value: rows, revision: Number(exists.revision) + 1, updatedBy: userId, updatedAt: now })
+        .set({
+          value: rows,
+          revision: Number(exists.revision) + 1,
+          updatedBy: userId,
+          updatedAt: now,
+        })
         .where('id', '=', KEYS_ID)
         .execute();
     else
       await ctx.database
         .query()
         .insertInto('personnelSettings')
-        .values({ id: KEYS_ID, value: rows, revision: 1, updatedBy: userId, createdAt: now, updatedAt: now })
+        .values({
+          id: KEYS_ID,
+          value: rows,
+          revision: 1,
+          updatedBy: userId,
+          createdAt: now,
+          updatedAt: now,
+        })
         .execute();
   }
 
@@ -266,7 +288,10 @@ export function createRecruitingServices(deps: RecruitingDeps) {
         const holders = await ctx.holdersOf(INTEGRATION_SET);
         return {
           accounts: await Promise.all(
-            holders.map(async (id) => ({ id, name: (await deps.platform.userName(id)) ?? id })),
+            holders.map(async (id) => ({
+              id,
+              name: (await deps.platform.userName(id)) ?? id,
+            })),
           ),
           keys: (await keyRows()).map((k) => ({ ...k, userName: null })),
         };
@@ -275,14 +300,34 @@ export function createRecruitingServices(deps: RecruitingDeps) {
         await authorizeAction(actor.authz, COMPOSITE.settings, 'manage');
         const holders = await ctx.holdersOf(INTEGRATION_SET);
         const body = (input ?? {}) as { userId?: unknown; name?: unknown };
-        const userId = typeof body.userId === 'string' ? body.userId : holders[0];
-        if (!userId || !holders.includes(userId)) throw new HrError('INTEGRATION_ACCOUNT_MISSING', 409);
-        const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 64) : INTEGRATION_KEY_DEFAULT_NAME;
-        const { key, secret } = await apiKeys().create({ userId, name, expiresIn: 365 * 86_400 });
+        const userId =
+          typeof body.userId === 'string' ? body.userId : holders[0];
+        if (!userId || !holders.includes(userId))
+          throw new HrError('INTEGRATION_ACCOUNT_MISSING', 409);
+        const name =
+          typeof body.name === 'string' && body.name.trim()
+            ? body.name.trim().slice(0, 64)
+            : INTEGRATION_KEY_DEFAULT_NAME;
+        const { key, secret } = await apiKeys().create({
+          userId,
+          name,
+          expiresIn: 365 * 86_400,
+        });
         const rows = await keyRows();
-        rows.push({ id: str(key.id), name, userId, createdAt: new Date().toISOString(), createdBy: actor.userId, disabledAt: null });
+        rows.push({
+          id: str(key.id),
+          name,
+          userId,
+          createdAt: new Date().toISOString(),
+          createdBy: actor.userId,
+          disabledAt: null,
+        });
         await writeKeyRows(rows, actor.userId);
-        ctx.audit({ event: 'recruiting.integrationKeyCreated', keyId: str(key.id), by: actor.userId });
+        ctx.audit({
+          event: 'recruiting.integrationKeyCreated',
+          keyId: str(key.id),
+          by: actor.userId,
+        });
         return { id: str(key.id), name, secret };
       },
       async disableKey(actor: ActorContext, id: string) {
@@ -293,7 +338,11 @@ export function createRecruitingServices(deps: RecruitingDeps) {
         await apiKeys().disable(id);
         row.disabledAt = new Date().toISOString();
         await writeKeyRows(rows, actor.userId);
-        ctx.audit({ event: 'recruiting.integrationKeyDisabled', keyId: id, by: actor.userId });
+        ctx.audit({
+          event: 'recruiting.integrationKeyDisabled',
+          keyId: id,
+          by: actor.userId,
+        });
         return { id, disabled: true };
       },
     },

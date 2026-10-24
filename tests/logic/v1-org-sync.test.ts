@@ -15,6 +15,8 @@ import {
   createStandaloneServer,
   type StandaloneServer,
 } from '../../server/standalone.ts';
+import { observeFixtureClose } from '../helpers/close-diagnostics.ts';
+import { observeMailClose } from '../helpers/mail-close-diagnostics.ts';
 import { signCallback, signedHeaders } from '../helpers/callback-signature.ts';
 
 // The database task runner imports seed files through Node itself, outside Vite. Node strips their types but does
@@ -50,6 +52,7 @@ let server: StandaloneServer;
 let directory: string;
 let base: string;
 let mockFile: string;
+let mailDiagnostics: ReturnType<typeof observeMailClose> | undefined;
 const cookies = new Map<string, string>();
 
 async function signIn(username: string): Promise<string> {
@@ -144,10 +147,24 @@ beforeAll(async () => {
     },
   });
   base = `http://localhost${server.application.publicBasePath}`;
+  mailDiagnostics = observeMailClose(
+    server.application,
+    'org-sync-attribution',
+  );
 }, 180_000);
 
 afterAll(async () => {
-  await server?.close();
+  try {
+    await observeFixtureClose({
+      suite: 'org-sync-attribution',
+      stage: 'application',
+      application: server?.application,
+      state: () => ({ ...mailDiagnostics?.snapshot() }),
+      close: () => server?.close(),
+    });
+  } finally {
+    mailDiagnostics?.restore();
+  }
   delete process.env.HR_DEMO_PASSWORD;
   delete process.env.ORG_SYNC_MOCK_FILE;
   delete process.env.ORG_SYNC_CALLBACK_SECRET;

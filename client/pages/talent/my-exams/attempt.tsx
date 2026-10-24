@@ -19,7 +19,6 @@ import {
 } from 'react';
 import { Link, useOutletContext, useParams } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -71,7 +70,6 @@ export default function AttemptPage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         {attempt.error ? (
           <LoadError error={attempt.error} onRetry={attempt.reload} />
         ) : !attempt.data ? (

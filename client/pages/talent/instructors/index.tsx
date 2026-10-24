@@ -11,7 +11,11 @@ import { useState, type ReactElement } from 'react';
 
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
-import { BlockSkeleton, EmptyState, LoadError } from '@/components/talent/states';
+import {
+  BlockSkeleton,
+  EmptyState,
+  LoadError,
+} from '@/components/talent/states';
 import { useTrAction } from '@/components/talent/talent-review-lib';
 import { useRemote } from '@/components/talent/use-remote';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -26,7 +30,10 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -58,10 +65,10 @@ export default function InstructorsPage(): ReactElement {
   const { t } = useTranslation();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const list = useRemote<{ instructors: Instructor[]; can: { manage: boolean } }>(
-    'talent/instructors',
-    { from: from || undefined, to: to || undefined },
-  );
+  const list = useRemote<{
+    instructors: Instructor[];
+    can: { manage: boolean };
+  }>('talent/instructors', { from: from || undefined, to: to || undefined });
   const [editing, setEditing] = useState<Instructor | 'new' | null>(null);
   const [assigning, setAssigning] = useState(false);
   return (
@@ -86,9 +93,21 @@ export default function InstructorsPage(): ReactElement {
       />
       <div className='flex flex-wrap items-center gap-2 text-sm'>
         <span>{t('talentReview.instructors.range')}</span>
-        <Input type='date' className='w-40' aria-label={t('talentReview.instructors.from')} value={from} onChange={(e) => setFrom(e.target.value)} />
+        <Input
+          type='date'
+          className='w-40'
+          aria-label={t('talentReview.instructors.from')}
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+        />
         <span>–</span>
-        <Input type='date' className='w-40' aria-label={t('talentReview.instructors.to')} value={to} onChange={(e) => setTo(e.target.value)} />
+        <Input
+          type='date'
+          className='w-40'
+          aria-label={t('talentReview.instructors.to')}
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+        />
       </div>
       {list.error ? (
         <LoadError error={list.error} onRetry={list.reload} />
@@ -103,10 +122,18 @@ export default function InstructorsPage(): ReactElement {
               <TableRow>
                 <TableHead>{t('talentReview.instructors.name')}</TableHead>
                 <TableHead>{t('talentReview.instructors.type')}</TableHead>
-                <TableHead className='text-end'>{t('talentReview.instructors.hours')}</TableHead>
-                <TableHead className='text-end'>{t('talentReview.instructors.sessions')}</TableHead>
-                <TableHead className='text-end'>{t('talentReview.instructors.satisfaction')}</TableHead>
-                <TableHead className='text-end'>{t('talentReview.instructors.passRate')}</TableHead>
+                <TableHead className='text-end'>
+                  {t('talentReview.instructors.hours')}
+                </TableHead>
+                <TableHead className='text-end'>
+                  {t('talentReview.instructors.sessions')}
+                </TableHead>
+                <TableHead className='text-end'>
+                  {t('talentReview.instructors.satisfaction')}
+                </TableHead>
+                <TableHead className='text-end'>
+                  {t('talentReview.instructors.passRate')}
+                </TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -116,18 +143,29 @@ export default function InstructorsPage(): ReactElement {
                   <TableCell>
                     <div className='font-medium'>{i.name}</div>
                     <div className='text-muted-foreground text-xs'>
-                      {[i.organization, i.level ? t(`talentReview.instructors.level.${i.level}`) : null]
+                      {[
+                        i.organization,
+                        i.level
+                          ? t(`talentReview.instructors.level.${i.level}`)
+                          : null,
+                      ]
                         .filter(Boolean)
                         .join(' · ')}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={i.type === 'internal' ? 'default' : 'outline'}>
+                    <Badge
+                      variant={i.type === 'internal' ? 'default' : 'outline'}
+                    >
                       {t(`talentReview.instructors.kind.${i.type}`)}
                     </Badge>
                   </TableCell>
-                  <TableCell className='text-end tabular-nums'>{i.stats.hours}</TableCell>
-                  <TableCell className='text-end tabular-nums'>{i.stats.sessions}</TableCell>
+                  <TableCell className='text-end tabular-nums'>
+                    {i.stats.hours}
+                  </TableCell>
+                  <TableCell className='text-end tabular-nums'>
+                    {i.stats.sessions}
+                  </TableCell>
                   <TableCell className='text-end tabular-nums'>
                     {i.stats.satisfaction ?? '—'}
                     {i.stats.responses ? ` (${i.stats.responses})` : ''}
@@ -137,7 +175,11 @@ export default function InstructorsPage(): ReactElement {
                   </TableCell>
                   <TableCell className='text-end'>
                     {list.data?.can.manage ? (
-                      <Button size='sm' variant='outline' onClick={() => setEditing(i)}>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => setEditing(i)}
+                      >
                         {t('talentReview.common.edit')}
                       </Button>
                     ) : null}
@@ -149,10 +191,18 @@ export default function InstructorsPage(): ReactElement {
         </div>
       )}
       {editing ? (
-        <ProfileDialog profile={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onDone={list.reload} />
+        <ProfileDialog
+          profile={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onDone={list.reload}
+        />
       ) : null}
       {assigning && list.data ? (
-        <AssignDialog instructors={list.data.instructors} onClose={() => setAssigning(false)} onDone={list.reload} />
+        <AssignDialog
+          instructors={list.data.instructors}
+          onClose={() => setAssigning(false)}
+          onDone={list.reload}
+        />
       ) : null}
     </PageContainer>
   );
@@ -169,9 +219,13 @@ function ProfileDialog({
 }): ReactElement {
   const { t } = useTranslation();
   const action = useTrAction();
-  const users = useRemote<{ userId: string; name: string }[]>('talent/instructors/accounts');
+  const users = useRemote<{ userId: string; name: string }[]>(
+    'talent/instructors/accounts',
+  );
   const [name, setName] = useState(profile?.name ?? '');
-  const [type, setType] = useState<'internal' | 'external'>(profile?.type ?? 'internal');
+  const [type, setType] = useState<'internal' | 'external'>(
+    profile?.type ?? 'internal',
+  );
   const [userId, setUserId] = useState(profile?.userId ?? '');
   const [organization, setOrganization] = useState(profile?.organization ?? '');
   const [level, setLevel] = useState(profile?.level ?? '');
@@ -179,24 +233,50 @@ function ProfileDialog({
     <Dialog open onOpenChange={(value) => (value ? undefined : onClose())}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{profile ? profile.name : t('talentReview.instructors.create')}</DialogTitle>
+          <DialogTitle>
+            {profile ? profile.name : t('talentReview.instructors.create')}
+          </DialogTitle>
         </DialogHeader>
         <div className='flex flex-col gap-3'>
           <Field>
-            <FieldLabel htmlFor='in-type'>{t('talentReview.instructors.type')}</FieldLabel>
-            <NativeSelect id='in-type' value={type} onChange={(e) => setType(e.target.value as 'internal' | 'external')}>
-              <NativeSelectOption value='internal'>{t('talentReview.instructors.kind.internal')}</NativeSelectOption>
-              <NativeSelectOption value='external'>{t('talentReview.instructors.kind.external')}</NativeSelectOption>
+            <FieldLabel htmlFor='in-type'>
+              {t('talentReview.instructors.type')}
+            </FieldLabel>
+            <NativeSelect
+              id='in-type'
+              value={type}
+              onChange={(e) =>
+                setType(e.target.value as 'internal' | 'external')
+              }
+            >
+              <NativeSelectOption value='internal'>
+                {t('talentReview.instructors.kind.internal')}
+              </NativeSelectOption>
+              <NativeSelectOption value='external'>
+                {t('talentReview.instructors.kind.external')}
+              </NativeSelectOption>
             </NativeSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor='in-name'>{t('talentReview.instructors.name')}</FieldLabel>
-            <Input id='in-name' value={name} onChange={(e) => setName(e.target.value)} />
+            <FieldLabel htmlFor='in-name'>
+              {t('talentReview.instructors.name')}
+            </FieldLabel>
+            <Input
+              id='in-name'
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </Field>
           {type === 'internal' ? (
             <Field>
-              <FieldLabel htmlFor='in-user'>{t('talentReview.instructors.account')}</FieldLabel>
-              <NativeSelect id='in-user' value={userId} onChange={(e) => setUserId(e.target.value)}>
+              <FieldLabel htmlFor='in-user'>
+                {t('talentReview.instructors.account')}
+              </FieldLabel>
+              <NativeSelect
+                id='in-user'
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+              >
                 <NativeSelectOption value=''>—</NativeSelectOption>
                 {(users.data ?? []).map((u) => (
                   <NativeSelectOption key={u.userId} value={u.userId}>
@@ -207,13 +287,25 @@ function ProfileDialog({
             </Field>
           ) : (
             <Field>
-              <FieldLabel htmlFor='in-org'>{t('talentReview.instructors.organization')}</FieldLabel>
-              <Input id='in-org' value={organization} onChange={(e) => setOrganization(e.target.value)} />
+              <FieldLabel htmlFor='in-org'>
+                {t('talentReview.instructors.organization')}
+              </FieldLabel>
+              <Input
+                id='in-org'
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+              />
             </Field>
           )}
           <Field>
-            <FieldLabel htmlFor='in-level'>{t('talentReview.instructors.levelLabel')}</FieldLabel>
-            <NativeSelect id='in-level' value={level} onChange={(e) => setLevel(e.target.value)}>
+            <FieldLabel htmlFor='in-level'>
+              {t('talentReview.instructors.levelLabel')}
+            </FieldLabel>
+            <NativeSelect
+              id='in-level'
+              value={level}
+              onChange={(e) => setLevel(e.target.value)}
+            >
               <NativeSelectOption value=''>—</NativeSelectOption>
               {['junior', 'senior', 'expert'].map((l) => (
                 <NativeSelectOption key={l} value={l}>
@@ -234,25 +326,32 @@ function ProfileDialog({
           </Button>
           <Button
             disabled={action.busy || !name.trim()}
-            onClick={() => { void (async () => {
-              const json = {
-                name,
-                type,
-                userId: type === 'internal' ? userId || null : null,
-                organization: type === 'external' ? organization || null : null,
-                level: level || null,
-              };
-              const done = await action.run(
-                profile
-                  ? { method: 'PUT', path: `talent/instructors/${encodeURIComponent(profile.id)}`, json }
-                  : { method: 'POST', path: 'talent/instructors', json },
-                t('talentReview.instructors.saved'),
-              );
-              if (done) {
-                onDone();
-                onClose();
-              }
-            })(); }}
+            onClick={() => {
+              void (async () => {
+                const json = {
+                  name,
+                  type,
+                  userId: type === 'internal' ? userId || null : null,
+                  organization:
+                    type === 'external' ? organization || null : null,
+                  level: level || null,
+                };
+                const done = await action.run(
+                  profile
+                    ? {
+                        method: 'PUT',
+                        path: `talent/instructors/${encodeURIComponent(profile.id)}`,
+                        json,
+                      }
+                    : { method: 'POST', path: 'talent/instructors', json },
+                  t('talentReview.instructors.saved'),
+                );
+                if (done) {
+                  onDone();
+                  onClose();
+                }
+              })();
+            }}
           >
             {t('talentReview.common.save')}
           </Button>
@@ -273,9 +372,14 @@ function AssignDialog({
 }): ReactElement {
   const { t } = useTranslation();
   const action = useTrAction();
-  const sessions = useRemote<{ id: string; title: string; startAt: string | null; instructorProfileId: string | null }[]>(
-    'talent/instructors/sessions',
-  );
+  const sessions = useRemote<
+    {
+      id: string;
+      title: string;
+      startAt: string | null;
+      instructorProfileId: string | null;
+    }[]
+  >('talent/instructors/sessions');
   const [sessionId, setSessionId] = useState('');
   const [profileId, setProfileId] = useState('');
   return (
@@ -286,8 +390,14 @@ function AssignDialog({
         </DialogHeader>
         <div className='flex flex-col gap-3'>
           <Field>
-            <FieldLabel htmlFor='as-session'>{t('talentReview.instructors.session')}</FieldLabel>
-            <NativeSelect id='as-session' value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+            <FieldLabel htmlFor='as-session'>
+              {t('talentReview.instructors.session')}
+            </FieldLabel>
+            <NativeSelect
+              id='as-session'
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+            >
               <NativeSelectOption value=''>—</NativeSelectOption>
               {(sessions.data ?? []).map((s) => (
                 <NativeSelectOption key={s.id} value={s.id}>
@@ -297,8 +407,14 @@ function AssignDialog({
             </NativeSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor='as-profile'>{t('talentReview.instructors.name')}</FieldLabel>
-            <NativeSelect id='as-profile' value={profileId} onChange={(e) => setProfileId(e.target.value)}>
+            <FieldLabel htmlFor='as-profile'>
+              {t('talentReview.instructors.name')}
+            </FieldLabel>
+            <NativeSelect
+              id='as-profile'
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+            >
               <NativeSelectOption value=''>—</NativeSelectOption>
               {instructors.map((i) => (
                 <NativeSelectOption key={i.id} value={i.id}>
@@ -319,20 +435,22 @@ function AssignDialog({
           </Button>
           <Button
             disabled={action.busy || !sessionId || !profileId}
-            onClick={() => { void (async () => {
-              const done = await action.run(
-                {
-                  method: 'PUT',
-                  path: `talent/instructors/sessions/${encodeURIComponent(sessionId)}`,
-                  json: { instructorProfileId: profileId },
-                },
-                t('talentReview.instructors.assigned'),
-              );
-              if (done) {
-                onDone();
-                onClose();
-              }
-            })(); }}
+            onClick={() => {
+              void (async () => {
+                const done = await action.run(
+                  {
+                    method: 'PUT',
+                    path: `talent/instructors/sessions/${encodeURIComponent(sessionId)}`,
+                    json: { instructorProfileId: profileId },
+                  },
+                  t('talentReview.instructors.assigned'),
+                );
+                if (done) {
+                  onDone();
+                  onClose();
+                }
+              })();
+            }}
           >
             {t('talentReview.common.save')}
           </Button>

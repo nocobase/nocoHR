@@ -1,5 +1,8 @@
-import { createApp } from '../../client/app.js';
-import { createAppClientConfig } from '@nocobase/app-client';
+import {
+  ClientApplication,
+  createAppClientConfig,
+  defineAppClientRenderConfig,
+} from '@nocobase/app-client';
 import { defineClientPlugins } from '@nocobase/app-client/plugins';
 import {
   defineAppRuntime,
@@ -8,6 +11,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { DefaultClientServiceProvider } from '../../client/service-provider.ts';
+import defaultConfigs from '../../client/config/index.js';
 
 describe('application title', () => {
   it('uses the configured title during the application lifecycle', async () => {
@@ -17,41 +21,55 @@ describe('application title', () => {
 
     await app.start();
 
-    expect(app.refineConfig.options?.title).toEqual({
-      text: 'Configured application',
-    });
     expect(document.title).toBe('Configured application');
 
     await app.shutdown();
     expect(document.title).toBe(previousTitle);
   });
 
-  it('falls back to NocoHR for a blank configured title', async () => {
-    const previousTitle = 'Host title';
-    document.title = previousTitle;
-    const app = await createTestApp('   ');
+  it.each(['   ', '', undefined, null, 42])(
+    'falls back to NocoHR for an invalid configured title (%s)',
+    async (title) => {
+      const previousTitle = 'Host title';
+      document.title = previousTitle;
+      const app = await createTestApp(title);
+
+      await app.start();
+
+      expect(document.title).toBe('NocoHR');
+
+      await app.shutdown();
+      expect(document.title).toBe(previousTitle);
+    },
+  );
+
+  it('trims a configured title and restores an empty host title', async () => {
+    document.title = '';
+    const app = await createTestApp('  NocoHR 人力资源  ');
 
     await app.start();
-
-    expect(app.refineConfig.options?.title).toEqual({ text: 'NocoHR' });
-    expect(document.title).toBe('NocoHR');
+    expect(document.title).toBe('NocoHR 人力资源');
 
     await app.shutdown();
-    expect(document.title).toBe(previousTitle);
+    expect(document.title).toBe('');
   });
 });
 
-async function createTestApp(title: string) {
+async function createTestApp(title: unknown) {
   const runtime = await resolveAppRuntime(
     defineAppRuntime({
       packageName: '@example/app',
       createAppConfig: createAppClientConfig,
+      defaultConfigs,
       serviceProviders: [DefaultClientServiceProvider],
       reactProviders: [],
       routes: [],
       plugins: defineClientPlugins([]),
     }),
-    { rawConfig: { app: { title } } },
+    { rawConfig: { app: title === undefined ? {} : { title } } },
   );
-  return createApp(runtime);
+  return new ClientApplication({
+    runtime,
+    createRenderConfig: () => defineAppClientRenderConfig({ routes: null }),
+  });
 }

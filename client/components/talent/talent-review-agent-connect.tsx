@@ -12,10 +12,19 @@ import { TrStatusBadge } from './talent-review-shared.js';
 import { useRemote } from './use-remote.js';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 
 interface Mine {
   clients: { id: string; name: string }[];
@@ -42,18 +51,28 @@ export function AgentConnectCard(): ReactElement | null {
   if (!mine.data) return null;
   const endpoint = `${globalThis.location?.origin ?? ''}${(globalThis.location?.pathname ?? '').replace(/\/talent\/.*$/u, '')}/api/talent/agent/mcp`;
   const active = (token: Mine['tokens'][number]) =>
-    !token.revokedAt && token.expiresAt !== null && new Date(token.expiresAt).getTime() > now;
+    !token.revokedAt &&
+    token.expiresAt !== null &&
+    new Date(token.expiresAt).getTime() > now;
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t('talentReview.connect.title')}</CardTitle>
-        <CardDescription>{t('talentReview.connect.description')}</CardDescription>
+        <CardDescription>
+          {t('talentReview.connect.description')}
+        </CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>
         <div className='grid gap-2 sm:grid-cols-[1fr_8rem_auto] sm:items-end'>
           <Field>
-            <FieldLabel htmlFor='connect-client'>{t('talentReview.connect.client')}</FieldLabel>
-            <NativeSelect id='connect-client' value={clientId} onChange={(e) => setClientId(e.target.value)}>
+            <FieldLabel htmlFor='connect-client'>
+              {t('talentReview.connect.client')}
+            </FieldLabel>
+            <NativeSelect
+              id='connect-client'
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+            >
               <NativeSelectOption value=''>—</NativeSelectOption>
               {mine.data.clients.map((c) => (
                 <NativeSelectOption key={c.id} value={c.id}>
@@ -63,7 +82,9 @@ export function AgentConnectCard(): ReactElement | null {
             </NativeSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor='connect-days'>{t('talentReview.connect.days', { max: mine.data.maxDays })}</FieldLabel>
+            <FieldLabel htmlFor='connect-days'>
+              {t('talentReview.connect.days', { max: mine.data.maxDays })}
+            </FieldLabel>
             <Input
               id='connect-days'
               type='number'
@@ -75,17 +96,19 @@ export function AgentConnectCard(): ReactElement | null {
           </Field>
           <Button
             disabled={action.busy || !clientId}
-            onClick={() => { void (async () => {
-              const issued = await action.run<{ secret: string }>({
-                method: 'POST',
-                path: 'talent/agent-clients/tokens',
-                json: { clientId, days: Number(days) || mine.data!.maxDays },
-              });
-              if (issued) {
-                setSecret(issued.secret);
-                mine.reload();
-              }
-            })(); }}
+            onClick={() => {
+              void (async () => {
+                const issued = await action.run<{ secret: string }>({
+                  method: 'POST',
+                  path: 'talent/agent-clients/tokens',
+                  json: { clientId, days: Number(days) || mine.data!.maxDays },
+                });
+                if (issued) {
+                  setSecret(issued.secret);
+                  mine.reload();
+                }
+              })();
+            }}
           >
             {t('talentReview.connect.issue')}
           </Button>
@@ -93,9 +116,13 @@ export function AgentConnectCard(): ReactElement | null {
         {secret ? (
           <Alert>
             <AlertDescription className='flex flex-col gap-1 break-all'>
-              <span className='font-medium'>{t('talentReview.connect.once')}</span>
+              <span className='font-medium'>
+                {t('talentReview.connect.once')}
+              </span>
               <code className='font-mono text-xs'>{secret}</code>
-              <span className='text-xs'>{t('talentReview.connect.endpoint', { url: endpoint })}</span>
+              <span className='text-xs'>
+                {t('talentReview.connect.endpoint', { url: endpoint })}
+              </span>
             </AlertDescription>
           </Alert>
         ) : null}
@@ -105,10 +132,14 @@ export function AgentConnectCard(): ReactElement | null {
           </Alert>
         ) : null}
         {mine.data.tokens.map((token) => (
-          <div key={token.id} className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 text-sm'>
+          <div
+            key={token.id}
+            className='flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 text-sm'
+          >
             <span className='flex flex-col'>
               <span className='font-medium'>
-                {token.clientName} · <span className='font-mono text-xs'>{token.prefix}…</span>
+                {token.clientName} ·{' '}
+                <span className='font-mono text-xs'>{token.prefix}…</span>
               </span>
               <span className='text-muted-foreground text-xs'>
                 {t('talentReview.connect.tokenLine', {
@@ -122,13 +153,18 @@ export function AgentConnectCard(): ReactElement | null {
                 size='sm'
                 variant='outline'
                 disabled={action.busy}
-                onClick={() => { void (async () => {
-                  const done = await action.run(
-                    { method: 'POST', path: `talent/agent-clients/tokens/${encodeURIComponent(token.id)}/revoke` },
-                    t('talentReview.agents.revoked'),
-                  );
-                  if (done) mine.reload();
-                })(); }}
+                onClick={() => {
+                  void (async () => {
+                    const done = await action.run(
+                      {
+                        method: 'POST',
+                        path: `talent/agent-clients/tokens/${encodeURIComponent(token.id)}/revoke`,
+                      },
+                      t('talentReview.agents.revoked'),
+                    );
+                    if (done) mine.reload();
+                  })();
+                }}
               >
                 {t('talentReview.agents.revoke')}
               </Button>

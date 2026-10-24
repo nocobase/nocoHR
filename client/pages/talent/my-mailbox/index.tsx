@@ -99,14 +99,19 @@ export default function MyMailboxPage(): ReactElement {
   };
 
   const refresh = useCallback(() => {
-    void Promise.all([mail.listProviders(), mail.listAccounts()])
-      .then(([p, a]) => {
+    async function load(): Promise<void> {
+      try {
+        const [p, a] = await Promise.all([
+          mail.listProviders(),
+          mail.listAccounts(),
+        ]);
         setProviders(p);
         setAccounts(a);
-      })
-      .catch((cause: unknown) =>
-        setError(mailErrorMessage(cause, t('myMailbox.loadFailed'))),
-      );
+      } catch (cause) {
+        setError(mailErrorMessage(cause, t('myMailbox.loadFailed')));
+      }
+    }
+    void load();
   }, [mail, t]);
 
   useEffect(() => refresh(), [refresh]);

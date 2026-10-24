@@ -7,11 +7,15 @@
  * saveSuccessorSuggestions never sets a readiness or overwrites a manual
  * candidate; the examiner never decides whether a record passes.
  */
-import { defineTools, type AIEmployeeOptions } from '@nocobase/ai-employee';
+import { defineTools, type AIEmployeeOptions } from '../contracts.js';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { z } from 'zod';
 
-import { authorizeAction, policyOf, scopeForUser } from '../../providers/hr/authorize.js';
+import {
+  authorizeAction,
+  policyOf,
+  scopeForUser,
+} from '../../providers/hr/authorize.js';
 import { HrError, str } from '../../providers/hr/shared.js';
 import { talentReviewServicesToken } from '../../providers/hr/tokens.js';
 
@@ -41,7 +45,11 @@ async function assertPlacement(
   actor: { userId: string; authz: Awaited<ReturnType<typeof scopeForUser>> },
   placementId: string,
 ) {
-  const policies = await authorizeAction(actor.authz, 'talent.talentReview', 'view');
+  const policies = await authorizeAction(
+    actor.authz,
+    'talent.talentReview',
+    'view',
+  );
   const visible = await services.context.database
     .repository('talentPlacements')
     .withPolicy(policyOf(policies, 'talentPlacements'))
@@ -56,7 +64,8 @@ export const getPlacementEvidence = defineTools({
   i18n: I18N,
   introduction: {
     title: 'Read placement evidence',
-    about: 'Facts for a nine-box placement: rating, potential answers, learning speed, growth, exams, practice.',
+    about:
+      'Facts for a nine-box placement: rating, potential answers, learning speed, growth, exams, practice.',
   },
   definition: {
     name: 'getPlacementEvidence',
@@ -69,7 +78,10 @@ export const getPlacementEvidence = defineTools({
     try {
       const actor = await actorOf(ctx);
       await assertPlacement(ctx.deps.services, actor, args.placementId);
-      return { status: 'success', content: await ctx.deps.services.evidence(args.placementId) };
+      return {
+        status: 'success',
+        content: await ctx.deps.services.evidence(args.placementId),
+      };
     } catch (error) {
       return failure(error);
     }
@@ -81,7 +93,10 @@ export const savePlacementSuggestion = defineTools({
   execution: 'backend',
   defaultPermission: 'ALLOW',
   i18n: I18N,
-  introduction: { title: 'Save a pre-placement', about: 'Writes the analyst suggestion of a placement.' },
+  introduction: {
+    title: 'Save a pre-placement',
+    about: 'Writes the analyst suggestion of a placement.',
+  },
   definition: {
     name: 'savePlacementSuggestion',
     description:
@@ -118,12 +133,18 @@ export const matchSuccessors = defineTools({
   execution: 'backend',
   defaultPermission: 'ALLOW',
   i18n: I18N,
-  introduction: { title: 'Match successors', about: 'People in scope against a key position, smallest gap first.' },
+  introduction: {
+    title: 'Match successors',
+    about: 'People in scope against a key position, smallest gap first.',
+  },
   definition: {
     name: 'matchSuccessors',
     description:
       "Computed on the server: the active people of the department (with sub-departments), never the incumbent, against the position's current requirements — the gaps, the latest final rating and the nine-box position — smallest gap first.",
-    schema: z.object({ positionId: z.string().min(1).max(64), departmentId: z.string().min(1).max(64) }),
+    schema: z.object({
+      positionId: z.string().min(1).max(64),
+      departmentId: z.string().min(1).max(64),
+    }),
   },
   dependencies: deps,
   invoke: async (ctx, args: { positionId: string; departmentId: string }) => {
@@ -132,7 +153,12 @@ export const matchSuccessors = defineTools({
       await authorizeAction(actor.authz, 'talent.succession', 'manage');
       return {
         status: 'success',
-        content: (await ctx.deps.services.succession.match(args.positionId, args.departmentId)).slice(0, 20),
+        content: (
+          await ctx.deps.services.succession.match(
+            args.positionId,
+            args.departmentId,
+          )
+        ).slice(0, 20),
       };
     } catch (error) {
       return failure(error);
@@ -145,7 +171,10 @@ export const saveSuccessorSuggestions = defineTools({
   execution: 'backend',
   defaultPermission: 'ALLOW',
   i18n: I18N,
-  introduction: { title: 'Save successor suggestions', about: 'Adds AI candidates without readiness.' },
+  introduction: {
+    title: 'Save successor suggestions',
+    about: 'Adds AI candidates without readiness.',
+  },
   definition: {
     name: 'saveSuccessorSuggestions',
     description:
@@ -153,7 +182,12 @@ export const saveSuccessorSuggestions = defineTools({
     schema: z.object({
       successionPlanId: z.string().min(1).max(64),
       candidates: z
-        .array(z.object({ employeeId: z.string().min(1).max(64), note: z.string().max(300) }))
+        .array(
+          z.object({
+            employeeId: z.string().min(1).max(64),
+            note: z.string().max(300),
+          }),
+        )
         .min(1)
         .max(10),
     }),
@@ -161,7 +195,10 @@ export const saveSuccessorSuggestions = defineTools({
   dependencies: deps,
   invoke: async (
     ctx,
-    args: { successionPlanId: string; candidates: { employeeId: string; note: string }[] },
+    args: {
+      successionPlanId: string;
+      candidates: { employeeId: string; note: string }[];
+    },
   ) => {
     try {
       const actor = await actorOf(ctx);
@@ -192,7 +229,10 @@ export const sendRiskAlert = defineTools({
   execution: 'backend',
   defaultPermission: 'ASK',
   i18n: I18N,
-  introduction: { title: 'Send a succession risk alert', about: 'Tells hr01 and the incumbent superior.' },
+  introduction: {
+    title: 'Send a succession risk alert',
+    about: 'Tells hr01 and the incumbent superior.',
+  },
   definition: {
     name: 'sendRiskAlert',
     description:
@@ -207,14 +247,19 @@ export const sendRiskAlert = defineTools({
     try {
       const actor = await actorOf(ctx);
       await authorizeAction(actor.authz, 'talent.succession', 'manage');
-      const outcome = await ctx.deps.services.context
-        .automation()
-        .run(
-          'talentAnalyst.successionRisk',
-          'manual',
-          { triggerRef: { planId: args.successionPlanId, reason: args.reason } },
-          (run) => ctx.deps.services.analyst.successionRisk(run, args.successionPlanId, args.reason),
-        );
+      const outcome = await ctx.deps.services.context.automation().run(
+        'talentAnalyst.successionRisk',
+        'manual',
+        {
+          triggerRef: { planId: args.successionPlanId, reason: args.reason },
+        },
+        (run) =>
+          ctx.deps.services.analyst.successionRisk(
+            run,
+            args.successionPlanId,
+            args.reason,
+          ),
+      );
       return { status: 'success', content: { status: outcome.status } };
     } catch (error) {
       return failure(error);
@@ -227,7 +272,10 @@ export const structureObservation = defineTools({
   execution: 'backend',
   defaultPermission: 'ALLOW',
   i18n: I18N,
-  introduction: { title: 'Structure practical notes', about: 'Maps the assessor notes to the checklist.' },
+  introduction: {
+    title: 'Structure practical notes',
+    about: 'Maps the assessor notes to the checklist.',
+  },
   definition: {
     name: 'structureObservation',
     description:
@@ -238,8 +286,14 @@ export const structureObservation = defineTools({
   invoke: async (ctx, args: { practicalRecordId: string }) => {
     try {
       const actor = await actorOf(ctx);
-      const record = await ctx.deps.services.structureRecord(actor, args.practicalRecordId);
-      return { status: 'success', content: { aiStructured: record.aiStructured } };
+      const record = await ctx.deps.services.structureRecord(
+        actor,
+        args.practicalRecordId,
+      );
+      return {
+        status: 'success',
+        content: { aiStructured: record.aiStructured },
+      };
     } catch (error) {
       return failure(error);
     }
@@ -251,7 +305,10 @@ export const draftPracticalChecklist = defineTools({
   execution: 'backend',
   defaultPermission: 'ALLOW',
   i18n: I18N,
-  introduction: { title: 'Draft a practical checklist', about: 'Drafts an assessment form from a work instruction.' },
+  introduction: {
+    title: 'Draft a practical checklist',
+    about: 'Drafts an assessment form from a work instruction.',
+  },
   definition: {
     name: 'draftPracticalChecklist',
     description:
@@ -262,11 +319,21 @@ export const draftPracticalChecklist = defineTools({
     }),
   },
   dependencies: deps,
-  invoke: async (ctx, args: { documentId: string; competencyIds: string[] }) => {
+  invoke: async (
+    ctx,
+    args: { documentId: string; competencyIds: string[] },
+  ) => {
     try {
       const actor = await actorOf(ctx);
       const template = await ctx.deps.services.draftChecklist(actor, args);
-      return { status: 'success', content: { assessmentId: template.id, title: template.title, reviewStatus: template.reviewStatus } };
+      return {
+        status: 'success',
+        content: {
+          assessmentId: template.id,
+          title: template.title,
+          reviewStatus: template.reviewStatus,
+        },
+      };
     } catch (error) {
       return failure(error);
     }
@@ -292,12 +359,17 @@ function extend(
   return {
     ...employee,
     systemPrompt: `${str(employee.systemPrompt ?? '')}${prompt}`,
-    tools: [...(employee.tools ?? []), ...tools.filter((t) => !names.has(t.name))],
+    tools: [
+      ...(employee.tools ?? []),
+      ...tools.filter((t) => !names.has(t.name)),
+    ],
   };
 }
 
 /** 人才分析师：盘点与继任 (第十三步). */
-export function withTalentReviewAnalystTools(employee: AIEmployeeOptions): AIEmployeeOptions {
+export function withTalentReviewAnalystTools(
+  employee: AIEmployeeOptions,
+): AIEmployeeOptions {
   return extend(
     employee,
     `
@@ -318,7 +390,9 @@ export function withTalentReviewAnalystTools(employee: AIEmployeeOptions): AIEmp
 }
 
 /** 考官：实操辅助记录与考核表起草 (第十三步). */
-export function withPracticalExaminerTools(employee: AIEmployeeOptions): AIEmployeeOptions {
+export function withPracticalExaminerTools(
+  employee: AIEmployeeOptions,
+): AIEmployeeOptions {
   return extend(
     employee,
     `

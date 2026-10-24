@@ -11,10 +11,12 @@
  * (hr01 by default); the monthly report runs once as each department head.
  * Run records keep ids and categories, never a quality issue's description.
  */
+import { assertUnrestrictedNativeAIEntry } from '../../native-ai/access.js';
 import { z } from 'zod';
 
 import { AIUnavailableError } from '../ai-runner.js';
 import { scopeForUser } from '../authorize.js';
+import type { ActorContext } from '../framework-service.js';
 import type { AutomationRunContext } from '../automation.js';
 import {
   fragments,
@@ -112,11 +114,12 @@ export function createAnalystWork(input: {
     title: string,
     prompt: string,
     schema: z.ZodType<T>,
-    userId = run.owner.userId,
+    actor = run.owner,
   ): Promise<T> {
     const { data, sessionId } = await deps.ai.structured({
       employee,
-      userId,
+      userId: actor.userId,
+      authorization: actor.authz,
       title,
       prompt,
       schema,
@@ -814,7 +817,7 @@ export function createAnalystWork(input: {
             '月度团队报告',
             `以部门负责人的视角写一份不超过 ${REPORT_MAX} 字的月度团队能力报告：持证风险、能力差距、问题记录趋势、待处理的建议；有新人流失数据时写群体数字（按班次对比），不点名个人，不写质量问题描述原文。数字直接用下列数据，不估算。\n${JSON.stringify({ scope: scopeLabel, ...facts })}`,
             z.object({ report: z.string().min(10).max(REPORT_MAX) }),
-            head,
+            ctx,
           );
           return data.report;
         },
@@ -880,7 +883,7 @@ export function createAnalystWork(input: {
   async function summarize(
     run: AutomationRunContext | null,
     employeeId: string,
-    userId: string,
+    actor: ActorContext,
   ) {
     const employee = (await reads.people([employeeId]))[0];
     if (!employee) throw new HrError('EMPLOYEE_NOT_FOUND', 404);
@@ -888,7 +891,8 @@ export function createAnalystWork(input: {
     const compose = async () => {
       const { data, sessionId } = await deps.ai.structured({
         employee: ANALYST,
-        userId,
+        userId: actor.userId,
+        authorization: actor.authz,
         title: '画像摘要',
         prompt: `为员工写画像摘要，总共不超过 150 字：先讲持证和岗位匹配，再讲近期变化；只写数量和类别，不写业务数据的描述原文；每句话都要引用下列事实的 id（evidenceIds）。\n${JSON.stringify({ name: employee.name, facts: facts.map((f) => ({ id: f.id, type: f.type, label: f.label })) })}`,
         schema: z.object({
@@ -929,7 +933,7 @@ export function createAnalystWork(input: {
     );
     run.reference({ employeeIds: ids });
     if (!ids.length) return { status: 'skipped', output: { refreshed: 0 } };
-    for (const id of ids) await summarize(run, id, run.owner.userId);
+    for (const id of ids) await summarize(run, id, run.owner);
     return { output: { refreshed: ids.length, employeeIds: ids } };
   };
 
@@ -1553,12 +1557,13 @@ export function createAnalystWork(input: {
     },
 
     /** 重新生成 by a head or HR: as the caller, with the analyst's wording when available. */
-    async regenerateSummary(userId: string, employeeId: string) {
+    async regenerateSummary(actor: ActorContext, employeeId: string) {
+      assertUnrestrictedNativeAIEntry(actor.authz);
       const run = {
         usedConversation: () => undefined,
         markFallback: () => undefined,
       } as unknown as AutomationRunContext;
-      return summarize(run, employeeId, userId);
+      return summarize(run, employeeId, actor);
     },
   };
   void iso;

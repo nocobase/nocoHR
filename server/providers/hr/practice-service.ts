@@ -12,13 +12,10 @@
  * completes the linked practice task. Practice scores are practice: they never
  * reach competency levels or certificates, and managers see only the score.
  */
+import type { StructuredAI } from '../native-ai/structured.js';
 import { z } from 'zod';
 
-import {
-  AIShapeError,
-  AIUnavailableError,
-  type AIRunner,
-} from './ai-runner.js';
+import { AIShapeError, AIUnavailableError } from './ai-runner.js';
 import { authorizeAction, policyOf, tryAuthorizeAction } from './authorize.js';
 import { recordDraftOutcome } from './draft-snapshots.js';
 import type { ActorContext } from './framework-service.js';
@@ -162,7 +159,7 @@ export interface PracticeService {
 
 export interface PracticeServiceDeps {
   readonly platform: Platform;
-  readonly ai: AIRunner;
+  readonly ai: StructuredAI;
   /** A passed practice completes a task: paths move on. */
   readonly onPracticePassed?: () =>
     ((employeeId: string) => Promise<void>) | undefined;
@@ -464,7 +461,6 @@ export function createPracticeService(
     return `《${str(doc.title)}》\n${str(doc.contentText ?? '').slice(0, DOCUMENT_EXCERPT_LENGTH)}`;
   }
 
-
   async function practiceRow(id: string): Promise<Record<string, unknown>> {
     const row = await database
       .query()
@@ -547,17 +543,12 @@ export function createPracticeService(
     throw error;
   }
 
-  /**
-   * The coach's next line. Every turn is a fresh conversation carrying the setting and the dialogue so far:
-   * continuing the previous one fails the structured format from the second turn on (a continued
-   * conversation can hold a structured-output call without its result, which the model provider rejects,
-   * and the runner retries only fresh conversations), so the practice stopped after one exchange.
-   */
+  /** Each tool-free turn includes the authorized scenario and transcript in one fresh native structured session. */
   async function coachReply(
     scenario: Record<string, unknown>,
     transcript: readonly Turn[],
     employeeText: string,
-    userId: string,
+    actor: ActorContext,
     turnNo: number,
   ): Promise<{ reply: string; end: boolean; sessionId: string }> {
     const prompt = coachPrompt(
@@ -570,7 +561,8 @@ export function createPracticeService(
     const result = await ai
       .structured({
         employee: 'practiceCoach',
-        userId,
+        userId: actor.userId,
+        authorization: actor.authz,
         title: `陪练：${str(scenario.title)}`,
         prompt,
         schema: z.object({
@@ -578,7 +570,6 @@ export function createPracticeService(
           end: z.boolean(),
         }),
         timeZone: platform.timeZone,
-        unattended: false,
       })
       .catch(aiError);
     return { ...result.data, sessionId: result.sessionId };
@@ -604,7 +595,7 @@ export function createPracticeService(
   async function evaluate(
     row: Record<string, unknown>,
     scenario: Record<string, unknown>,
-    userId: string,
+    actor: ActorContext,
   ): Promise<{ score: number; results: RubricResult[]; feedback: string }> {
     const rubric = json<RubricPoint[]>(scenario.rubric, []);
     const transcript = json<Turn[]>(row.transcript, []);
@@ -634,7 +625,8 @@ export function createPracticeService(
       const { data } = await ai
         .structured({
           employee: 'practiceCoach',
-          userId,
+          userId: actor.userId,
+          authorization: actor.authz,
           title: `陪练评分：${str(scenario.title)}`,
           prompt: basePrompt + correction,
           schema: evaluationSchema,
@@ -690,7 +682,7 @@ export function createPracticeService(
     row: Record<string, unknown>,
   ): Promise<void> {
     const scenario = await scenarioRow(str(row.scenarioId));
-    const evaluation = await evaluate(row, scenario, ctx.userId);
+    const evaluation = await evaluate(row, scenario, ctx);
     const stamp = new Date();
     await database
       .query()
@@ -1049,7 +1041,7 @@ export function createPracticeService(
           scenario,
           transcript.slice(0, -1),
           message,
-          ctx.userId,
+          ctx,
           turnNo,
         );
         transcript.push({

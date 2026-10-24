@@ -4,7 +4,6 @@ import { DownloadIcon, FileSpreadsheetIcon } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { RouteChildPage } from '@/components/route-child-page';
@@ -152,7 +151,6 @@ export default function ImportEmployeesPage(): ReactElement {
   return (
     <RouteChildPage>
       <PageContainer>
-        <Breadcrumbs />
         <PageHeader
           title={t('talent.import.title')}
           description={t('talent.import.description')}

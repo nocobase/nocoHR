@@ -38,6 +38,14 @@ users:
     email: admin@nocobase.com # stored lowercase; also signs in
     password: admin123
 
+# The target CLI replaces this placeholder when creating a fresh config.yml.
+# Existing deployments retain their original keyring; do not replace it during a source merge.
+# SECRETS_KEYS supplies the keyring from deployment secrets, current key first.
+secrets:
+  keys:
+    - version: 1
+      key: replace-with-a-unique-secret
+
 auth:
   # Generate a unique secret, for example with: openssl rand -hex 32
   secret: replace-with-a-unique-secret
@@ -197,3 +205,38 @@ logging:
     enabled: true
     # Set true for human-readable terminal output.
     pretty: false
+
+# Application-owned text chat and backend confirmation runtime. Enable only in an isolated
+# validation environment until the capability and migration preflight passes.
+# Existing AI/Workflow plugin configuration is retained separately.
+assistant:
+  enabled: false
+  llmService: application
+  model: ''
+  apiKey: '' # Supply APP_ASSISTANT_API_KEY through the deployment secret store.
+  baseURL: '' # Optional OpenAI-compatible API base URL; never returned to clients.
+# Application-owned process runtime stays opt-in until capability and history cutover checks pass.
+processes:
+  enabled: false
+  # Native Scheduler schedule ID -> user ID. Obtain IDs from an authorized schedule inventory.
+  # This is server-only delegation, not a role grant. The user must retain workflow/manage.
+  # No default/root execution user; missing bindings refuse execution. Target JSON cannot set the user.
+  scheduleUsers: {}
+
+# Native Knowledge is separate from retained HR documents. No space is implicitly public.
+# Configure real native model services in Settings > Models; select an embedding model here.
+# Membership only bounds *.related grants; it does not grant actions. Assign knowledge-use
+# and native kb.knowledge/read.related (plus propose/edit/manage as needed) through Roles.
+# *.all is an explicit administrator grant across configured spaces. No HR grants are copied.
+nativeKnowledge:
+  spaces: []
+  # Example (replace IDs explicitly; do not import legacy documents/permissions):
+  # - scope: hr
+  #   scopeId: handbook
+  #   title: HR handbook
+  #   relatedUserIds: [explicit-user-id]
+  embedding: null
+  # embedding: { modelService: configured-service-name, model: configured-embedding-model }
+# Official vectors use isolated storage/vectors.sqlite by default. A model/dimension change
+# is reconciled by the official document Reindex action; it builds the derived index from
+# native chunks while the ready index serves. No legacy semantic index is imported.

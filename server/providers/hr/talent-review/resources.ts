@@ -334,10 +334,7 @@ export const successionResource = defineCompositeResource(
       .action('manage', (a) =>
         a
           .title(label('talentReview.authz.actions.manage'))
-          .grant(
-            'successionPlans',
-            write('successionPlans', SUCCESSION_FIELDS),
-          )
+          .grant('successionPlans', write('successionPlans', SUCCESSION_FIELDS))
           .grant(
             'positions',
             defineDatabasePermission((p) =>
@@ -460,23 +457,21 @@ export const practicalResource = defineCompositeResource(
           .grant('employees', employees),
       )
       .action('void', (a) =>
-        a
-          .title(label('talentReview.authz.practical.void'))
-          .grant(
-            'practicalRecords',
-            defineDatabasePermission((p) =>
-              p
-                .collection('practicalRecords')
-                .read([...RECORD_FIELDS])
-                .update([
-                  'status',
-                  'voidReason',
-                  'voidedBy',
-                  'voidedAt',
-                  'updatedAt',
-                ]),
-            ),
+        a.title(label('talentReview.authz.practical.void')).grant(
+          'practicalRecords',
+          defineDatabasePermission((p) =>
+            p
+              .collection('practicalRecords')
+              .read([...RECORD_FIELDS])
+              .update([
+                'status',
+                'voidReason',
+                'voidedBy',
+                'voidedAt',
+                'updatedAt',
+              ]),
           ),
+        ),
       ),
 );
 
@@ -506,7 +501,11 @@ export const instructorResource = defineCompositeResource(
               p
                 .collection('trainingSessions')
                 .read(['id', 'instructorUserId', 'instructorProfileId'])
-                .update(['instructorUserId', 'instructorProfileId', 'updatedAt']),
+                .update([
+                  'instructorUserId',
+                  'instructorProfileId',
+                  'updatedAt',
+                ]),
             ),
           ),
       ),
@@ -518,17 +517,21 @@ export const trainingEvaluationResource = defineCompositeResource(
     r
       .title(label('talentReview.authz.trainingEvaluation.title'))
       .action('respond', (a) =>
-        a
-          .title(label('talentReview.authz.trainingEvaluation.respond'))
-          .grant(
-            'trainingEvaluations',
-            defineDatabasePermission((p) =>
-              p
-                .collection('trainingEvaluations')
-                .read([...EVALUATION_FIELDS])
-                .update(['answers', 'score', 'status', 'submittedAt', 'updatedAt']),
-            ),
+        a.title(label('talentReview.authz.trainingEvaluation.respond')).grant(
+          'trainingEvaluations',
+          defineDatabasePermission((p) =>
+            p
+              .collection('trainingEvaluations')
+              .read([...EVALUATION_FIELDS])
+              .update([
+                'answers',
+                'score',
+                'status',
+                'submittedAt',
+                'updatedAt',
+              ]),
           ),
+        ),
       )
       .action('view', (a) =>
         a
@@ -555,18 +558,16 @@ export const knowledgeCandidateResource = defineCompositeResource(
     r
       .title(label('talentReview.authz.knowledgeCandidate.title'))
       .action('ingest', (a) =>
-        a
-          .title(label('talentReview.authz.knowledgeCandidate.ingest'))
-          .grant(
-            'knowledgeCandidates',
-            defineDatabasePermission((p) =>
-              p
-                .collection('knowledgeCandidates')
-                .read(['id', 'sourceSystem', 'externalId', 'status'])
-                .create([...CANDIDATE_FIELDS])
-                .update(['title', 'content', 'link', 'updatedAt']),
-            ),
+        a.title(label('talentReview.authz.knowledgeCandidate.ingest')).grant(
+          'knowledgeCandidates',
+          defineDatabasePermission((p) =>
+            p
+              .collection('knowledgeCandidates')
+              .read(['id', 'sourceSystem', 'externalId', 'status'])
+              .create([...CANDIDATE_FIELDS])
+              .update(['title', 'content', 'link', 'updatedAt']),
           ),
+        ),
       )
       .action('view', (a) =>
         a
@@ -577,24 +578,34 @@ export const knowledgeCandidateResource = defineCompositeResource(
           ),
       )
       .action('ignore', (a) =>
-        a
-          .title(label('talentReview.authz.knowledgeCandidate.ignore'))
-          .grant(
-            'knowledgeCandidates',
-            defineDatabasePermission((p) =>
-              p
-                .collection('knowledgeCandidates')
-                .read([...CANDIDATE_FIELDS])
-                .update(['status', 'ignoredBy', 'updatedAt']),
-            ),
+        a.title(label('talentReview.authz.knowledgeCandidate.ignore')).grant(
+          'knowledgeCandidates',
+          defineDatabasePermission((p) =>
+            p
+              .collection('knowledgeCandidates')
+              .read([...CANDIDATE_FIELDS])
+              .update(['status', 'ignoredBy', 'updatedAt']),
           ),
+        ),
       ),
 );
 
 const contentFields = {
-  courses: ['id', 'title', 'ownerUserId', 'reviewStatus', ...TRANSLATION_FIELDS],
+  courses: [
+    'id',
+    'title',
+    'ownerUserId',
+    'reviewStatus',
+    ...TRANSLATION_FIELDS,
+  ],
   lessons: ['id', 'courseId', 'title', ...TRANSLATION_FIELDS],
-  questions: ['id', 'stem', 'ownerUserId', 'reviewStatus', ...TRANSLATION_FIELDS],
+  questions: [
+    'id',
+    'stem',
+    'ownerUserId',
+    'reviewStatus',
+    ...TRANSLATION_FIELDS,
+  ],
   practiceScenarios: [
     'id',
     'title',

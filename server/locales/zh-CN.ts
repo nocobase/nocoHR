@@ -11,6 +11,9 @@ import { goLiveServerZh } from './modules/go-live.js';
 import { licensedServerZh } from './modules/licensed.js';
 
 const zhCN: AppServerResource = {
+  processes: {
+    authorization: { section: '自动化', title: '工作流', manage: '管理工作流' },
+  },
   workbench: {
     title: '工作台',
     description: '集中处理审批、AI 准备事项与系统提醒。',
@@ -704,6 +707,14 @@ const zhCN: AppServerResource = {
         rejected: '已驳回',
         cancelled: '已撤回',
       },
+    },
+    nativeApproval: {
+      title: '确认助手操作',
+      sent: '请在审批卡片上核对并确认变更。',
+      unavailable: '该审批已不可用或你已无权操作，请在 NocoHR 查看。',
+      recorded: '已记录你的决定，请在会话中查看结果。',
+      approved: '已批准，助手已继续会话。',
+      rejected: '已拒绝，助手已继续会话。',
     },
     profileChange: {
       title: '信息修改申请',

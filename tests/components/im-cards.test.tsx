@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,12 +13,13 @@ vi.mock('@nocobase/app-client', async (original) => ({
   ...(await original<typeof import('@nocobase/app-client')>()),
   useApiClient: () => ({ request }),
 }));
-// Real Chinese wording, so the tests read what a user reads.
+// Existing cases use Chinese; an exported native backend view renders in English.
 vi.mock('@nocobase/i18n/client', async () => {
-  const zh = (await import('../../client/locales/zh-CN')).default as Record<
-    string,
-    unknown
-  >;
+  const copy = (
+    process.env.NATIVE_IM_VIEW_FILE
+      ? (await import('../../client/locales/en-US')).default
+      : (await import('../../client/locales/zh-CN')).default
+  ) as Record<string, unknown>;
   const t = (key: string, options: Record<string, unknown> = {}) => {
     const value = key
       .split('.')
@@ -26,7 +28,7 @@ vi.mock('@nocobase/i18n/client', async () => {
           node && typeof node === 'object'
             ? (node as Record<string, unknown>)[part]
             : undefined,
-        zh,
+        copy,
       );
     const text = typeof value === 'string' ? value : key;
     return text.replace(/\{\{(\w+)\}\}/gu, (_, name: string) =>
@@ -35,7 +37,9 @@ vi.mock('@nocobase/i18n/client', async () => {
   };
   return {
     useTranslation: () => ({ t }),
-    useLocale: () => ({ locale: 'zh-CN' }),
+    useLocale: () => ({
+      locale: process.env.NATIVE_IM_VIEW_FILE ? 'en-US' : 'zh-CN',
+    }),
   };
 });
 vi.mock('../../client/components/ui/toast', () => ({ toast: { add: added } }));
@@ -284,4 +288,59 @@ describe('自助 card order', () => {
     expect(keys).toContain('profileChange');
     expect(keys).toHaveLength(SERVICES.length - 1);
   });
+});
+
+it('renders native approval buttons and declines without asking for a business rejection comment', async () => {
+  const fallbackView = {
+    title: 'Approve assistant action',
+    lines: ['Mobile: 138****0000 → 139****0000'],
+    buttons: [
+      { key: 'approve', label: 'Approve', style: 'primary' as const },
+      { key: 'reject', label: 'Reject', style: 'danger' as const },
+    ],
+    state: 'open' as const,
+  };
+  const view = process.env.NATIVE_IM_VIEW_FILE
+    ? (JSON.parse(
+        readFileSync(process.env.NATIVE_IM_VIEW_FILE, 'utf8'),
+      ) as typeof fallbackView)
+    : fallbackView;
+  request.mockResolvedValue({
+    data: {
+      data: {
+        ok: true,
+        message: 'Declined',
+        card: { ...view, buttons: [], state: 'discarded' },
+      },
+    },
+  });
+  render(
+    <MemoryRouter>
+      <MockCard
+        cardId='native-card'
+        senderId='bound-sender'
+        view={view}
+        onChanged={() => undefined}
+      />
+    </MemoryRouter>,
+  );
+  expect(screen.getByText('Mobile: 138****0000 → 139****0000')).toBeVisible();
+  if (process.env.NATIVE_IM_CARD_HTML)
+    writeFileSync(
+      process.env.NATIVE_IM_CARD_HTML,
+      document.documentElement.outerHTML,
+    );
+  fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        json: {
+          senderId: 'bound-sender',
+          cardId: 'native-card',
+          button: 'reject',
+          comment: null,
+        },
+      }),
+    ),
+  );
 });

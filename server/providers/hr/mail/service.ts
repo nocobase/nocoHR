@@ -33,6 +33,7 @@ import type {
 } from '../../../config/business-mail.js';
 import type { ActorContext } from '../framework-service.js';
 import { HrError } from '../shared.js';
+import { MailPollError } from './task-result.js';
 import type { MailSettingsService } from './settings.js';
 import {
   MAIL_PURPOSES,
@@ -684,6 +685,7 @@ export function createMailService(deps: MailServiceDeps) {
     async poll(only?: MailPurpose): Promise<Record<string, number>> {
       const settings = (await deps.settings.read()).value;
       const counts: Record<string, number> = {};
+      const failures: unknown[] = [];
       for (const purpose of MAIL_PURPOSES) {
         if (only && purpose !== only) continue;
         if (!settings.mailboxes[purpose].enabled || !handlers.has(purpose))
@@ -701,6 +703,7 @@ export function createMailService(deps: MailServiceDeps) {
           await synchronize(bound.ctx, bound.accountId);
           items = await newMail(purpose, bound.ctx, bound.accountId);
         } catch (error) {
+          failures.push(error);
           deps.log({ error, purpose }, 'Mailbox could not be read');
           continue;
         }
@@ -714,11 +717,13 @@ export function createMailService(deps: MailServiceDeps) {
             if (mail.status === 'linked') await handler.onReply(mail);
             else await handler.onUnmatched(mail);
           } catch (error) {
+            failures.push(error);
             deps.log({ error, purpose }, 'Mail could not be processed');
           }
         }
         counts[purpose] = stored;
       }
+      if (failures.length) throw new MailPollError(failures, counts);
       return counts;
     },
 
